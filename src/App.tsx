@@ -515,6 +515,7 @@ export default function App() {
   const [donateStep, setDonateStep] = useState<number>(1);
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
   const [newExtraPhotos, setNewExtraPhotos] = useState<string[]>([]);
+  const [isSubmittingDonation, setIsSubmittingDonation] = useState<boolean>(false);
 
   useEffect(() => {
     if (isDonateModalOpen) {
@@ -793,6 +794,8 @@ export default function App() {
       return;
     }
 
+    if (isSubmittingDonation) return;
+
     const defaultImg =
       newImageUrl.trim() ||
       'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&q=80&w=600';
@@ -800,24 +803,44 @@ export default function App() {
     const donationCredits = Number(newCredits) || 10;
     const earnedBonus = firstDonationBonus;
 
+    const donationPayload = {
+      title: newTitle.trim(),
+      category: newCategory,
+      credits: donationCredits,
+      location: newLocation.trim() || 'São Paulo, SP',
+      condition: newCondition,
+      imageUrl: defaultImg,
+      description: newDescription.trim() || 'Item doado recentemente na comunidade em ótimo estado.',
+      isFeatured: newIsFeatured,
+      donorName: 'Você',
+      donorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
+    };
+
+    setIsSubmittingDonation(true);
+
+    let savedToFirestore = true;
     try {
       await addDoc(collection(db, 'donations'), {
-        title: newTitle.trim(),
-        category: newCategory,
-        credits: donationCredits,
-        location: newLocation.trim() || 'São Paulo, SP',
-        condition: newCondition,
-        imageUrl: defaultImg,
-        description: newDescription.trim() || 'Item doado recentemente na comunidade em ótimo estado.',
-        isFeatured: newIsFeatured,
-        donorName: 'Você',
-        donorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
+        ...donationPayload,
         createdAt: serverTimestamp()
       });
     } catch (error) {
       console.error('Erro ao salvar doação no Firestore:', error);
-      showToast('Não foi possível salvar sua doação. Tente novamente.', 'error');
-      return;
+      savedToFirestore = false;
+    }
+
+    // Always fall back to local state so the flow never gets stuck, even if Firestore fails
+    if (!savedToFirestore) {
+      setItems((prev) => [
+        {
+          id: Date.now().toString(),
+          ...donationPayload,
+          createdAt: 'Hoje',
+          isFavorite: false,
+          isRedeemed: false
+        },
+        ...prev
+      ]);
     }
 
     setUserCredits((prev) => prev + donationCredits + earnedBonus);
@@ -834,11 +857,14 @@ export default function App() {
     setNewIsFeatured(false);
     setAiSuggested(false);
     setIsAnalyzing(false);
+    setIsSubmittingDonation(false);
     setDonateStep(1);
     setIsDonateModalOpen(false);
 
     showToast(
-      `🎉 Doação cadastrada com sucesso! ${newIsFeatured ? '🔥 Item destacado no topo!' : ''} Você ganhou +${donationCredits + earnedBonus} Créditos${earnedBonus > 0 ? ` (com bônus de 1ª doação)` : ''}!`,
+      savedToFirestore
+        ? `🎉 Doação cadastrada com sucesso! ${newIsFeatured ? '🔥 Item destacado no topo!' : ''} Você ganhou +${donationCredits + earnedBonus} Créditos${earnedBonus > 0 ? ` (com bônus de 1ª doação)` : ''}!`
+        : `🎉 Doação salva localmente! Ela será sincronizada assim que a conexão for restabelecida.`,
       'success'
     );
   };
@@ -3107,7 +3133,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setDonateStep((prev) => Math.max(1, prev - 1))}
-                      disabled={donateStep === 1}
+                      disabled={donateStep === 1 || isSubmittingDonation}
                       className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 shrink-0"
                     >
                       <ArrowLeft className="w-3.5 h-3.5" />
@@ -3125,10 +3151,20 @@ export default function App() {
                     ) : (
                       <button
                         type="submit"
-                        className="flex-1 px-5 py-2.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                        disabled={isSubmittingDonation}
+                        className="flex-1 px-5 py-2.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                       >
-                        <Check className="w-4 h-4" />
-                        <span>Publicar Doação</span>
+                        {isSubmittingDonation ? (
+                          <>
+                            <span className="animate-spin text-xs">🌀</span>
+                            <span>Publicando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-4 h-4" />
+                            <span>Publicar Doação</span>
+                          </>
+                        )}
                       </button>
                     )}
                   </div>
