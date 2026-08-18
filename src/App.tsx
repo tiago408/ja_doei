@@ -40,6 +40,8 @@ import {
   Inbox
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { db } from './firebase';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
 
@@ -344,6 +346,43 @@ export default function App() {
   const [items, setItems] = useState<DonationItem[]>(INITIAL_ITEMS);
   const [userCredits, setUserCredits] = useState<number>(0);
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
+
+  // Loads donations from Firestore in real time and merges them with the local mock feed
+  useEffect(() => {
+    const donationsRef = collection(db, 'donations');
+    const donationsQuery = query(donationsRef, orderBy('createdAt', 'desc'));
+
+    const unsubscribe = onSnapshot(donationsQuery, (snapshot) => {
+      const firestoreItems: DonationItem[] = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          title: data.title,
+          category: data.category,
+          credits: data.credits,
+          location: data.location,
+          condition: data.condition,
+          imageUrl: data.imageUrl,
+          description: data.description,
+          createdAt: 'Hoje',
+          isFeatured: data.isFeatured || false,
+          donorName: data.donorName || 'Você',
+          donorAvatar: data.donorAvatar,
+          isFavorite: false,
+          isRedeemed: false
+        };
+      });
+
+      setItems((prev) => {
+        const mockOnly = prev.filter((item) => INITIAL_ITEMS.some((mock) => mock.id === item.id));
+        return [...firestoreItems, ...mockOnly];
+      });
+    }, (error) => {
+      console.error('Erro ao carregar doações do Firestore:', error);
+    });
+
+    return () => unsubscribe();
+  }, []);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'home' | 'search' | 'favorites' | 'profile'>('home');
 
@@ -728,7 +767,7 @@ export default function App() {
   };
 
   // Submit New Donation
-  const handleCreateDonation = (e: React.FormEvent) => {
+  const handleCreateDonation = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (donateStep === 1) {
@@ -758,24 +797,30 @@ export default function App() {
       newImageUrl.trim() ||
       'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&q=80&w=600';
 
-    const newItem: DonationItem = {
-      id: Date.now().toString(),
-      title: newTitle.trim(),
-      category: newCategory,
-      credits: Number(newCredits) || 10,
-      location: newLocation.trim() || 'São Paulo, SP',
-      condition: newCondition,
-      imageUrl: defaultImg,
-      description: newDescription.trim() || 'Item doado recentemente na comunidade em ótimo estado.',
-      createdAt: 'Hoje',
-      isFeatured: newIsFeatured,
-      donorName: 'Você',
-      donorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
-    };
-
-    setItems((prev) => [newItem, ...prev]);
+    const donationCredits = Number(newCredits) || 10;
     const earnedBonus = firstDonationBonus;
-    setUserCredits((prev) => prev + newItem.credits + earnedBonus);
+
+    try {
+      await addDoc(collection(db, 'donations'), {
+        title: newTitle.trim(),
+        category: newCategory,
+        credits: donationCredits,
+        location: newLocation.trim() || 'São Paulo, SP',
+        condition: newCondition,
+        imageUrl: defaultImg,
+        description: newDescription.trim() || 'Item doado recentemente na comunidade em ótimo estado.',
+        isFeatured: newIsFeatured,
+        donorName: 'Você',
+        donorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
+        createdAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Erro ao salvar doação no Firestore:', error);
+      showToast('Não foi possível salvar sua doação. Tente novamente.', 'error');
+      return;
+    }
+
+    setUserCredits((prev) => prev + donationCredits + earnedBonus);
 
     // Reset Form
     setNewTitle('');
@@ -793,7 +838,7 @@ export default function App() {
     setIsDonateModalOpen(false);
 
     showToast(
-      `🎉 Doação cadastrada com sucesso! ${newIsFeatured ? '🔥 Item destacado no topo!' : ''} Você ganhou +${newItem.credits + earnedBonus} Créditos${earnedBonus > 0 ? ` (com bônus de 1ª doação)` : ''}!`,
+      `🎉 Doação cadastrada com sucesso! ${newIsFeatured ? '🔥 Item destacado no topo!' : ''} Você ganhou +${donationCredits + earnedBonus} Créditos${earnedBonus > 0 ? ` (com bônus de 1ª doação)` : ''}!`,
       'success'
     );
   };
