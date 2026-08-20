@@ -41,7 +41,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
-import { db } from './firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from './firebase';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
 
@@ -362,7 +363,7 @@ export default function App() {
           credits: data.credits,
           location: data.location,
           condition: data.condition,
-          imageUrl: data.imageUrl,
+          imageUrl: data.imageUrl || data.image,
           description: data.description,
           createdAt: 'Hoje',
           isFeatured: data.isFeatured || false,
@@ -516,6 +517,8 @@ export default function App() {
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
   const [newExtraPhotos, setNewExtraPhotos] = useState<string[]>([]);
   const [isSubmittingDonation, setIsSubmittingDonation] = useState<boolean>(false);
+  const [newImageFile, setNewImageFile] = useState<File | null>(null);
+  const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'publishing'>('idle');
 
   useEffect(() => {
     if (isDonateModalOpen) {
@@ -598,6 +601,7 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setNewImageFile(file);
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
@@ -796,12 +800,25 @@ export default function App() {
 
     if (isSubmittingDonation) return;
 
-    const defaultImg =
-      newImageUrl.trim() ||
-      'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&q=80&w=600';
-
+    const fallbackImg = 'https://images.unsplash.com/photo-1532629345422-7515f3d16bb0?w=500';
     const donationCredits = Number(newCredits) || 10;
     const earnedBonus = firstDonationBonus;
+
+    setIsSubmittingDonation(true);
+
+    // Upload the cover photo to Firebase Storage, falling back to a stock image on any failure
+    let finalImageUrl = newImageUrl.trim() || fallbackImg;
+    if (newImageFile) {
+      setUploadPhase('uploading');
+      try {
+        const imageRef = ref(storage, `donations_images/${Date.now()}_${newImageFile.name}`);
+        const uploadSnapshot = await uploadBytes(imageRef, newImageFile);
+        finalImageUrl = await getDownloadURL(uploadSnapshot.ref);
+      } catch (error) {
+        console.error('Erro ao enviar imagem para o Firebase Storage:', error);
+        finalImageUrl = newImageUrl.trim() || fallbackImg;
+      }
+    }
 
     const donationPayload = {
       title: newTitle.trim(),
@@ -809,14 +826,15 @@ export default function App() {
       credits: donationCredits,
       location: newLocation.trim() || 'São Paulo, SP',
       condition: newCondition,
-      imageUrl: defaultImg,
+      image: finalImageUrl,
+      imageUrl: finalImageUrl,
       description: newDescription.trim() || 'Item doado recentemente na comunidade em ótimo estado.',
       isFeatured: newIsFeatured,
       donorName: 'Você',
       donorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
     };
 
-    setIsSubmittingDonation(true);
+    setUploadPhase('publishing');
 
     let savedToFirestore = true;
     try {
@@ -851,6 +869,7 @@ export default function App() {
     setNewCredits(30);
     setNewCreditsBase(30);
     setNewImageUrl('');
+    setNewImageFile(null);
     setNewExtraPhotos([]);
     setNewCondition('Seminovo - Excelente estado');
     setNewDescription('');
@@ -858,6 +877,7 @@ export default function App() {
     setAiSuggested(false);
     setIsAnalyzing(false);
     setIsSubmittingDonation(false);
+    setUploadPhase('idle');
     setDonateStep(1);
     setIsDonateModalOpen(false);
 
@@ -2817,6 +2837,7 @@ export default function App() {
                               type="button"
                               onClick={() => {
                                 setNewImageUrl('');
+                                setNewImageFile(null);
                                 setIsAnalyzing(false);
                                 setAiSuggested(false);
                               }}
@@ -3157,7 +3178,7 @@ export default function App() {
                         {isSubmittingDonation ? (
                           <>
                             <span className="animate-spin text-xs">🌀</span>
-                            <span>Publicando...</span>
+                            <span>{uploadPhase === 'uploading' ? 'Enviando imagem...' : 'Publicando...'}</span>
                           </>
                         ) : (
                           <>
