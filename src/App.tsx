@@ -429,6 +429,11 @@ export default function App() {
   const [editProfilePhotoFile, setEditProfilePhotoFile] = useState<File | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
 
+  const profileDonations = useMemo(
+    () => (user ? items.filter((item) => item.userId === user.uid) : []),
+    [items, user]
+  );
+
   // Keeps the logged-in user (name, email, photo) in sync with Firebase Auth
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -727,7 +732,7 @@ export default function App() {
   // New Item Form State
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Roupas');
-  const [newCredits, setNewCredits] = useState<number>(30);
+  const [newCredits, setNewCredits] = useState<number>(100);
   const [newLocation, setNewLocation] = useState('São Paulo, SP');
   const [newCondition, setNewCondition] = useState('Seminovo - Excelente estado');
   const [newImageUrl, setNewImageUrl] = useState('');
@@ -735,9 +740,9 @@ export default function App() {
   const [newIsFeatured, setNewIsFeatured] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [aiSuggested, setAiSuggested] = useState<boolean>(false);
-  const [newCreditsBase, setNewCreditsBase] = useState<number>(30);
-  const [creditsMin, setCreditsMin] = useState<number>(24);
-  const [creditsMax, setCreditsMax] = useState<number>(36);
+  const [newCreditsBase, setNewCreditsBase] = useState<number>(100);
+  const [creditsMin, setCreditsMin] = useState<number>(80);
+  const [creditsMax, setCreditsMax] = useState<number>(120);
   const [requiresModeration, setRequiresModeration] = useState<boolean>(false);
   const [donateStep, setDonateStep] = useState<number>(1);
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
@@ -753,26 +758,16 @@ export default function App() {
   }, [isDonateModalOpen]);
 
   useEffect(() => {
-    const categoryKey: Record<string, string> = {
-      'Casa & Cozinha': 'eletrodomesticos',
-      Eletrônicos: 'eletronicos',
-      Móveis: 'moveis',
-      Roupas: 'vestuario',
-      Calçados: 'vestuario',
-      Livros: 'livros_brinquedos',
-      Outros: 'outros',
-    };
-    const conditionKey: Record<string, string> = {
-      'Novo na caixa': 'Novo / Lacrado',
-      'Seminovo - Excelente estado': 'Seminovo - Excelente estado',
-      'Usado - Bom estado': 'Usado - Bom estado',
-      'Usado - Com marcas de uso': 'Usado - Com marcas de uso',
-    };
-    const pricing = calculateItemCredits(
-      newTitle,
-      categoryKey[newCategory] || 'outros',
-      conditionKey[newCondition] || newCondition
-    );
+    if (!newTitle.trim()) {
+      setNewCredits(100);
+      setNewCreditsBase(100);
+      setCreditsMin(80);
+      setCreditsMax(120);
+      setRequiresModeration(false);
+      return;
+    }
+
+    const pricing = calculateItemCredits(newTitle, newCategory, newCondition);
 
     setNewCredits(pricing.suggestedCredits);
     setNewCreditsBase(pricing.suggestedCredits);
@@ -1134,8 +1129,8 @@ export default function App() {
     // Reset Form
     setNewTitle('');
     setNewCategory('Roupas');
-    setNewCredits(30);
-    setNewCreditsBase(30);
+    setNewCredits(100);
+    setNewCreditsBase(100);
     setNewImageUrl('');
     setNewImageFile(null);
     setNewExtraPhotos([]);
@@ -1993,7 +1988,7 @@ export default function App() {
                 <div className="bg-white p-3 rounded-xl border border-slate-200 text-center">
                   <PackageCheck className="w-4 h-4 text-[#14A76C] mx-auto mb-1" />
                   <span className="block text-xs font-extrabold text-slate-800">
-                    {items.length - INITIAL_ITEMS.length + 2}
+                    {profileDonations.length}
                   </span>
                   <span className="text-[10px] text-slate-500 font-medium">Doações</span>
                 </div>
@@ -2012,6 +2007,50 @@ export default function App() {
                   <span className="text-[10px] text-slate-500 font-medium">Reutilizado</span>
                 </div>
               </div>
+
+              {/* Published donations */}
+              {user && (
+                <div className="bg-white rounded-2xl p-4 border border-slate-200">
+                  <h3 className="text-xs font-bold text-slate-800 mb-3 flex items-center justify-between">
+                    <span>Minhas doações publicadas</span>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      {profileDonations.length} itens
+                    </span>
+                  </h3>
+
+                  {profileDonations.length === 0 ? (
+                    <p className="text-[11px] text-slate-500 text-center py-4">
+                      Você ainda não publicou nenhuma doação. Clique em + Doar para começar!
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {profileDonations.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleOpenDetails(item)}
+                          className="w-full flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100 text-left hover:bg-slate-100 transition-colors"
+                        >
+                          <img
+                            src={item.imageUrl}
+                            alt={item.title}
+                            className="w-10 h-10 rounded-lg object-cover shrink-0"
+                          />
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-xs font-semibold text-slate-800 truncate">
+                              {item.title}
+                            </span>
+                            <span className="block text-[10px] text-slate-500 truncate">
+                              {item.category} · {item.credits} créditos
+                            </span>
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* History Section */}
               <div className="bg-white rounded-2xl p-4 border border-slate-200">
