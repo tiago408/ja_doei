@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Heart,
   Search,
@@ -65,7 +65,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { db, storage, auth } from './firebase';
-import { calculateItemCredits } from './aiPricingService';
+import { calculateItemCredits, fetchGeminiValuation } from './aiPricingService';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
 
@@ -739,7 +739,9 @@ export default function App() {
   const [newDescription, setNewDescription] = useState('');
   const [newIsFeatured, setNewIsFeatured] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [isPricingAnalyzing, setIsPricingAnalyzing] = useState<boolean>(false);
   const [aiSuggested, setAiSuggested] = useState<boolean>(false);
+  const [pricingJustification, setPricingJustification] = useState<string>('');
   const [newCreditsBase, setNewCreditsBase] = useState<number>(100);
   const [creditsMin, setCreditsMin] = useState<number>(80);
   const [creditsMax, setCreditsMax] = useState<number>(120);
@@ -750,6 +752,7 @@ export default function App() {
   const [isSubmittingDonation, setIsSubmittingDonation] = useState<boolean>(false);
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'publishing'>('idle');
+  const pricingRequestId = useRef(0);
 
   useEffect(() => {
     if (isDonateModalOpen) {
@@ -757,24 +760,55 @@ export default function App() {
     }
   }, [isDonateModalOpen]);
 
-  useEffect(() => {
+  const handleGeminiValuation = async (conditionOverride = newCondition) => {
+    const requestId = ++pricingRequestId.current;
     if (!newTitle.trim()) {
       setNewCredits(100);
       setNewCreditsBase(100);
       setCreditsMin(80);
       setCreditsMax(120);
       setRequiresModeration(false);
+      setPricingJustification('Digite o título do item para obter uma avaliação de mercado.');
       return;
     }
 
-    const pricing = calculateItemCredits(newTitle, newCategory, newCondition);
-
-    setNewCredits(pricing.suggestedCredits);
-    setNewCreditsBase(pricing.suggestedCredits);
-    setCreditsMin(pricing.minAllowedCredits);
-    setCreditsMax(pricing.maxAllowedCredits);
-    setRequiresModeration(pricing.requiresModeration);
-  }, [newTitle, newCategory, newCondition]);
+    setIsPricingAnalyzing(true);
+    try {
+      const pricing = await fetchGeminiValuation(newTitle.trim(), conditionOverride);
+      if (requestId !== pricingRequestId.current) return;
+      setNewCredits(pricing.suggestedCredits);
+      setNewCreditsBase(pricing.suggestedCredits);
+      setCreditsMin(pricing.minAllowedCredits);
+      setCreditsMax(pricing.maxAllowedCredits);
+      setRequiresModeration(pricing.requiresModeration);
+      setPricingJustification(pricing.justification);
+    } catch (error) {
+      if (requestId !== pricingRequestId.current) return;
+      const categoryKey: Record<string, string> = {
+        'Casa & Cozinha': 'eletrodomesticos',
+        Eletrônicos: 'eletronicos',
+        Móveis: 'moveis',
+        Roupas: 'vestuario',
+        Calçados: 'vestuario',
+        Livros: 'livros_brinquedos',
+        Outros: 'outros',
+      };
+      const pricing = calculateItemCredits(
+        newTitle.trim(),
+        categoryKey[newCategory] || 'outros',
+        conditionOverride
+      );
+      setNewCredits(pricing.suggestedCredits);
+      setNewCreditsBase(pricing.suggestedCredits);
+      setCreditsMin(pricing.minAllowedCredits);
+      setCreditsMax(pricing.maxAllowedCredits);
+      setRequiresModeration(pricing.requiresModeration);
+      setPricingJustification(`${pricing.justification} (Avaliação local.)`);
+      console.warn('Gemini indisponível; usando avaliação local:', error);
+    } finally {
+      if (requestId === pricingRequestId.current) setIsPricingAnalyzing(false);
+    }
+  };
 
   // Toast System
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -1135,6 +1169,8 @@ export default function App() {
     setNewImageFile(null);
     setNewExtraPhotos([]);
     setNewCondition('Seminovo - Excelente estado');
+    setPricingJustification('');
+    setIsPricingAnalyzing(false);
     setNewDescription('');
     setNewIsFeatured(false);
     setAiSuggested(false);
@@ -3291,6 +3327,7 @@ export default function App() {
                             type="text"
                             value={newTitle}
                             onChange={(e) => setNewTitle(e.target.value)}
+                            onBlur={() => { void handleGeminiValuation(); }}
                             placeholder="Ex: Vaso de Cerâmica, Jaqueta Jeans..."
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                             required
@@ -3318,7 +3355,10 @@ export default function App() {
                           </label>
                           <select
                             value={newCondition}
-                            onChange={(e) => setNewCondition(e.target.value)}
+                            onChange={(e) => {
+                              setNewCondition(e.target.value);
+                              void handleGeminiValuation(e.target.value);
+                            }}
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                           >
                             <option value="Novo na caixa">Novo</option>
@@ -3395,6 +3435,17 @@ export default function App() {
                           <p className="text-[10px] text-slate-500 mt-1.5 text-center">
                             Faixa permitida: {creditsMin} a {creditsMax} créditos (±20%)
                           </p>
+                          {isPricingAnalyzing && (
+                            <div className="mt-2 flex items-center justify-center gap-1.5 text-[10px] font-semibold text-[#14A76C]">
+                              <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                              <span>Analisando item via IA...</span>
+                            </div>
+                          )}
+                          {pricingJustification && !isPricingAnalyzing && (
+                            <p className="mt-2 text-[10px] leading-snug text-slate-500">
+                              {pricingJustification}
+                            </p>
+                          )}
                           {requiresModeration && (
                             <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] font-semibold text-amber-800">
                               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
