@@ -65,6 +65,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { db, storage, auth } from './firebase';
+import { calculateItemCredits } from './aiPricingService';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
 
@@ -735,6 +736,9 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [aiSuggested, setAiSuggested] = useState<boolean>(false);
   const [newCreditsBase, setNewCreditsBase] = useState<number>(30);
+  const [creditsMin, setCreditsMin] = useState<number>(24);
+  const [creditsMax, setCreditsMax] = useState<number>(36);
+  const [requiresModeration, setRequiresModeration] = useState<boolean>(false);
   const [donateStep, setDonateStep] = useState<number>(1);
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
   const [newExtraPhotos, setNewExtraPhotos] = useState<string[]>([]);
@@ -747,6 +751,35 @@ export default function App() {
       setDonateStep(1);
     }
   }, [isDonateModalOpen]);
+
+  useEffect(() => {
+    const categoryKey: Record<string, string> = {
+      'Casa & Cozinha': 'eletrodomesticos',
+      Eletrônicos: 'eletronicos',
+      Móveis: 'moveis',
+      Roupas: 'vestuario',
+      Calçados: 'vestuario',
+      Livros: 'livros_brinquedos',
+      Outros: 'outros',
+    };
+    const conditionKey: Record<string, string> = {
+      'Novo na caixa': 'Novo / Lacrado',
+      'Seminovo - Excelente estado': 'Seminovo - Excelente estado',
+      'Usado - Bom estado': 'Usado - Bom estado',
+      'Usado - Com marcas de uso': 'Usado - Com marcas de uso',
+    };
+    const pricing = calculateItemCredits(
+      newTitle,
+      categoryKey[newCategory] || 'outros',
+      conditionKey[newCondition] || newCondition
+    );
+
+    setNewCredits(pricing.suggestedCredits);
+    setNewCreditsBase(pricing.suggestedCredits);
+    setCreditsMin(pricing.minAllowedCredits);
+    setCreditsMax(pricing.maxAllowedCredits);
+    setRequiresModeration(pricing.requiresModeration);
+  }, [newTitle, newCategory, newCondition]);
 
   // Toast System
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -794,10 +827,6 @@ export default function App() {
       setDonateStep(2);
     }, 1500);
   };
-
-  // +-20% lock around the AI-calculated base value
-  const creditsMin = Math.round(newCreditsBase * 0.8);
-  const creditsMax = Math.round(newCreditsBase * 1.2);
 
   const handleCreditsStep = (delta: number) => {
     setNewCredits((prev) => Math.min(creditsMax, Math.max(creditsMin, prev + delta)));
@@ -3231,6 +3260,21 @@ export default function App() {
 
                         <div>
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                            Categoria
+                          </label>
+                          <select
+                            value={newCategory}
+                            onChange={(e) => setNewCategory(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                          >
+                            {CATEGORIES.filter((category) => category !== 'Todas').map((category) => (
+                              <option key={category} value={category}>{category}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
                             Estado de Conservação
                           </label>
                           <select
@@ -3312,6 +3356,12 @@ export default function App() {
                           <p className="text-[10px] text-slate-500 mt-1.5 text-center">
                             Faixa permitida: {creditsMin} a {creditsMax} créditos (±20%)
                           </p>
+                          {requiresModeration && (
+                            <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] font-semibold text-amber-800">
+                              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                              <span>Item sujeito a análise da moderação antes da publicação</span>
+                            </div>
+                          )}
                         </div>
 
                         <div>
