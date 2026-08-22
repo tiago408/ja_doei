@@ -38,7 +38,8 @@ import {
   Camera,
   LocateFixed,
   Inbox,
-  Pencil
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -49,6 +50,7 @@ import {
   orderBy,
   serverTimestamp,
   doc,
+  deleteDoc,
   getDoc,
   setDoc,
   updateDoc,
@@ -979,6 +981,23 @@ export default function App() {
     setSelectedItemForDetails(item);
     setSelectedFreightId('ja_doei_express');
     setIsCepCalculated(true);
+  };
+
+  const handleDeleteDonation = async (item: DonationItem) => {
+    if (!user || item.userId !== user.uid) return;
+    if (!window.confirm('Tem certeza que deseja excluir esta doação?')) return;
+
+    try {
+      await deleteDoc(doc(db, 'donations', item.id));
+      setItems((prev) => prev.filter((currentItem) => currentItem.id !== item.id));
+      setSelectedItemForDetails((currentItem) => (
+        currentItem?.id === item.id ? null : currentItem
+      ));
+      showToast('Doação excluída com sucesso.', 'success');
+    } catch (error) {
+      console.error('Erro ao excluir doação:', error);
+      showToast('Não foi possível excluir a doação. Tente novamente.', 'error');
+    }
   };
 
   // Calculate Freight
@@ -2061,11 +2080,10 @@ export default function App() {
                   ) : (
                     <div className="space-y-2">
                       {profileDonations.map((item) => (
-                        <button
+                        <div
                           key={item.id}
-                          type="button"
                           onClick={() => handleOpenDetails(item)}
-                          className="w-full flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100 text-left hover:bg-slate-100 transition-colors"
+                          className="w-full flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100 text-left hover:bg-slate-100 transition-colors cursor-pointer"
                         >
                           <img
                             src={item.imageUrl}
@@ -2080,8 +2098,20 @@ export default function App() {
                               {item.category} · {item.credits} créditos
                             </span>
                           </span>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleDeleteDonation(item);
+                            }}
+                            className="p-2 rounded-full text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
+                            title="Excluir Doação"
+                            aria-label="Excluir Doação"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                           <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
-                        </button>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -2549,6 +2579,16 @@ export default function App() {
 
                 {/* Primary Action Buttons - Sticky Footer */}
                 <div className="sticky bottom-0 bg-white p-4 border-t border-slate-200 z-10 space-y-2 shrink-0 shadow-lg">
+                  {user && selectedItemForDetails.userId === user.uid && (
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteDonation(selectedItemForDetails)}
+                      className="w-full py-2.5 rounded-2xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Excluir Doação</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setIsHelpShippingModalOpen(true)}
