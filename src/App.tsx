@@ -42,7 +42,16 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from './firebase';
+import {
+  signInWithPopup,
+  GoogleAuthProvider,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  updateProfile
+} from 'firebase/auth';
+import { db, storage, auth } from './firebase';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
 
@@ -62,6 +71,7 @@ interface DonationItem {
   isFeatured?: boolean;
   donorName?: string;
   donorAvatar?: string;
+  userId?: string | null;
 }
 
 export interface FreightOption {
@@ -367,8 +377,9 @@ export default function App() {
           description: data.description,
           createdAt: 'Hoje',
           isFeatured: data.isFeatured || false,
-          donorName: data.donorName || 'Você',
+          donorName: data.donorName || data.userName || 'Você',
           donorAvatar: data.donorAvatar,
+          userId: data.userId || null,
           isFavorite: false,
           isRedeemed: false
         };
@@ -390,11 +401,30 @@ export default function App() {
   // Auth State
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
   const [authTab, setAuthTab] = useState<'login' | 'signup'>('login');
-  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [user, setUser] = useState<{ uid: string; name: string; email: string; photoURL?: string | null } | null>(null);
   const [authName, setAuthName] = useState<string>('');
   const [authEmail, setAuthEmail] = useState<string>('');
   const [authWhatsapp, setAuthWhatsapp] = useState<string>('');
   const [authPassword, setAuthPassword] = useState<string>('');
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState<boolean>(false);
+
+  // Keeps the logged-in user (name, email, photo) in sync with Firebase Auth
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        setUser({
+          uid: firebaseUser.uid,
+          name: firebaseUser.displayName || 'Usuário Já Doei',
+          email: firebaseUser.email || '',
+          photoURL: firebaseUser.photoURL
+        });
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Requires the user to be logged in before proceeding; opens AuthModal otherwise
   const requireAuth = () => {
@@ -403,6 +433,74 @@ export default function App() {
       return false;
     }
     return true;
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setIsAuthSubmitting(true);
+      await signInWithPopup(auth, new GoogleAuthProvider());
+      setUserCredits(150);
+      setIsAuthOpen(false);
+    } catch (error) {
+      console.error('Erro ao entrar com Google:', error);
+      showToast('Não foi possível entrar com o Google. Tente novamente.', 'error');
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsAuthSubmitting(true);
+      await signInWithEmailAndPassword(auth, authEmail, authPassword);
+      setUserCredits(150);
+      setIsAuthOpen(false);
+      setAuthEmail('');
+      setAuthPassword('');
+    } catch (error) {
+      console.error('Erro ao entrar:', error);
+      showToast('E-mail ou senha inválidos.', 'error');
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  };
+
+  const handleEmailSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsAuthSubmitting(true);
+      const credential = await createUserWithEmailAndPassword(auth, authEmail, authPassword);
+      if (authName.trim()) {
+        await updateProfile(credential.user, { displayName: authName.trim() });
+        setUser({
+          uid: credential.user.uid,
+          name: authName.trim(),
+          email: credential.user.email || '',
+          photoURL: credential.user.photoURL
+        });
+      }
+      setUserCredits(150); // Bônus de boas-vindas ao criar conta
+      setIsAuthOpen(false);
+      setAuthName('');
+      setAuthEmail('');
+      setAuthWhatsapp('');
+      setAuthPassword('');
+    } catch (error) {
+      console.error('Erro ao criar conta:', error);
+      showToast('Não foi possível criar sua conta. Verifique os dados e tente novamente.', 'error');
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setUserCredits(0);
+    } catch (error) {
+      console.error('Erro ao sair:', error);
+    }
   };
 
   // Modals & Interactivity Flows
@@ -588,7 +686,10 @@ export default function App() {
   };
 
   // First-donation bonus: +15% of the item's credits, granted only before the user's first donation
-  const isFirstDonation = useMemo(() => !items.some((i) => i.donorName === 'Você'), [items]);
+  const isFirstDonation = useMemo(
+    () => !items.some((i) => (user ? i.userId === user.uid : false) || i.donorName === 'Você'),
+    [items, user]
+  );
   const firstDonationBonus = isFirstDonation ? Math.round(newCredits * 0.15) : 0;
 
   // Sets the chosen photo (upload, camera or preset) and kicks off the AI simulation
@@ -830,8 +931,10 @@ export default function App() {
       imageUrl: finalImageUrl,
       description: newDescription.trim() || 'Item doado recentemente na comunidade em ótimo estado.',
       isFeatured: newIsFeatured,
-      donorName: 'Você',
-      donorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
+      userId: user?.uid || null,
+      userName: user?.name || 'Você',
+      donorName: user?.name || 'Você',
+      donorAvatar: user?.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
     };
 
     setUploadPhase('publishing');
@@ -1530,10 +1633,7 @@ export default function App() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      setUser(null);
-                      setUserCredits(0);
-                    }}
+                    onClick={handleLogout}
                     className="p-2 rounded-full text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all shrink-0"
                     title="Sair"
                   >
@@ -4309,14 +4409,7 @@ export default function App() {
 
                 {authTab === 'login' ? (
                   <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      setUser({ name: authName || 'Mariana Silva', email: authEmail });
-                      setUserCredits(150);
-                      setIsAuthOpen(false);
-                      setAuthEmail('');
-                      setAuthPassword('');
-                    }}
+                    onSubmit={handleEmailLogin}
                     className="space-y-3"
                   >
                     <div>
@@ -4344,9 +4437,10 @@ export default function App() {
 
                     <button
                       type="submit"
-                      className="w-full py-3 rounded-xl bg-[#14A76C] hover:bg-[#108958] active:scale-98 text-white text-xs font-bold shadow-md transition-all"
+                      disabled={isAuthSubmitting}
+                      className="w-full py-3 rounded-xl bg-[#14A76C] hover:bg-[#108958] active:scale-98 text-white text-xs font-bold shadow-md transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      Entrar
+                      {isAuthSubmitting ? 'Entrando...' : 'Entrar'}
                     </button>
 
                     <div className="flex items-center gap-3 py-1">
@@ -4357,12 +4451,9 @@ export default function App() {
 
                     <button
                       type="button"
-                      onClick={() => {
-                        setUser({ name: 'Mariana Silva', email: 'mariana@gmail.com' });
-                        setUserCredits(150);
-                        setIsAuthOpen(false);
-                      }}
-                      className="w-full py-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-bold shadow-2xs transition-all flex items-center justify-center gap-2"
+                      onClick={handleGoogleLogin}
+                      disabled={isAuthSubmitting}
+                      className="w-full py-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-bold shadow-2xs transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       <GoogleIcon className="w-4 h-4" />
                       <span>Continuar com Google</span>
@@ -4370,16 +4461,7 @@ export default function App() {
                   </form>
                 ) : (
                   <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      setUser({ name: authName, email: authEmail });
-                      setUserCredits(150); // Bônus de boas-vindas ao criar conta
-                      setIsAuthOpen(false);
-                      setAuthName('');
-                      setAuthEmail('');
-                      setAuthWhatsapp('');
-                      setAuthPassword('');
-                    }}
+                    onSubmit={handleEmailSignup}
                     className="space-y-3"
                   >
                     <div>
@@ -4429,9 +4511,10 @@ export default function App() {
 
                     <button
                       type="submit"
-                      className="w-full py-3 rounded-xl bg-[#14A76C] hover:bg-[#108958] active:scale-98 text-white text-xs font-bold shadow-md transition-all"
+                      disabled={isAuthSubmitting}
+                      className="w-full py-3 rounded-xl bg-[#14A76C] hover:bg-[#108958] active:scale-98 text-white text-xs font-bold shadow-md transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      Cadastrar e Começar
+                      {isAuthSubmitting ? 'Criando conta...' : 'Cadastrar e Começar'}
                     </button>
                   </form>
                 )}
