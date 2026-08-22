@@ -37,10 +37,23 @@ import {
   LogOut,
   Camera,
   LocateFixed,
-  Inbox
+  Inbox,
+  Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  query,
+  orderBy,
+  serverTimestamp,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  increment
+} from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
   signInWithPopup,
@@ -408,6 +421,13 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState<string>('');
   const [isAuthSubmitting, setIsAuthSubmitting] = useState<boolean>(false);
 
+  // Edit Profile State
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
+  const [editProfileName, setEditProfileName] = useState<string>('');
+  const [editProfilePhotoPreview, setEditProfilePhotoPreview] = useState<string>('');
+  const [editProfilePhotoFile, setEditProfilePhotoFile] = useState<File | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
+
   // Keeps the logged-in user (name, email, photo) in sync with Firebase Auth
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -426,6 +446,25 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Syncs the credits balance in real time from the users/{uid} Firestore document
+  useEffect(() => {
+    if (!user?.uid) {
+      setUserCredits(0);
+      return;
+    }
+
+    const userRef = doc(db, 'users', user.uid);
+    const unsubscribe = onSnapshot(userRef, (snap) => {
+      if (snap.exists()) {
+        setUserCredits(snap.data().credits ?? 0);
+      }
+    }, (error) => {
+      console.error('Erro ao sincronizar créditos do usuário:', error);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
   // Requires the user to be logged in before proceeding; opens AuthModal otherwise
   const requireAuth = () => {
     if (!user) {
@@ -435,11 +474,31 @@ export default function App() {
     return true;
   };
 
+  // Creates the users/{uid} Firestore document with the 150-credit test balance on first signup only
+  const ensureUserDocument = async (uid: string, name: string, email: string, photoURL?: string | null) => {
+    const userRef = doc(db, 'users', uid);
+    const userSnap = await getDoc(userRef);
+    if (!userSnap.exists()) {
+      await setDoc(userRef, {
+        name,
+        email,
+        photoURL: photoURL || null,
+        credits: 150,
+        createdAt: serverTimestamp()
+      });
+    }
+  };
+
   const handleGoogleLogin = async () => {
     try {
       setIsAuthSubmitting(true);
-      await signInWithPopup(auth, new GoogleAuthProvider());
-      setUserCredits(150);
+      const credential = await signInWithPopup(auth, new GoogleAuthProvider());
+      await ensureUserDocument(
+        credential.user.uid,
+        credential.user.displayName || 'Usuário Já Doei',
+        credential.user.email || '',
+        credential.user.photoURL
+      );
       setIsAuthOpen(false);
     } catch (error) {
       console.error('Erro ao entrar com Google:', error);
@@ -453,8 +512,13 @@ export default function App() {
     e.preventDefault();
     try {
       setIsAuthSubmitting(true);
-      await signInWithEmailAndPassword(auth, authEmail, authPassword);
-      setUserCredits(150);
+      const credential = await signInWithEmailAndPassword(auth, authEmail, authPassword);
+      await ensureUserDocument(
+        credential.user.uid,
+        credential.user.displayName || 'Usuário Já Doei',
+        credential.user.email || '',
+        credential.user.photoURL
+      );
       setIsAuthOpen(false);
       setAuthEmail('');
       setAuthPassword('');
@@ -471,16 +535,22 @@ export default function App() {
     try {
       setIsAuthSubmitting(true);
       const credential = await createUserWithEmailAndPassword(auth, authEmail, authPassword);
-      if (authName.trim()) {
-        await updateProfile(credential.user, { displayName: authName.trim() });
+      const displayName = authName.trim();
+      if (displayName) {
+        await updateProfile(credential.user, { displayName });
         setUser({
           uid: credential.user.uid,
-          name: authName.trim(),
+          name: displayName,
           email: credential.user.email || '',
           photoURL: credential.user.photoURL
         });
       }
-      setUserCredits(150); // Bônus de boas-vindas ao criar conta
+      await ensureUserDocument(
+        credential.user.uid,
+        displayName || 'Usuário Já Doei',
+        credential.user.email || '',
+        credential.user.photoURL
+      );
       setIsAuthOpen(false);
       setAuthName('');
       setAuthEmail('');
@@ -497,9 +567,63 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      setUserCredits(0);
     } catch (error) {
       console.error('Erro ao sair:', error);
+    }
+  };
+
+  // Opens the Edit Profile modal pre-filled with the current name and photo
+  const handleOpenEditProfile = () => {
+    if (!user) return;
+    setEditProfileName(user.name);
+    setEditProfilePhotoPreview(user.photoURL || '');
+    setEditProfilePhotoFile(null);
+    setIsEditProfileOpen(true);
+  };
+
+  const handleEditProfilePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setEditProfilePhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setEditProfilePhotoPreview(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  // Uploads the new photo (if any) to Storage, then syncs Auth + Firestore with the updated profile
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth.currentUser || !user) return;
+
+    setIsSavingProfile(true);
+    try {
+      let photoURL = user.photoURL || null;
+
+      if (editProfilePhotoFile) {
+        const photoRef = ref(storage, `profile_pictures/${auth.currentUser.uid}`);
+        const uploadSnapshot = await uploadBytes(photoRef, editProfilePhotoFile);
+        photoURL = await getDownloadURL(uploadSnapshot.ref);
+      }
+
+      const displayName = editProfileName.trim() || user.name;
+
+      await updateProfile(auth.currentUser, { displayName, photoURL });
+      await setDoc(doc(db, 'users', user.uid), { name: displayName, photoURL }, { merge: true });
+
+      setUser({ ...user, name: displayName, photoURL });
+      setIsEditProfileOpen(false);
+      showToast('✅ Perfil atualizado com sucesso!', 'success');
+    } catch (error) {
+      console.error('Erro ao atualizar perfil:', error);
+      showToast('Não foi possível atualizar o perfil. Tente novamente.', 'error');
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -964,7 +1088,19 @@ export default function App() {
       ]);
     }
 
-    setUserCredits((prev) => prev + donationCredits + earnedBonus);
+    // Grant credits: persist to the user's Firestore document when logged in, else fall back locally
+    if (user?.uid) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          credits: increment(donationCredits + earnedBonus)
+        });
+      } catch (error) {
+        console.error('Erro ao atualizar créditos do usuário no Firestore:', error);
+        setUserCredits((prev) => prev + donationCredits + earnedBonus);
+      }
+    } else {
+      setUserCredits((prev) => prev + donationCredits + earnedBonus);
+    }
 
     // Reset Form
     setNewTitle('');
@@ -993,7 +1129,7 @@ export default function App() {
   };
 
   // Confirm Redeem (Confirmação Troca Final)
-  const handleConfirmRedeem = () => {
+  const handleConfirmRedeem = async () => {
     if (!selectedItemForRedeem) return;
 
     const itemCost = selectedItemForRedeem.credits;
@@ -1016,8 +1152,20 @@ export default function App() {
     const insuranceFee = isInsuranceSelected ? 3.90 : 0;
     const totalCashPaid = cashComplement + currentSelectedFreight.price + insuranceFee;
 
-    // Deduct credits used and update item status
-    setUserCredits((prev) => Math.max(0, prev - creditsDeducted));
+    // Deduct credits used: persist to Firestore when logged in, else fall back locally
+    if (user?.uid) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          credits: increment(-creditsDeducted)
+        });
+      } catch (error) {
+        console.error('Erro ao atualizar créditos do usuário no Firestore:', error);
+        setUserCredits((prev) => Math.max(0, prev - creditsDeducted));
+      }
+    } else {
+      setUserCredits((prev) => Math.max(0, prev - creditsDeducted));
+    }
+
     setItems((prev) =>
       prev.map((item) =>
         item.id === selectedItemForRedeem.id ? { ...item, isRedeemed: true } : item
@@ -1046,8 +1194,17 @@ export default function App() {
   };
 
   // Claim Bonus Credits
-  const handleClaimBonus = (amount: number, reason: string) => {
-    setUserCredits((prev) => prev + amount);
+  const handleClaimBonus = async (amount: number, reason: string) => {
+    if (user?.uid) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), { credits: increment(amount) });
+      } catch (error) {
+        console.error('Erro ao atualizar créditos do usuário no Firestore:', error);
+        setUserCredits((prev) => prev + amount);
+      }
+    } else {
+      setUserCredits((prev) => prev + amount);
+    }
     showToast(`✨ Parabéns! +${amount} Créditos adicionados (${reason}).`, 'success');
   };
 
@@ -1601,16 +1758,28 @@ export default function App() {
               {/* Profile Card */}
               {user ? (
                 <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center gap-3">
-                  <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-[#14A76C] to-[#FF8243] p-0.5 shadow-md shrink-0">
-                    <div className="w-full h-full bg-slate-900 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                      {user.name
-                        .split(' ')
-                        .map((part) => part[0])
-                        .slice(0, 2)
-                        .join('')
-                        .toUpperCase()}
+                  <button
+                    type="button"
+                    onClick={handleOpenEditProfile}
+                    className="relative w-14 h-14 rounded-full bg-gradient-to-tr from-[#14A76C] to-[#FF8243] p-0.5 shadow-md shrink-0"
+                    title="Editar perfil"
+                  >
+                    <div className="w-full h-full bg-slate-900 rounded-full flex items-center justify-center text-white font-bold text-lg overflow-hidden">
+                      {user.photoURL ? (
+                        <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" />
+                      ) : (
+                        user.name
+                          .split(' ')
+                          .map((part) => part[0])
+                          .slice(0, 2)
+                          .join('')
+                          .toUpperCase()
+                      )}
                     </div>
-                  </div>
+                    <span className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs">
+                      <Pencil className="w-2.5 h-2.5" />
+                    </span>
+                  </button>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <h2 className="text-sm font-bold text-slate-800 truncate">
@@ -1631,14 +1800,24 @@ export default function App() {
                       </span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="p-2 rounded-full text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all shrink-0"
-                    title="Sair"
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </button>
+                  <div className="flex flex-col items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleOpenEditProfile}
+                      className="p-2 rounded-full text-slate-400 hover:text-[#14A76C] hover:bg-emerald-50 transition-all"
+                      title="Editar Perfil"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="p-2 rounded-full text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all"
+                      title="Sair"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center gap-3">
@@ -4358,6 +4537,78 @@ export default function App() {
           )}
         </AnimatePresence>
 
+        {/* MODAL: EDITAR PERFIL */}
+        <AnimatePresence>
+          {isEditProfileOpen && user && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="w-full sm:max-w-md bg-white rounded-2xl p-5 shadow-2xl flex flex-col gap-4 border border-slate-200"
+              >
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <h3 className="text-sm font-bold text-slate-800">Editar Perfil</h3>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditProfileOpen(false)}
+                    className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+                    title="Fechar"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveProfile} className="space-y-3">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    id="profile-photo-upload"
+                    onChange={handleEditProfilePhotoChange}
+                  />
+                  <div className="flex justify-center">
+                    <label
+                      htmlFor="profile-photo-upload"
+                      className="relative w-20 h-20 rounded-full bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center cursor-pointer overflow-hidden hover:border-[#14A76C]/50 transition-all"
+                      title="Alterar foto de perfil"
+                    >
+                      {editProfilePhotoPreview ? (
+                        <img src={editProfilePhotoPreview} alt="Pré-visualização do perfil" className="w-full h-full object-cover" />
+                      ) : (
+                        <Camera className="w-6 h-6 text-slate-400" />
+                      )}
+                      <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-white text-[9px] font-bold text-center py-0.5">
+                        Alterar
+                      </span>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">Nome de exibição</label>
+                    <input
+                      type="text"
+                      required
+                      value={editProfileName}
+                      onChange={(e) => setEditProfileName(e.target.value)}
+                      placeholder="Seu nome"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#14A76C]"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSavingProfile}
+                    className="w-full py-3 rounded-xl bg-[#14A76C] hover:bg-[#108958] active:scale-98 text-white text-xs font-bold shadow-md transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {isSavingProfile ? 'Salvando...' : 'Salvar Alterações'}
+                  </button>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
         {/* MODAL: LOGIN E CADASTRO */}
         <AnimatePresence>
           {isAuthOpen && (
@@ -4515,6 +4766,22 @@ export default function App() {
                       className="w-full py-3 rounded-xl bg-[#14A76C] hover:bg-[#108958] active:scale-98 text-white text-xs font-bold shadow-md transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {isAuthSubmitting ? 'Criando conta...' : 'Cadastrar e Começar'}
+                    </button>
+
+                    <div className="flex items-center gap-3 py-1">
+                      <div className="flex-1 h-px bg-slate-200" />
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase">ou</span>
+                      <div className="flex-1 h-px bg-slate-200" />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleGoogleLogin}
+                      disabled={isAuthSubmitting}
+                      className="w-full py-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-bold shadow-2xs transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <GoogleIcon className="w-4 h-4" />
+                      <span>Cadastrar com Google</span>
                     </button>
                   </form>
                 )}
