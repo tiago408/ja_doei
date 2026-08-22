@@ -85,6 +85,7 @@ interface DonationItem {
   isFavorite?: boolean;
   isRedeemed?: boolean;
   isFeatured?: boolean;
+  status?: 'available' | 'completed';
   donorName?: string;
   donorAvatar?: string;
   userId?: string | null;
@@ -393,6 +394,7 @@ export default function App() {
           description: data.description,
           createdAt: 'Hoje',
           isFeatured: data.isFeatured || false,
+          status: data.status || 'available',
           donorName: data.donorName || data.userName || 'Você',
           donorAvatar: data.donorAvatar,
           userId: data.userId || null,
@@ -1104,7 +1106,6 @@ export default function App() {
 
     const fallbackImg = 'https://images.unsplash.com/photo-1532629345422-7515f3d16bb0?w=500';
     const donationCredits = Number(newCredits) || 10;
-    const earnedBonus = firstDonationBonus;
 
     setIsSubmittingDonation(true);
 
@@ -1132,6 +1133,7 @@ export default function App() {
       imageUrl: finalImageUrl,
       description: newDescription.trim() || 'Item doado recentemente na comunidade em ótimo estado.',
       isFeatured: newIsFeatured,
+      status: 'available',
       userId: user?.uid || null,
       userName: user?.name || 'Você',
       donorName: user?.name || 'Você',
@@ -1159,24 +1161,11 @@ export default function App() {
           ...donationPayload,
           createdAt: 'Hoje',
           isFavorite: false,
-          isRedeemed: false
+          isRedeemed: false,
+          status: 'available'
         },
         ...prev
       ]);
-    }
-
-    // Grant credits: persist to the user's Firestore document when logged in, else fall back locally
-    if (user?.uid) {
-      try {
-        await updateDoc(doc(db, 'users', user.uid), {
-          credits: increment(donationCredits + earnedBonus)
-        });
-      } catch (error) {
-        console.error('Erro ao atualizar créditos do usuário no Firestore:', error);
-        setUserCredits((prev) => prev + donationCredits + earnedBonus);
-      }
-    } else {
-      setUserCredits((prev) => prev + donationCredits + earnedBonus);
     }
 
     // Reset Form
@@ -1201,13 +1190,39 @@ export default function App() {
 
     showToast(
       savedToFirestore
-        ? `🎉 Doação cadastrada com sucesso! ${newIsFeatured ? '🔥 Item destacado no topo!' : ''} Você ganhou +${donationCredits + earnedBonus} Créditos${earnedBonus > 0 ? ` (com bônus de 1ª doação)` : ''}!`
+        ? `🎉 Doação cadastrada com sucesso! ${newIsFeatured ? '🔥 Item destacado no topo!' : ''} Os créditos serão liberados após a confirmação da entrega.`
         : `🎉 Doação salva localmente! Ela será sincronizada assim que a conexão for restabelecida.`,
       'success'
     );
   };
 
   // Confirm Redeem (Confirmação Troca Final)
+  const handleConfirmDonationDelivery = async (item: DonationItem) => {
+    if (!user || !item.userId) {
+      showToast('Não foi possível identificar o doador deste item.', 'error');
+      return;
+    }
+
+    if (!window.confirm('Confirmar o recebimento desta doação?')) return;
+
+    try {
+      await updateDoc(doc(db, 'donations', item.id), { status: 'completed' });
+      await updateDoc(doc(db, 'users', item.userId), {
+        credits: increment(item.credits)
+      });
+      setItems((prev) => prev.map((currentItem) => (
+        currentItem.id === item.id
+          ? { ...currentItem, status: 'completed', isRedeemed: true }
+          : currentItem
+      )));
+      setSuccessRedeemData(null);
+      showToast(`Entrega confirmada. +${item.credits} créditos foram liberados ao doador.`, 'success');
+    } catch (error) {
+      console.error('Erro ao concluir doação:', error);
+      showToast('Não foi possível confirmar a entrega. Tente novamente.', 'error');
+    }
+  };
+
   const handleConfirmRedeem = async () => {
     if (!selectedItemForRedeem) return;
 
@@ -4689,6 +4704,14 @@ export default function App() {
 
                 {/* Action Buttons */}
                 <div className="space-y-2 mt-auto">
+                  <button
+                    type="button"
+                    onClick={() => void handleConfirmDonationDelivery(successRedeemData.item)}
+                    className="w-full py-3 px-4 bg-[#FF8243] hover:bg-[#e96f2f] active:scale-98 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Confirmar recebimento da doação</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
