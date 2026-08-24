@@ -68,7 +68,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { db, storage, auth } from './firebase';
-import { calculateItemCredits, fetchGeminiValuation } from './aiPricingService';
+import { analyzeImageWithGemini, calculateItemCredits, fetchGeminiValuation } from './aiPricingService';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
 
@@ -256,16 +256,6 @@ const AI_CREDIT_TABLE: Record<string, number> = {
   Móveis: 80,
   'Casa & Cozinha': 50,
   Outros: 25,
-};
-
-const AI_CONDITION_HINTS: Record<string, string> = {
-  Roupas: 'Seminovo - Excelente estado',
-  'Calçados': 'Usado - Bom estado',
-  Eletrônicos: 'Seminovo - Excelente estado',
-  Livros: 'Usado - Bom estado',
-  Móveis: 'Usado - Com marcas de uso',
-  'Casa & Cozinha': 'Seminovo - Excelente estado',
-  Outros: 'Usado - Bom estado',
 };
 
 // Maps known preset photos straight to their category, simulating recognition
@@ -743,6 +733,7 @@ export default function App() {
   const [newCreditsBase, setNewCreditsBase] = useState<number>(100);
   const [creditsMin, setCreditsMin] = useState<number>(80);
   const [creditsMax, setCreditsMax] = useState<number>(120);
+  const [isVisionPricingLocked, setIsVisionPricingLocked] = useState<boolean>(false);
   const [requiresModeration, setRequiresModeration] = useState<boolean>(false);
   const [donateStep, setDonateStep] = useState<number>(1);
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
@@ -759,6 +750,7 @@ export default function App() {
   }, [isDonateModalOpen]);
 
   const handleGeminiValuation = async (conditionOverride = newCondition) => {
+    if (isVisionPricingLocked) return;
     const requestId = ++pricingRequestId.current;
     if (!newTitle.trim()) {
       setNewCredits(100);
@@ -828,7 +820,7 @@ export default function App() {
     }, 1000);
   };
 
-  const handleAiSuggestion = (selectedUrl?: string) => {
+  const handleAiSuggestion = async (selectedUrl?: string) => {
     const finalUrl = (selectedUrl ?? newImageUrl ?? '').trim();
     if (!finalUrl) {
       setIsAnalyzing(false);
@@ -839,20 +831,48 @@ export default function App() {
     setIsAnalyzing(true);
     setAiSuggested(false);
 
-    window.setTimeout(() => {
-      const suggestedCategory =
-        PHOTO_PRESET_CATEGORY_MAP[finalUrl] || guessCategoryFromUrl(finalUrl);
-      const suggestedCondition = AI_CONDITION_HINTS[suggestedCategory] || 'Seminovo - Excelente estado';
-      const suggestedCredits = AI_CREDIT_TABLE[suggestedCategory] ?? 30;
+    const requestId = ++pricingRequestId.current;
+    try {
+      const analysis = await analyzeImageWithGemini(finalUrl);
+      if (requestId !== pricingRequestId.current) return;
 
-      setNewCategory(suggestedCategory);
-      setNewCondition(suggestedCondition);
+      const categoryAliases: Record<string, string> = {
+        roupas: 'Roupas', vestuario: 'Roupas', calçados: 'Calçados', calcados: 'Calçados',
+        livros: 'Livros', brinquedos: 'Outros', móveis: 'Móveis', moveis: 'Móveis',
+        eletrônicos: 'Eletrônicos', eletronicos: 'Eletrônicos', 'casa e cozinha': 'Casa & Cozinha',
+        'casa & cozinha': 'Casa & Cozinha', outros: 'Outros'
+      };
+      const normalizedCategory = categoryAliases[analysis.category.toLowerCase()] || 'Outros';
+      const suggestedCredits = analysis.estimatedMarketValueBRL;
+
+      setNewTitle(analysis.title);
+      setNewCategory(normalizedCategory);
+      setNewDescription(analysis.description);
       setNewCredits(suggestedCredits);
       setNewCreditsBase(suggestedCredits);
+      setCreditsMin(Math.round(suggestedCredits * 0.8));
+      setCreditsMax(Math.round(suggestedCredits * 1.2));
+      setNewCondition('Seminovo - Excelente estado');
+      setIsVisionPricingLocked(true);
+      setPricingJustification('Valor estimado pelo Gemini Vision com base no mercado brasileiro.');
       setAiSuggested(true);
-      setIsAnalyzing(false);
       setDonateStep(2);
-    }, 1500);
+    } catch (error) {
+      if (requestId !== pricingRequestId.current) return;
+      console.warn('Gemini Vision indisponível; usando sugestão local:', error);
+      const suggestedCategory = PHOTO_PRESET_CATEGORY_MAP[finalUrl] || guessCategoryFromUrl(finalUrl);
+      const suggestedCredits = AI_CREDIT_TABLE[suggestedCategory] ?? 15;
+      setNewCategory(suggestedCategory);
+      setNewCredits(suggestedCredits);
+      setNewCreditsBase(suggestedCredits);
+      setCreditsMin(Math.round(suggestedCredits * 0.8));
+      setCreditsMax(Math.round(suggestedCredits * 1.2));
+      setIsVisionPricingLocked(true);
+      setAiSuggested(true);
+      setDonateStep(2);
+    } finally {
+      if (requestId === pricingRequestId.current) setIsAnalyzing(false);
+    }
   };
 
   const handleCreditsStep = (delta: number) => {
@@ -875,7 +895,7 @@ export default function App() {
   // Sets the chosen photo (upload, camera or preset) and kicks off the AI simulation
   const handlePhotoSelected = (url: string) => {
     setNewImageUrl(url);
-    handleAiSuggestion(url);
+    void handleAiSuggestion(url);
   };
 
   const handlePhotoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1177,6 +1197,7 @@ export default function App() {
     setNewCategory('Roupas');
     setNewCredits(100);
     setNewCreditsBase(100);
+    setIsVisionPricingLocked(false);
     setNewImageUrl('');
     setNewImageFile(null);
     setNewExtraPhotos([]);
@@ -3291,6 +3312,7 @@ export default function App() {
                               onClick={() => {
                                 setNewImageUrl('');
                                 setNewImageFile(null);
+                                setIsVisionPricingLocked(false);
                                 setIsAnalyzing(false);
                                 setAiSuggested(false);
                               }}
@@ -3324,7 +3346,7 @@ export default function App() {
                         {isAnalyzing && (
                           <div className="flex items-center gap-2 rounded-xl border border-[#14A76C]/20 bg-emerald-50 p-2 text-[11px] font-semibold text-[#14A76C]">
                             <Sparkles className="w-4 h-4 animate-pulse" />
-                            <span>IA do Já Doei analisando a foto e calculando os créditos... ✨</span>
+                            <span>Analisando imagem via IA...</span>
                           </div>
                         )}
                       </div>
