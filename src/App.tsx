@@ -47,6 +47,7 @@ import {
   addDoc,
   onSnapshot,
   query,
+  where,
   orderBy,
   serverTimestamp,
   doc,
@@ -327,36 +328,13 @@ function guessCategoryFromUrl(url: string): string {
   return knownCategories[hash % knownCategories.length];
 }
 
-// Mock transactional notifications shown in the Notifications Center
-const NOTIFICATIONS_MOCK = [
-  {
-    id: 1,
-    icon: PackageCheck,
-    iconBg: 'bg-[#14A76C]/10',
-    iconColor: 'text-[#14A76C]',
-    title: 'Item Resgatado',
-    text: "Seu desapego 'Vaso de Cerâmica' foi resgatado! Prepare o envio.",
-    time: 'Há 2 horas'
-  },
-  {
-    id: 2,
-    icon: Truck,
-    iconBg: 'bg-[#FF8243]/10',
-    iconColor: 'text-[#FF8243]',
-    title: 'Envio em Andamento',
-    text: 'O motorista Uber Flash está a caminho para coletar sua doação.',
-    time: 'Há 5 horas'
-  },
-  {
-    id: 3,
-    icon: Sparkles,
-    iconBg: 'bg-sky-50',
-    iconColor: 'text-sky-600',
-    title: 'Créditos Liberados',
-    text: 'Sua doação foi entregue! Os créditos + bônus já estão na sua conta.',
-    time: 'Ontem'
-  }
-];
+interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  createdAt: Date | null;
+  read: boolean;
+}
 
 export default function App() {
   // Splash Screen State
@@ -375,6 +353,7 @@ export default function App() {
   const [items, setItems] = useState<DonationItem[]>(INITIAL_ITEMS);
   const [userCredits, setUserCredits] = useState<number>(0);
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   // Loads donations from Firestore in real time and merges them with the local mock feed
   useEffect(() => {
@@ -415,6 +394,7 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
+
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'home' | 'search' | 'favorites' | 'profile'>('home');
 
@@ -428,6 +408,45 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState<string>('');
   const [isAuthSubmitting, setIsAuthSubmitting] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (!user?.uid) {
+      setNotifications([]);
+      return;
+    }
+
+    const notificationsQuery = query(
+      collection(db, 'notifications'),
+      where('userId', '==', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(notificationsQuery, (snapshot) => {
+      const nextNotifications: AppNotification[] = snapshot.docs
+        .map((notificationDoc) => {
+          const data = notificationDoc.data();
+          const createdAt = data.createdAt?.toDate?.() ?? null;
+          return {
+            id: notificationDoc.id,
+            title: data.title || 'Nova notificação',
+            message: data.message || data.text || '',
+            createdAt,
+            read: data.read === true
+          };
+        })
+        .sort((first, second) => {
+          const firstTime = first.createdAt?.getTime() ?? 0;
+          const secondTime = second.createdAt?.getTime() ?? 0;
+          return secondTime - firstTime;
+        });
+
+      setNotifications(nextNotifications);
+    }, (error) => {
+      console.error('Erro ao sincronizar notificações:', error);
+      setNotifications([]);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
   // Edit Profile State
   const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
   const [editProfileName, setEditProfileName] = useState<string>('');
@@ -436,9 +455,13 @@ export default function App() {
   const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
 
   const profileDonations = useMemo(
-    () => (user ? items.filter((item) => item.userId === user.uid) : []),
+    () => (user
+      ? items.filter((item) => item.userId === user.uid && (!item.status || item.status === 'available'))
+      : []),
     [items, user]
   );
+
+  const hasUnreadNotifications = notifications.some((notification) => !notification.read);
 
   // Keeps the logged-in user (name, email, photo) in sync with Firebase Auth
   useEffect(() => {
@@ -982,7 +1005,7 @@ export default function App() {
     return items.filter(
       (item) =>
         (item.receiverId === user.uid || item.userId === user.uid) &&
-        ['reserved', 'completed'].includes(item.status || 'available')
+        ['reserved', 'in_transit', 'completed'].includes(item.status || 'available')
     );
   }, [items, user]);
 
@@ -1222,6 +1245,13 @@ export default function App() {
       await updateDoc(doc(db, 'users', item.userId), {
         credits: increment(item.credits)
       });
+      await addDoc(collection(db, 'notifications'), {
+        userId: item.userId,
+        title: 'Créditos liberados',
+        message: `Créditos de ${item.title} foram liberados após a confirmação de ${user.name}.`,
+        createdAt: serverTimestamp(),
+        read: false
+      });
       setItems((prev) => prev.map((currentItem) => (
         currentItem.id === item.id
           ? { ...currentItem, status: 'completed', isRedeemed: true }
@@ -1255,6 +1285,7 @@ export default function App() {
 
         await addDoc(collection(db, 'notifications'), {
           userId: item.userId,
+          title: 'Entrega confirmada',
           message: `A entrega de ${item.title} foi confirmada por ${user.name}.`,
           createdAt: serverTimestamp(),
           read: false
@@ -1308,6 +1339,7 @@ export default function App() {
       });
       await addDoc(collection(db, 'notifications'), {
         userId: donorId,
+        title: 'Item resgatado',
         message: `Seu item ${selectedItemForRedeem.title} foi solicitado por ${user.name}!`,
         createdAt: serverTimestamp(),
         read: false
@@ -1463,7 +1495,9 @@ export default function App() {
                   title="Notificações"
                 >
                   <Bell className="w-4 h-4" />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-[#FF8243] rounded-full border border-[#14A76C]"></span>
+                  {hasUnreadNotifications && (
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-[#14A76C]"></span>
+                  )}
                 </button>
               </div>
             </div>
@@ -2232,7 +2266,11 @@ export default function App() {
                               ? 'text-emerald-600 bg-emerald-50'
                               : 'text-amber-600 bg-amber-50'
                           }`}>
-                            {item.status === 'completed' ? 'Concluído' : 'Reservado'}
+                            {item.status === 'completed'
+                              ? 'Concluído'
+                              : item.status === 'in_transit'
+                              ? 'Em trânsito'
+                              : 'Reservado'}
                           </span>
                         </div>
 
@@ -3783,25 +3821,41 @@ export default function App() {
                   </button>
                 </div>
 
-                {NOTIFICATIONS_MOCK.length === 0 ? (
+                {notifications.length === 0 ? (
                   <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
                     <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
                       <Inbox className="w-6 h-6" />
                     </div>
                     <p className="text-xs font-semibold text-slate-500">
-                      Nenhuma notificação nova no momento
+                      Você não possui notificações no momento.
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-2 overflow-y-auto no-scrollbar">
-                    {NOTIFICATIONS_MOCK.map((notification) => {
-                      const NotificationIcon = notification.icon;
+                    {notifications.map((notification) => {
+                      const isDeliveryNotification = notification.title.toLowerCase().includes('envio');
+                      const isCreditNotification = notification.title.toLowerCase().includes('crédito');
+                      const NotificationIcon = isDeliveryNotification
+                        ? Truck
+                        : isCreditNotification
+                        ? Sparkles
+                        : PackageCheck;
+                      const iconBg = isDeliveryNotification
+                        ? 'bg-[#FF8243]/10'
+                        : isCreditNotification
+                        ? 'bg-sky-50'
+                        : 'bg-[#14A76C]/10';
+                      const iconColor = isDeliveryNotification
+                        ? 'text-[#FF8243]'
+                        : isCreditNotification
+                        ? 'text-sky-600'
+                        : 'text-[#14A76C]';
                       return (
                         <div
                           key={notification.id}
-                          className="p-3 rounded-xl border border-slate-200 bg-slate-50 flex items-start gap-2.5"
+                          className={`p-3 rounded-xl border border-slate-200 flex items-start gap-2.5 ${notification.read ? 'bg-slate-50' : 'bg-emerald-50/40'}`}
                         >
-                          <div className={`w-8 h-8 rounded-full ${notification.iconBg} ${notification.iconColor} flex items-center justify-center shrink-0`}>
+                          <div className={`w-8 h-8 rounded-full ${iconBg} ${iconColor} flex items-center justify-center shrink-0`}>
                             <NotificationIcon className="w-4 h-4" />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -3809,10 +3863,12 @@ export default function App() {
                               {notification.title}
                             </h4>
                             <p className="text-[11px] text-slate-500 leading-snug">
-                              {notification.text}
+                              {notification.message}
                             </p>
                             <span className="text-[10px] text-slate-400 mt-0.5 block">
-                              {notification.time}
+                              {notification.createdAt
+                                ? notification.createdAt.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+                                : 'Agora'}
                             </span>
                           </div>
                         </div>
