@@ -11,16 +11,6 @@ export interface PricingResult {
   requiresModeration: boolean;
 }
 
-// Tabela de Âncoras e Limites Por Categoria
-const CATEGORY_ANCHORS: Record<string, { baseMin: number; baseMax: number }> = {
-  eletrodomesticos: { baseMin: 150, baseMax: 600 },
-  eletronicos: { baseMin: 200, baseMax: 1500 },
-  moveis: { baseMin: 100, baseMax: 800 },
-  vestuario: { baseMin: 20, baseMax: 150 },
-  livros_brinquedos: { baseMin: 15, baseMax: 80 },
-  outros: { baseMin: 30, baseMax: 200 },
-};
-
 // Fatores de Conservação
 const CONDITION_MULTIPLIERS: Record<string, number> = {
   "Novo / Lacrado": 1.0,
@@ -108,17 +98,16 @@ export function calculateItemCredits(
   categoryKey: string,
   condition: string
 ): PricingResult {
-  const category = CATEGORY_ANCHORS[categoryKey] || CATEGORY_ANCHORS["outros"];
-
-  // Lógica heurística baseada no título e regras brasileiras (1 Crédito = R$ 1,00)
-  let estimatedMarketValueBRL = (category.baseMin + category.baseMax) / 2;
-
   const lowerTitle = title.toLowerCase();
-  if (lowerTitle.includes("nespresso") || lowerTitle.includes("cafeteira")) {
-    estimatedMarketValueBRL = 380;
-  } else if (lowerTitle.includes("geladeira") || lowerTitle.includes("sofa")) {
-    estimatedMarketValueBRL = 700;
-  }
+  let estimatedMarketValueBRL = 15;
+  if (lowerTitle.includes("nespresso") || lowerTitle.includes("cafeteira")) estimatedMarketValueBRL = 380;
+  else if (lowerTitle.includes("geladeira") || lowerTitle.includes("sofa")) estimatedMarketValueBRL = 700;
+  else if (/(caneta|lapiseira|caderno|copo simples|miudeza)/.test(lowerTitle)) estimatedMarketValueBRL = 15;
+  else if (categoryKey === 'eletrodomesticos') estimatedMarketValueBRL = 375;
+  else if (categoryKey === 'eletronicos') estimatedMarketValueBRL = 850;
+  else if (categoryKey === 'moveis') estimatedMarketValueBRL = 450;
+  else if (categoryKey === 'vestuario') estimatedMarketValueBRL = 85;
+  else if (categoryKey === 'livros_brinquedos') estimatedMarketValueBRL = 48;
 
   const pricing = createPricingResult(
     title,

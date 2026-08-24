@@ -86,12 +86,11 @@ interface DonationItem {
   isFavorite?: boolean;
   isRedeemed?: boolean;
   isFeatured?: boolean;
-  status?: 'available' | 'reserved' | 'in_transit' | 'completed';
+  status?: 'available' | 'reserved' | 'express_accepted' | 'in_transit' | 'completed';
   donorName?: string;
   donorAvatar?: string;
   userId?: string | null;
   receiverId?: string | null;
-  allowPickup?: boolean;
   allowStandardDelivery?: boolean;
   allowExpressDelivery?: boolean;
   expressDeliveryRequested?: boolean;
@@ -100,7 +99,7 @@ interface DonationItem {
 
 export interface FreightOption {
   id: string;
-  category: 'imediata' | 'padrao' | 'grande_porte';
+  category: 'imediata' | 'padrao';
   categoryLabel: string;
   name: string;
   carrierName: string;
@@ -168,17 +167,6 @@ const FREIGHT_OPTIONS: FreightOption[] = [
     icon: '📦',
     type: 'standard'
   },
-  {
-    id: 'lalamove_carreto',
-    category: 'grande_porte',
-    categoryLabel: 'Opções de Grande Porte - Móveis/Eletro',
-    name: 'Lalamove Utilitário / Carreto',
-    carrierName: 'Lalamove Utilitário',
-    price: 65.00,
-    deliveryTime: 'Entrega agendada',
-    icon: '🚛',
-    type: 'standard'
-  }
 ];
 
 // Default mock products
@@ -384,7 +372,6 @@ export default function App() {
           donorAvatar: data.donorAvatar,
           userId: data.userId || null,
           receiverId: data.receiverId || null,
-          allowPickup: data.allowPickup !== false,
           allowStandardDelivery: data.allowStandardDelivery !== false,
           allowExpressDelivery: data.allowExpressDelivery === true,
           expressDeliveryRequested: data.expressDeliveryRequested === true,
@@ -797,7 +784,6 @@ export default function App() {
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newIsFeatured, setNewIsFeatured] = useState<boolean>(false);
-  const [allowPickup, setAllowPickup] = useState<boolean>(true);
   const [allowStandardDelivery, setAllowStandardDelivery] = useState<boolean>(true);
   const [allowExpressDelivery, setAllowExpressDelivery] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
@@ -1212,7 +1198,6 @@ export default function App() {
       userName: user?.name || 'Você',
       donorName: user?.name || 'Você',
       donorAvatar: user?.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
-      allowPickup,
       allowStandardDelivery,
       allowExpressDelivery
     };
@@ -1258,7 +1243,6 @@ export default function App() {
     setIsPricingAnalyzing(false);
     setNewDescription('');
     setNewIsFeatured(false);
-      setAllowPickup(true);
       setAllowStandardDelivery(true);
       setAllowExpressDelivery(false);
     setAiSuggested(false);
@@ -1307,6 +1291,33 @@ export default function App() {
     } catch (error) {
       console.error('Erro ao concluir doação:', error);
       showToast('Não foi possível confirmar a entrega. Tente novamente.', 'error');
+    }
+  };
+
+  const handleAcceptExpressDelivery = async (item: DonationItem) => {
+    if (!user || item.userId !== user.uid || !item.receiverId) return;
+
+    try {
+      await updateDoc(doc(db, 'donations', item.id), {
+        status: 'in_transit',
+        expressDeliveryRequested: false
+      });
+      await addDoc(collection(db, 'notifications'), {
+        userId: item.receiverId,
+        title: 'Entrega expressa aceita',
+        message: 'O doador aceitou o envio expresso! O motorista parceiro já foi acionado para a coleta.',
+        createdAt: serverTimestamp(),
+        read: false
+      });
+      setItems((prev) => prev.map((currentItem) => (
+        currentItem.id === item.id
+          ? { ...currentItem, status: 'in_transit', expressDeliveryRequested: false }
+          : currentItem
+      )));
+      showToast('Coleta expressa confirmada e motorista acionado.', 'success');
+    } catch (error) {
+      console.error('Erro ao aceitar coleta expressa:', error);
+      showToast('Não foi possível aceitar a coleta expressa. Tente novamente.', 'error');
     }
   };
 
@@ -2317,7 +2328,7 @@ export default function App() {
                     {profileHistoryItems.map((item) => (
                       <div
                         key={item.id}
-                        className="flex flex-col gap-2 p-2 rounded-xl bg-slate-50 border border-slate-100"
+                        className={`flex flex-col gap-2 p-2 rounded-xl border ${item.expressDeliveryRequested && item.userId === user?.uid ? 'bg-red-50 border-red-300' : 'bg-slate-50 border-slate-100'}`}
                       >
                         <div className="flex items-center gap-2.5">
                           <img
@@ -2357,9 +2368,19 @@ export default function App() {
                         )}
 
                         {item.status === 'reserved' && user?.uid === item.userId && (
-                          <span className="inline-flex items-center w-fit px-2 py-1 rounded-md text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200">
-                            Aguardando confirmação de quem recebeu
-                          </span>
+                          item.expressDeliveryRequested ? (
+                            <button
+                              type="button"
+                              onClick={() => void handleAcceptExpressDelivery(item)}
+                              className="w-full px-2 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold transition-colors"
+                            >
+                              Aceitar &amp; Confirmar Coleta Expressa (15 min)
+                            </button>
+                          ) : (
+                            <span className="inline-flex items-center w-fit px-2 py-1 rounded-md text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200">
+                              Aguardando confirmação de quem recebeu
+                            </span>
+                          )
                         )}
                       </div>
                     ))}
@@ -2653,7 +2674,7 @@ export default function App() {
                             Opções Imediatas - Moto / Cidade
                           </span>
                           <div className="space-y-1.5">
-                            {FREIGHT_OPTIONS.filter((f) => f.category === 'imediata').map((opt) => (
+                            {FREIGHT_OPTIONS.filter((f) => f.category === 'imediata' && selectedItemForDetails.allowExpressDelivery).map((opt) => (
                               <label
                                 key={opt.id}
                                 onClick={() => {
@@ -2754,44 +2775,6 @@ export default function App() {
                             Opções de Grande Porte - Móveis/Eletro
                           </span>
                           <div className="space-y-1.5">
-                            {FREIGHT_OPTIONS.filter((f) => f.category === 'grande_porte').map((opt) => (
-                              <label
-                                key={opt.id}
-                                onClick={() => {
-                                  if (selectedItemForDetails.allowStandardDelivery) setSelectedFreightId(opt.id);
-                                }}
-                                className={`p-2.5 rounded-xl border-2 flex items-center justify-between transition-all ${
-                                  !selectedItemForDetails.allowStandardDelivery ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                                } ${
-                                  selectedFreightId === opt.id
-                                    ? 'border-[#14A76C] bg-emerald-50/60 shadow-2xs'
-                                    : 'border-slate-200 bg-white hover:border-slate-300'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2.5">
-                                  <input
-                                    type="radio"
-                                    name="freightOption"
-                                    checked={selectedFreightId === opt.id}
-                                    onChange={() => setSelectedFreightId(opt.id)}
-                                    disabled={!selectedItemForDetails.allowStandardDelivery}
-                                    className="accent-[#14A76C]"
-                                  />
-                                  <span className="text-base">{opt.icon}</span>
-                                  <div>
-                                    <span className="text-xs font-bold text-slate-800 block">
-                                      {opt.name}
-                                    </span>
-                                    <span className="text-[10px] text-slate-500 block">
-                                      ({opt.deliveryTime})
-                                    </span>
-                                  </div>
-                                </div>
-                                <span className="text-xs font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                                  R$ {opt.price.toFixed(2).replace('.', ',')}
-                                </span>
-                              </label>
-                            ))}
                           </div>
                         </div>
 
@@ -3736,7 +3719,6 @@ export default function App() {
                             Opções de entrega
                           </span>
                           {[
-                            { label: 'Permitir Retirada no Local', value: allowPickup, setValue: setAllowPickup },
                             { label: 'Permitir Entrega Padrão', value: allowStandardDelivery, setValue: setAllowStandardDelivery },
                             { label: 'Disponível para Entrega Expressa 15 min', value: allowExpressDelivery, setValue: setAllowExpressDelivery }
                           ].map((option) => (
