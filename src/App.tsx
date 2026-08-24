@@ -462,6 +462,7 @@ export default function App() {
   );
 
   const hasUnreadNotifications = notifications.some((notification) => !notification.read);
+  const safeUserCredits = Math.max(-30, userCredits);
 
   // Keeps the logged-in user (name, email, photo) in sync with Firebase Auth
   useEffect(() => {
@@ -605,6 +606,19 @@ export default function App() {
     } catch (error) {
       console.error('Erro ao sair:', error);
     }
+  };
+
+  const handleNotificationClick = async (notification: AppNotification) => {
+    if (!notification.read) {
+      try {
+        await updateDoc(doc(db, 'notifications', notification.id), { read: true });
+      } catch (error) {
+        console.error('Erro ao marcar notificação como lida:', error);
+      }
+    }
+
+    setIsNotificationsModalOpen(false);
+    setActiveTab('profile');
   };
 
   // Opens the Edit Profile modal pre-filled with the current name and photo
@@ -1316,19 +1330,20 @@ export default function App() {
       return;
     }
 
-    if (userCredits < itemCredits) {
-      showToast(
-        `Créditos insuficientes. O resgate exige ${itemCredits} créditos e seu saldo atual é ${userCredits}.`,
-        'error'
-      );
-      return;
-    }
-
     try {
       const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
       const currentCredits = Number(userSnap.data()?.credits ?? userCredits);
-      const nextCredits = Math.max(0, currentCredits - itemCredits);
+      const limitePermitido = -Math.round(itemCredits * 0.30);
+      const nextCredits = currentCredits - itemCredits;
+
+      if (nextCredits < limitePermitido) {
+        showToast(
+          'Saldo insuficiente. Você precisa de mais créditos! Que tal publicar um desapego agora para ganhar créditos?',
+          'error'
+        );
+        return;
+      }
 
       await updateDoc(userRef, {
         credits: nextCredits
@@ -1345,7 +1360,7 @@ export default function App() {
         read: false
       });
 
-      setUserCredits((prev) => Math.max(0, prev - itemCredits));
+      setUserCredits(nextCredits);
       setItems((prev) =>
         prev.map((item) =>
           item.id === selectedItemForRedeem.id
@@ -1513,7 +1528,7 @@ export default function App() {
                     Seus créditos
                   </span>
                   <div className="text-lg font-black tracking-tight text-white flex items-center gap-1.5">
-                    <span>{userCredits}</span>
+                    <span>{safeUserCredits}</span>
                     <span className="text-xs font-semibold text-emerald-200">
                       Créditos
                     </span>
@@ -1986,7 +2001,7 @@ export default function App() {
                     <p className="text-[11px] text-slate-500 truncate">{user.email} • São Paulo, SP</p>
                     <div className="mt-2 flex items-center gap-2">
                       <span className="bg-[#FF8243]/10 text-[#FF8243] text-xs font-bold px-2.5 py-0.5 rounded-lg border border-[#FF8243]/20">
-                        {userCredits} Créditos
+                        {safeUserCredits} Créditos
                       </span>
                     </div>
                   </div>
@@ -2828,13 +2843,13 @@ export default function App() {
                 {/* Resumo Discriminado do Resgate e Complemento em R$ */}
                 {(() => {
                   const itemCost = selectedItemForRedeem.credits;
-                  const maxPercent = isPremium ? 0.40 : 0.30;
-                  const maxMissingAllowed = Math.floor(itemCost * maxPercent);
-                  const minCreditsUserNeeded = itemCost - maxMissingAllowed;
-                  const missingCredits = Math.max(0, itemCost - userCredits);
+                  const limitePermitido = -Math.round(itemCost * 0.30);
+                  const maxMissingAllowed = Math.round(itemCost * 0.30);
+                  const safeItemCredits = Math.max(limitePermitido, userCredits);
+                  const missingCredits = Math.max(0, itemCost - safeItemCredits);
                   const canRedeemWithComplement = missingCredits <= maxMissingAllowed;
 
-                  const creditsUsed = Math.min(userCredits, itemCost);
+                  const creditsUsed = Math.max(0, Math.min(safeItemCredits, itemCost));
                   const cashComplement = (itemCost - creditsUsed) * 1.00;
                   const freightFee = currentSelectedFreight.price;
                   const insuranceFee = isInsuranceSelected ? 3.90 : 0;
@@ -3159,7 +3174,7 @@ export default function App() {
                         {!canRedeemWithComplement ? (
                           <div className="p-3 bg-rose-50 rounded-2xl border border-rose-200 text-center space-y-2">
                             <p className="text-xs text-rose-700 font-semibold">
-                              ⚠️ Saldo de {userCredits} Cts é inferior ao mínimo necessário ({minCreditsUserNeeded} Cts) para este item.
+                              Saldo insuficiente. Você precisa de mais créditos! Que tal publicar um desapego agora para ganhar créditos?
                             </p>
                             <p className="text-[10px] text-slate-600">
                               {isPremium
@@ -3853,6 +3868,15 @@ export default function App() {
                       return (
                         <div
                           key={notification.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => void handleNotificationClick(notification)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              void handleNotificationClick(notification);
+                            }
+                          }}
                           className={`p-3 rounded-xl border border-slate-200 flex items-start gap-2.5 ${notification.read ? 'bg-slate-50' : 'bg-emerald-50/40'}`}
                         >
                           <div className={`w-8 h-8 rounded-full ${iconBg} ${iconColor} flex items-center justify-center shrink-0`}>
