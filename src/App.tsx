@@ -95,7 +95,7 @@ interface DonationItem {
 
 export interface FreightOption {
   id: string;
-  category: 'imediata' | 'padrao';
+  category: 'padrao';
   categoryLabel: string;
   name: string;
   carrierName: string;
@@ -107,39 +107,6 @@ export interface FreightOption {
 }
 
 const FREIGHT_OPTIONS: FreightOption[] = [
-  {
-    id: 'uber_flash',
-    category: 'imediata',
-    categoryLabel: 'Opções Imediatas - Moto / Cidade',
-    name: 'Uber Flash (Até 1h)',
-    carrierName: 'Uber',
-    price: 18.50,
-    deliveryTime: 'Chega em até 1 hora',
-    icon: '⚡',
-    type: 'express'
-  },
-  {
-    id: '99_entrega',
-    category: 'imediata',
-    categoryLabel: 'Opções Imediatas - Moto / Cidade',
-    name: '99Entrega (Até 1h)',
-    carrierName: '99Entrega',
-    price: 17.50,
-    deliveryTime: 'Chega em até 1 hora',
-    icon: '⚡',
-    type: 'express'
-  },
-  {
-    id: 'lalamove_moto',
-    category: 'imediata',
-    categoryLabel: 'Opções Imediatas - Moto / Cidade',
-    name: 'Lalamove Moto (Até 2h)',
-    carrierName: 'Lalamove',
-    price: 16.90,
-    deliveryTime: 'Chega em até 2 horas',
-    icon: '🛵',
-    type: 'express'
-  },
   {
     id: 'ja_doei_express',
     category: 'padrao',
@@ -1012,7 +979,7 @@ export default function App() {
   }, [items, user]);
 
   const currentSelectedFreight = useMemo(() => {
-    return FREIGHT_OPTIONS.find((f) => f.id === selectedFreightId) || FREIGHT_OPTIONS[3];
+    return FREIGHT_OPTIONS.find((f) => f.id === selectedFreightId) || FREIGHT_OPTIONS[0];
   }, [selectedFreightId]);
 
   // Open Product Details
@@ -1336,10 +1303,6 @@ export default function App() {
       await updateDoc(userRef, {
         credits: nextCredits
       });
-      if (currentSelectedFreight.type !== 'standard') {
-        showToast('A entrega expressa estará disponível em breve.', 'info');
-        return;
-      }
       await updateDoc(doc(db, 'donations', selectedItemForRedeem.id), {
         status: 'reserved',
         receiverId: user.uid,
@@ -2589,26 +2552,6 @@ export default function App() {
                     {/* Organized Selectable Shipping Radio Options */}
                     {isCepCalculated && (
                       <div className="space-y-3 max-h-64 overflow-y-auto no-scrollbar pr-1">
-                        {/* Entrega Expressa desativada na V1 */}
-                        <div>
-                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">
-                            Entrega Expressa
-                          </span>
-                          <div className="space-y-1.5">
-                            <div className="p-2.5 rounded-xl border-2 border-slate-200 bg-slate-100 opacity-50 flex items-center justify-between cursor-not-allowed">
-                              <div className="flex items-center gap-2.5">
-                                <input type="radio" name="freightOption" disabled className="accent-[#14A76C]" />
-                                <span className="text-base">⚡</span>
-                                <div>
-                                  <span className="text-xs font-bold text-slate-800 block">Entrega Expressa (15 min)</span>
-                                  <span className="text-[10px] text-slate-500 block">Disponível em breve</span>
-                                </div>
-                              </div>
-                              <span className="text-[9px] font-extrabold text-amber-700 bg-amber-100 px-2 py-1 rounded-md border border-amber-300">Em breve</span>
-                            </div>
-                          </div>
-                        </div>
-
                         {/* [Opções Padrão / Econômica] */}
                         <div>
                           <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">
