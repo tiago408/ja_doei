@@ -85,7 +85,7 @@ interface DonationItem {
   isFavorite?: boolean;
   isRedeemed?: boolean;
   isFeatured?: boolean;
-  status?: 'available' | 'reserved' | 'completed';
+  status?: 'available' | 'reserved' | 'in_transit' | 'completed';
   donorName?: string;
   donorAvatar?: string;
   userId?: string | null;
@@ -946,13 +946,14 @@ export default function App() {
   // Filtered Items (Sorted with Cadeira Ergonômica / Featured items first)
   const filteredItems = useMemo(() => {
     const filtered = items.filter((item) => {
+      const isAvailableInFeed = !item.status || item.status === 'available';
       const matchesCategory =
         selectedCategory === 'Todas' || item.category === selectedCategory;
       const matchesSearch =
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.location.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
+      return isAvailableInFeed && matchesCategory && matchesSearch;
     });
 
     return [...filtered].sort((a, b) => {
@@ -1276,9 +1277,7 @@ export default function App() {
   const handleConfirmRedeem = async () => {
     if (!selectedItemForRedeem || !user) return;
 
-    const itemCost = selectedItemForRedeem.credits;
-    const freightCost = Number(currentSelectedFreight.price) || 0;
-    const totalCost = Math.round(itemCost + freightCost);
+    const itemCredits = selectedItemForRedeem.credits;
     const donorId = selectedItemForRedeem.userId;
 
     if (!donorId) {
@@ -1286,17 +1285,22 @@ export default function App() {
       return;
     }
 
-    if (userCredits < totalCost) {
+    if (userCredits < itemCredits) {
       showToast(
-        `Créditos insuficientes. O resgate exige ${totalCost} créditos e seu saldo atual é ${userCredits}.`,
+        `Créditos insuficientes. O resgate exige ${itemCredits} créditos e seu saldo atual é ${userCredits}.`,
         'error'
       );
       return;
     }
 
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
-        credits: increment(-totalCost)
+      const userRef = doc(db, 'users', user.uid);
+      const userSnap = await getDoc(userRef);
+      const currentCredits = Number(userSnap.data()?.credits ?? userCredits);
+      const nextCredits = Math.max(0, currentCredits - itemCredits);
+
+      await updateDoc(userRef, {
+        credits: nextCredits
       });
       await updateDoc(doc(db, 'donations', selectedItemForRedeem.id), {
         status: 'reserved',
@@ -1309,7 +1313,7 @@ export default function App() {
         read: false
       });
 
-      setUserCredits((prev) => Math.max(0, prev - totalCost));
+      setUserCredits((prev) => Math.max(0, prev - itemCredits));
       setItems((prev) =>
         prev.map((item) =>
           item.id === selectedItemForRedeem.id
@@ -1327,7 +1331,7 @@ export default function App() {
       setSuccessRedeemData({
         item: redeemedItem,
         orderNumber,
-        creditsUsed: totalCost,
+        creditsUsed: itemCredits,
         freightPrice: currentSelectedFreight.price,
         cashComplement: 0,
         insuranceFee: isInsuranceSelected ? 3.90 : 0,
@@ -2209,30 +2213,21 @@ export default function App() {
                     {profileHistoryItems.map((item) => (
                       <div
                         key={item.id}
-                        className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100"
+                        className="flex flex-col gap-2 p-2 rounded-xl bg-slate-50 border border-slate-100"
                       >
-                        <img
-                          src={item.imageUrl}
-                          alt={item.title}
-                          className="w-10 h-10 rounded-lg object-cover"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-xs font-semibold text-slate-800 truncate">
-                            {item.title}
-                          </h4>
-                          <span className="text-[10px] text-slate-500">{item.location}</span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {item.status === 'reserved' && (
-                            <button
-                              type="button"
-                              onClick={() => void handleConfirmItemReceived(item)}
-                              className="px-2 py-1 rounded-md bg-[#14A76C] text-white text-[10px] font-bold"
-                            >
-                              Confirmar Recebimento do Item
-                            </button>
-                          )}
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                        <div className="flex items-center gap-2.5">
+                          <img
+                            src={item.imageUrl}
+                            alt={item.title}
+                            className="w-10 h-10 rounded-lg object-cover"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-xs font-semibold text-slate-800 truncate">
+                              {item.title}
+                            </h4>
+                            <span className="text-[10px] text-slate-500">{item.location}</span>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 ${
                             item.status === 'completed'
                               ? 'text-emerald-600 bg-emerald-50'
                               : 'text-amber-600 bg-amber-50'
@@ -2240,6 +2235,24 @@ export default function App() {
                             {item.status === 'completed' ? 'Concluído' : 'Reservado'}
                           </span>
                         </div>
+
+                        {item.status === 'reserved' && user?.uid === item.receiverId && (
+                          <div className="w-full">
+                            <button
+                              type="button"
+                              onClick={() => void handleConfirmItemReceived(item)}
+                              className="w-full px-2 py-1.5 rounded-md bg-[#14A76C] text-white text-[10px] font-bold"
+                            >
+                              Confirmar Recebimento do Item
+                            </button>
+                          </div>
+                        )}
+
+                        {item.status === 'reserved' && user?.uid === item.userId && (
+                          <span className="inline-flex items-center w-fit px-2 py-1 rounded-md text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200">
+                            Aguardando confirmação de quem recebeu
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
