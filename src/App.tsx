@@ -85,10 +85,11 @@ interface DonationItem {
   isFavorite?: boolean;
   isRedeemed?: boolean;
   isFeatured?: boolean;
-  status?: 'available' | 'completed';
+  status?: 'available' | 'reserved' | 'completed';
   donorName?: string;
   donorAvatar?: string;
   userId?: string | null;
+  receiverId?: string | null;
 }
 
 export interface FreightOption {
@@ -398,8 +399,9 @@ export default function App() {
           donorName: data.donorName || data.userName || 'Você',
           donorAvatar: data.donorAvatar,
           userId: data.userId || null,
+          receiverId: data.receiverId || null,
           isFavorite: false,
-          isRedeemed: false
+          isRedeemed: ['reserved', 'completed'].includes(data.status || 'available')
         };
       });
 
@@ -974,6 +976,15 @@ export default function App() {
     return items.filter((item) => item.isRedeemed);
   }, [items]);
 
+  const profileHistoryItems = useMemo(() => {
+    if (!user) return [];
+    return items.filter(
+      (item) =>
+        (item.receiverId === user.uid || item.userId === user.uid) &&
+        ['reserved', 'completed'].includes(item.status || 'available')
+    );
+  }, [items, user]);
+
   const currentSelectedFreight = useMemo(() => {
     return FREIGHT_OPTIONS.find((f) => f.id === selectedFreightId) || FREIGHT_OPTIONS[3];
   }, [selectedFreightId]);
@@ -1223,68 +1234,115 @@ export default function App() {
     }
   };
 
+  const handleConfirmItemReceived = async (item: DonationItem) => {
+    if (!user || !item.receiverId || item.receiverId !== user.uid) {
+      showToast('Você precisa estar vinculado a este resgate para confirmar a entrega.', 'error');
+      return;
+    }
+
+    if (!window.confirm('Confirmar que você recebeu este item?')) return;
+
+    try {
+      await updateDoc(doc(db, 'donations', item.id), {
+        status: 'completed'
+      });
+
+      if (item.userId) {
+        await updateDoc(doc(db, 'users', item.userId), {
+          credits: increment(item.credits)
+        });
+
+        await addDoc(collection(db, 'notifications'), {
+          userId: item.userId,
+          message: `A entrega de ${item.title} foi confirmada por ${user.name}.`,
+          createdAt: serverTimestamp(),
+          read: false
+        });
+      }
+
+      setItems((prev) => prev.map((currentItem) =>
+        currentItem.id === item.id
+          ? { ...currentItem, status: 'completed', isRedeemed: true }
+          : currentItem
+      ));
+
+      showToast('Entrega confirmada. Os créditos do doador foram liberados.', 'success');
+    } catch (error) {
+      console.error('Erro ao confirmar recebimento do item:', error);
+      showToast('Não foi possível confirmar o recebimento. Tente novamente.', 'error');
+    }
+  };
+
   const handleConfirmRedeem = async () => {
-    if (!selectedItemForRedeem) return;
+    if (!selectedItemForRedeem || !user) return;
 
     const itemCost = selectedItemForRedeem.credits;
-    const maxPercent = isPremium ? 0.40 : 0.30;
-    const maxMissingAllowed = Math.floor(itemCost * maxPercent);
+    const freightCost = Number(currentSelectedFreight.price) || 0;
+    const totalCost = Math.round(itemCost + freightCost);
+    const donorId = selectedItemForRedeem.userId;
 
-    if (userCredits < itemCost) {
-      const missing = itemCost - userCredits;
-      if (missing > maxMissingAllowed) {
-        showToast(
-          `Créditos insuficientes! Seu saldo é menor que o mínimo necessário (${itemCost - maxMissingAllowed} Cts).`,
-          'error'
-        );
-        return;
-      }
+    if (!donorId) {
+      showToast('Não foi possível identificar o doador deste item.', 'error');
+      return;
     }
 
-    const creditsDeducted = Math.min(userCredits, itemCost);
-    const cashComplement = (itemCost - creditsDeducted) * 1.00;
-    const insuranceFee = isInsuranceSelected ? 3.90 : 0;
-    const totalCashPaid = cashComplement + currentSelectedFreight.price + insuranceFee;
-
-    // Deduct credits used: persist to Firestore when logged in, else fall back locally
-    if (user?.uid) {
-      try {
-        await updateDoc(doc(db, 'users', user.uid), {
-          credits: increment(-creditsDeducted)
-        });
-      } catch (error) {
-        console.error('Erro ao atualizar créditos do usuário no Firestore:', error);
-        setUserCredits((prev) => Math.max(0, prev - creditsDeducted));
-      }
-    } else {
-      setUserCredits((prev) => Math.max(0, prev - creditsDeducted));
+    if (userCredits < totalCost) {
+      showToast(
+        `Créditos insuficientes. O resgate exige ${totalCost} créditos e seu saldo atual é ${userCredits}.`,
+        'error'
+      );
+      return;
     }
 
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === selectedItemForRedeem.id ? { ...item, isRedeemed: true } : item
-      )
-    );
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        credits: increment(-totalCost)
+      });
+      await updateDoc(doc(db, 'donations', selectedItemForRedeem.id), {
+        status: 'reserved',
+        receiverId: user.uid
+      });
+      await addDoc(collection(db, 'notifications'), {
+        userId: donorId,
+        message: `Seu item ${selectedItemForRedeem.title} foi solicitado por ${user.name}!`,
+        createdAt: serverTimestamp(),
+        read: false
+      });
 
-    const redeemedItem = selectedItemForRedeem;
-    const orderNumber = `#JD-${Math.floor(1000 + Math.random() * 9000)}`;
+      setUserCredits((prev) => Math.max(0, prev - totalCost));
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === selectedItemForRedeem.id
+            ? { ...item, isRedeemed: true, status: 'reserved', receiverId: user.uid }
+            : item
+        )
+      );
 
-    setSelectedItemForRedeem(null);
-    setSelectedItemForDetails(null);
+      const redeemedItem = selectedItemForRedeem;
+      const orderNumber = `#JD-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    setSuccessRedeemData({
-      item: redeemedItem,
-      orderNumber,
-      creditsUsed: creditsDeducted,
-      freightPrice: currentSelectedFreight.price,
-      cashComplement,
-      insuranceFee,
-      totalCashPaid,
-      deliveryType: currentSelectedFreight.type === 'express' ? 'express' : 'standard',
-      carrierName: currentSelectedFreight.carrierName || currentSelectedFreight.name,
-      freightType: currentSelectedFreight.type,
-      freightName: currentSelectedFreight.name,
-    });
+      setSelectedItemForRedeem(null);
+      setSelectedItemForDetails(null);
+      setActiveTab('profile');
+      setSuccessRedeemData({
+        item: redeemedItem,
+        orderNumber,
+        creditsUsed: totalCost,
+        freightPrice: currentSelectedFreight.price,
+        cashComplement: 0,
+        insuranceFee: isInsuranceSelected ? 3.90 : 0,
+        totalCashPaid: isInsuranceSelected ? currentSelectedFreight.price + 3.90 : currentSelectedFreight.price,
+        deliveryType: currentSelectedFreight.type === 'express' ? 'express' : 'standard',
+        carrierName: currentSelectedFreight.carrierName || currentSelectedFreight.name,
+        freightType: currentSelectedFreight.type,
+        freightName: currentSelectedFreight.name,
+      });
+
+      showToast('Resgate realizado com sucesso. O doador foi notificado.', 'success');
+    } catch (error) {
+      console.error('Erro ao confirmar resgate:', error);
+      showToast('Não foi possível confirmar o resgate. Tente novamente.', 'error');
+    }
   };
 
   // Claim Bonus Credits
@@ -2138,17 +2196,17 @@ export default function App() {
                 <h3 className="text-xs font-bold text-slate-800 mb-3 flex items-center justify-between">
                   <span>Histórico de trocas & resgates</span>
                   <span className="text-[10px] text-slate-400 font-normal">
-                    {redeemedItems.length} itens
+                    {profileHistoryItems.length} itens
                   </span>
                 </h3>
 
-                {redeemedItems.length === 0 ? (
+                {profileHistoryItems.length === 0 ? (
                   <p className="text-[11px] text-slate-400 text-center py-4">
                     Você ainda não resgatou nenhum item.
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {redeemedItems.map((item) => (
+                    {profileHistoryItems.map((item) => (
                       <div
                         key={item.id}
                         className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100"
@@ -2164,9 +2222,24 @@ export default function App() {
                           </h4>
                           <span className="text-[10px] text-slate-500">{item.location}</span>
                         </div>
-                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
-                          Concluído
-                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {item.status === 'reserved' && (
+                            <button
+                              type="button"
+                              onClick={() => void handleConfirmItemReceived(item)}
+                              className="px-2 py-1 rounded-md bg-[#14A76C] text-white text-[10px] font-bold"
+                            >
+                              Confirmar Recebimento do Item
+                            </button>
+                          )}
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                            item.status === 'completed'
+                              ? 'text-emerald-600 bg-emerald-50'
+                              : 'text-amber-600 bg-amber-50'
+                          }`}>
+                            {item.status === 'completed' ? 'Concluído' : 'Reservado'}
+                          </span>
+                        </div>
                       </div>
                     ))}
                   </div>
