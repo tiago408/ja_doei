@@ -106,9 +106,8 @@ export async function analyzeImageWithGemini(base64Image: string): Promise<Image
     throw new Error('VITE_GEMINI_API_KEY não configurada');
   }
 
-  const [metadata, imageData] = base64Image.split(';base64,');
-  const mimeType = metadata.match(/^data:(.+)$/)?.[1] || 'image/jpeg';
-  if (!imageData) {
+  const cleanBase64 = base64Image.replace(/^data:image\/[^;]+;base64,/, '').trim();
+  if (!cleanBase64) {
     throw new Error('Imagem inválida para análise visual');
   }
 
@@ -133,7 +132,7 @@ REGRAS RÍGIDAS DE PREÇO (1 Real = 1 Crédito):
         contents: [{
           parts: [
             { text: prompt },
-            { inlineData: { mimeType, data: imageData } }
+            { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } }
           ]
         }],
         generationConfig: { responseMimeType: 'application/json' }

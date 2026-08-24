@@ -898,18 +898,50 @@ export default function App() {
     void handleAiSuggestion(url);
   };
 
+  const resizeImageForAnalysis = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const scale = Math.min(1, 800 / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const context = canvas.getContext('2d');
+      if (!context) {
+        reject(new Error('Não foi possível preparar a imagem para análise'));
+        return;
+      }
+
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      let quality = 0.7;
+      let compressed = canvas.toDataURL('image/jpeg', quality);
+      while (compressed.length * 0.75 > 200 * 1024 && quality > 0.3) {
+        quality -= 0.1;
+        compressed = canvas.toDataURL('image/jpeg', quality);
+      }
+      resolve(compressed);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Não foi possível ler a foto capturada'));
+    };
+    image.src = objectUrl;
+  });
+
   const handlePhotoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setNewImageFile(file);
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        handlePhotoSelected(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    setIsAnalyzing(true);
+    void resizeImageForAnalysis(file)
+      .then((compressedImage) => handlePhotoSelected(compressedImage))
+      .catch((error) => {
+        console.error('Erro ao comprimir imagem para análise:', error);
+        setIsAnalyzing(false);
+        showToast('Não foi possível preparar a foto. Tente novamente.', 'error');
+      });
     e.target.value = '';
   };
 
@@ -3307,6 +3339,14 @@ export default function App() {
                               alt="Pré-visualização da foto do item"
                               className="w-full max-w-full box-border h-44 object-cover"
                             />
+                            {isAnalyzing && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-slate-900/45 text-white">
+                                <span className="flex items-center gap-2 rounded-full bg-slate-900/75 px-3 py-2 text-xs font-bold">
+                                  <Sparkles className="w-4 h-4 animate-pulse" />
+                                  Analisando imagem com IA...
+                                </span>
+                              </div>
+                            )}
                             <button
                               type="button"
                               onClick={() => {
