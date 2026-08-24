@@ -91,6 +91,11 @@ interface DonationItem {
   donorAvatar?: string;
   userId?: string | null;
   receiverId?: string | null;
+  allowPickup?: boolean;
+  allowStandardDelivery?: boolean;
+  allowExpressDelivery?: boolean;
+  expressDeliveryRequested?: boolean;
+  expressDeliveryRequestedAt?: Date | null;
 }
 
 export interface FreightOption {
@@ -379,6 +384,11 @@ export default function App() {
           donorAvatar: data.donorAvatar,
           userId: data.userId || null,
           receiverId: data.receiverId || null,
+          allowPickup: data.allowPickup !== false,
+          allowStandardDelivery: data.allowStandardDelivery !== false,
+          allowExpressDelivery: data.allowExpressDelivery === true,
+          expressDeliveryRequested: data.expressDeliveryRequested === true,
+          expressDeliveryRequestedAt: data.expressDeliveryRequestedAt?.toDate?.() ?? null,
           isFavorite: false,
           isRedeemed: ['reserved', 'completed'].includes(data.status || 'available')
         };
@@ -682,6 +692,12 @@ export default function App() {
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
   const [selectedItemForDetails, setSelectedItemForDetails] = useState<DonationItem | null>(null);
   const [selectedItemForRedeem, setSelectedItemForRedeem] = useState<DonationItem | null>(null);
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Shipping & Logística state
   const [cepInput, setCepInput] = useState<string>('01310-100');
@@ -781,6 +797,9 @@ export default function App() {
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newIsFeatured, setNewIsFeatured] = useState<boolean>(false);
+  const [allowPickup, setAllowPickup] = useState<boolean>(true);
+  const [allowStandardDelivery, setAllowStandardDelivery] = useState<boolean>(true);
+  const [allowExpressDelivery, setAllowExpressDelivery] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [isPricingAnalyzing, setIsPricingAnalyzing] = useState<boolean>(false);
   const [aiSuggested, setAiSuggested] = useState<boolean>(false);
@@ -1030,7 +1049,13 @@ export default function App() {
   // Open Product Details
   const handleOpenDetails = (item: DonationItem) => {
     setSelectedItemForDetails(item);
-    setSelectedFreightId('ja_doei_express');
+    setSelectedFreightId(
+      item.allowStandardDelivery !== false
+        ? 'ja_doei_express'
+        : item.allowExpressDelivery
+        ? 'uber_flash'
+        : 'ja_doei_express'
+    );
     setIsCepCalculated(true);
   };
 
@@ -1186,7 +1211,10 @@ export default function App() {
       userId: user?.uid || null,
       userName: user?.name || 'Você',
       donorName: user?.name || 'Você',
-      donorAvatar: user?.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
+      donorAvatar: user?.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
+      allowPickup,
+      allowStandardDelivery,
+      allowExpressDelivery
     };
 
     setUploadPhase('publishing');
@@ -1230,6 +1258,9 @@ export default function App() {
     setIsPricingAnalyzing(false);
     setNewDescription('');
     setNewIsFeatured(false);
+      setAllowPickup(true);
+      setAllowStandardDelivery(true);
+      setAllowExpressDelivery(false);
     setAiSuggested(false);
     setIsAnalyzing(false);
     setIsSubmittingDonation(false);
@@ -1348,14 +1379,19 @@ export default function App() {
       await updateDoc(userRef, {
         credits: nextCredits
       });
+      const isExpressDelivery = currentSelectedFreight.type === 'express';
       await updateDoc(doc(db, 'donations', selectedItemForRedeem.id), {
         status: 'reserved',
-        receiverId: user.uid
+        receiverId: user.uid,
+        expressDeliveryRequested: isExpressDelivery,
+        expressDeliveryRequestedAt: isExpressDelivery ? serverTimestamp() : null
       });
       await addDoc(collection(db, 'notifications'), {
         userId: donorId,
-        title: 'Item resgatado',
-        message: `Seu item ${selectedItemForRedeem.title} foi solicitado por ${user.name}!`,
+        title: isExpressDelivery ? 'Solicitação Expressa!' : 'Item resgatado',
+        message: isExpressDelivery
+          ? 'Solicitação Expressa! O recebedor contratou entrega expressa. Você tem 15 minutos para confirmar que o item está pronto.'
+          : `Seu item ${selectedItemForRedeem.title} foi solicitado por ${user.name}!`,
         createdAt: serverTimestamp(),
         read: false
       });
@@ -1364,7 +1400,14 @@ export default function App() {
       setItems((prev) =>
         prev.map((item) =>
           item.id === selectedItemForRedeem.id
-            ? { ...item, isRedeemed: true, status: 'reserved', receiverId: user.uid }
+            ? {
+                ...item,
+                isRedeemed: true,
+                status: 'reserved',
+                receiverId: user.uid,
+                expressDeliveryRequested: isExpressDelivery,
+                expressDeliveryRequestedAt: isExpressDelivery ? new Date() : null
+              }
             : item
         )
       );
@@ -2223,6 +2266,18 @@ export default function App() {
                             <span className="block text-[10px] text-slate-500 truncate">
                               {item.category} · {item.credits} créditos
                             </span>
+                            {item.expressDeliveryRequested && (
+                              <>
+                                <span className="block text-[10px] font-bold text-red-600 truncate">
+                                  Entrega Expressa Solicitada - Aceite em até 15 min
+                                </span>
+                                {item.expressDeliveryRequestedAt && (
+                                  <span className="block text-[9px] font-semibold text-red-500">
+                                    Restam {Math.max(0, 15 - Math.floor((currentTime - item.expressDeliveryRequestedAt.getTime()) / 60000))} min para aceitar
+                                  </span>
+                                )}
+                              </>
+                            )}
                           </span>
                           <button
                             type="button"
@@ -2601,8 +2656,12 @@ export default function App() {
                             {FREIGHT_OPTIONS.filter((f) => f.category === 'imediata').map((opt) => (
                               <label
                                 key={opt.id}
-                                onClick={() => setSelectedFreightId(opt.id)}
-                                className={`p-2.5 rounded-xl border-2 flex items-center justify-between cursor-pointer transition-all ${
+                                onClick={() => {
+                                  if (selectedItemForDetails.allowExpressDelivery) setSelectedFreightId(opt.id);
+                                }}
+                                className={`p-2.5 rounded-xl border-2 flex items-center justify-between transition-all ${
+                                  !selectedItemForDetails.allowExpressDelivery ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                                } ${
                                   selectedFreightId === opt.id
                                     ? 'border-[#14A76C] bg-emerald-50/60 shadow-2xs'
                                     : 'border-slate-200 bg-white hover:border-slate-300'
@@ -2614,6 +2673,7 @@ export default function App() {
                                     name="freightOption"
                                     checked={selectedFreightId === opt.id}
                                     onChange={() => setSelectedFreightId(opt.id)}
+                                    disabled={!selectedItemForDetails.allowExpressDelivery}
                                     className="accent-[#14A76C]"
                                   />
                                   <span className="text-base">{opt.icon}</span>
@@ -2643,8 +2703,12 @@ export default function App() {
                             {FREIGHT_OPTIONS.filter((f) => f.category === 'padrao').map((opt) => (
                               <label
                                 key={opt.id}
-                                onClick={() => setSelectedFreightId(opt.id)}
-                                className={`p-2.5 rounded-xl border-2 flex items-center justify-between cursor-pointer transition-all ${
+                                onClick={() => {
+                                  if (selectedItemForDetails.allowStandardDelivery) setSelectedFreightId(opt.id);
+                                }}
+                                className={`p-2.5 rounded-xl border-2 flex items-center justify-between transition-all ${
+                                  !selectedItemForDetails.allowStandardDelivery ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                                } ${
                                   selectedFreightId === opt.id
                                     ? 'border-[#14A76C] bg-emerald-50/60 shadow-2xs'
                                     : 'border-slate-200 bg-white hover:border-slate-300'
@@ -2656,6 +2720,7 @@ export default function App() {
                                     name="freightOption"
                                     checked={selectedFreightId === opt.id}
                                     onChange={() => setSelectedFreightId(opt.id)}
+                                    disabled={!selectedItemForDetails.allowStandardDelivery}
                                     className="accent-[#14A76C] shrink-0"
                                   />
                                   <span className="text-base shrink-0">{opt.icon}</span>
@@ -2692,8 +2757,12 @@ export default function App() {
                             {FREIGHT_OPTIONS.filter((f) => f.category === 'grande_porte').map((opt) => (
                               <label
                                 key={opt.id}
-                                onClick={() => setSelectedFreightId(opt.id)}
-                                className={`p-2.5 rounded-xl border-2 flex items-center justify-between cursor-pointer transition-all ${
+                                onClick={() => {
+                                  if (selectedItemForDetails.allowStandardDelivery) setSelectedFreightId(opt.id);
+                                }}
+                                className={`p-2.5 rounded-xl border-2 flex items-center justify-between transition-all ${
+                                  !selectedItemForDetails.allowStandardDelivery ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                                } ${
                                   selectedFreightId === opt.id
                                     ? 'border-[#14A76C] bg-emerald-50/60 shadow-2xs'
                                     : 'border-slate-200 bg-white hover:border-slate-300'
@@ -2705,6 +2774,7 @@ export default function App() {
                                     name="freightOption"
                                     checked={selectedFreightId === opt.id}
                                     onChange={() => setSelectedFreightId(opt.id)}
+                                    disabled={!selectedItemForDetails.allowStandardDelivery}
                                     className="accent-[#14A76C]"
                                   />
                                   <span className="text-base">{opt.icon}</span>
@@ -3438,9 +3508,9 @@ export default function App() {
                             <div className="w-14 h-14 rounded-full bg-[#14A76C] text-white flex items-center justify-center shadow-md">
                               <Camera className="w-7 h-7" />
                             </div>
-                            <span className="text-sm font-bold">Tirar Foto ou Escolher da Galeria</span>
+                            <span className="text-sm font-bold">Tirar Foto do Item</span>
                             <span className="text-[10px] text-slate-500 font-medium text-center px-6">
-                              A IA identifica categoria, estado e créditos automaticamente
+                              Tire uma foto do item agora (fotos da galeria não são permitidas por segurança)
                             </span>
                           </label>
                         )}
@@ -3659,6 +3729,27 @@ export default function App() {
                             placeholder="Conte mais detalhes, motivo do desapego, avarias ou especificações..."
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40 resize-none"
                           ></textarea>
+                        </div>
+
+                        <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50 space-y-2">
+                          <span className="block text-[11px] font-bold text-slate-700">
+                            Opções de entrega
+                          </span>
+                          {[
+                            { label: 'Permitir Retirada no Local', value: allowPickup, setValue: setAllowPickup },
+                            { label: 'Permitir Entrega Padrão', value: allowStandardDelivery, setValue: setAllowStandardDelivery },
+                            { label: 'Disponível para Entrega Expressa 15 min', value: allowExpressDelivery, setValue: setAllowExpressDelivery }
+                          ].map((option) => (
+                            <label key={option.label} className="flex items-center gap-2 text-[11px] font-medium text-slate-700 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={option.value}
+                                onChange={(event) => option.setValue(event.target.checked)}
+                                className="accent-[#14A76C]"
+                              />
+                              <span>{option.label}</span>
+                            </label>
+                          ))}
                         </div>
                       </div>
                     )}
