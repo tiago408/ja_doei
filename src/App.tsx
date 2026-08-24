@@ -91,10 +91,6 @@ interface DonationItem {
   donorAvatar?: string;
   userId?: string | null;
   receiverId?: string | null;
-  allowStandardDelivery?: boolean;
-  allowExpressDelivery?: boolean;
-  expressDeliveryRequested?: boolean;
-  expressDeliveryRequestedAt?: Date | null;
 }
 
 export interface FreightOption {
@@ -372,10 +368,6 @@ export default function App() {
           donorAvatar: data.donorAvatar,
           userId: data.userId || null,
           receiverId: data.receiverId || null,
-          allowStandardDelivery: data.allowStandardDelivery !== false,
-          allowExpressDelivery: data.allowExpressDelivery === true,
-          expressDeliveryRequested: data.expressDeliveryRequested === true,
-          expressDeliveryRequestedAt: data.expressDeliveryRequestedAt?.toDate?.() ?? null,
           isFavorite: false,
           isRedeemed: ['reserved', 'completed'].includes(data.status || 'available')
         };
@@ -679,13 +671,6 @@ export default function App() {
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
   const [selectedItemForDetails, setSelectedItemForDetails] = useState<DonationItem | null>(null);
   const [selectedItemForRedeem, setSelectedItemForRedeem] = useState<DonationItem | null>(null);
-  const [currentTime, setCurrentTime] = useState(() => Date.now());
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setCurrentTime(Date.now()), 30000);
-    return () => window.clearInterval(timer);
-  }, []);
-
   // Shipping & Logística state
   const [cepInput, setCepInput] = useState<string>('01310-100');
   const [isCepCalculated, setIsCepCalculated] = useState<boolean>(true);
@@ -723,7 +708,7 @@ export default function App() {
     cashComplement: number;
     insuranceFee: number;
     totalCashPaid: number;
-    deliveryType: 'express' | 'standard';
+    deliveryType: 'standard';
     carrierName: string;
     freightType: string;
     freightName: string;
@@ -784,8 +769,6 @@ export default function App() {
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newIsFeatured, setNewIsFeatured] = useState<boolean>(false);
-  const [allowStandardDelivery, setAllowStandardDelivery] = useState<boolean>(true);
-  const [allowExpressDelivery, setAllowExpressDelivery] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [isPricingAnalyzing, setIsPricingAnalyzing] = useState<boolean>(false);
   const [aiSuggested, setAiSuggested] = useState<boolean>(false);
@@ -1035,13 +1018,7 @@ export default function App() {
   // Open Product Details
   const handleOpenDetails = (item: DonationItem) => {
     setSelectedItemForDetails(item);
-    setSelectedFreightId(
-      item.allowStandardDelivery !== false
-        ? 'ja_doei_express'
-        : item.allowExpressDelivery
-        ? 'uber_flash'
-        : 'ja_doei_express'
-    );
+    setSelectedFreightId('ja_doei_express');
     setIsCepCalculated(true);
   };
 
@@ -1198,8 +1175,6 @@ export default function App() {
       userName: user?.name || 'Você',
       donorName: user?.name || 'Você',
       donorAvatar: user?.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
-      allowStandardDelivery,
-      allowExpressDelivery
     };
 
     setUploadPhase('publishing');
@@ -1243,8 +1218,6 @@ export default function App() {
     setIsPricingAnalyzing(false);
     setNewDescription('');
     setNewIsFeatured(false);
-      setAllowStandardDelivery(true);
-      setAllowExpressDelivery(false);
     setAiSuggested(false);
     setIsAnalyzing(false);
     setIsSubmittingDonation(false);
@@ -1291,33 +1264,6 @@ export default function App() {
     } catch (error) {
       console.error('Erro ao concluir doação:', error);
       showToast('Não foi possível confirmar a entrega. Tente novamente.', 'error');
-    }
-  };
-
-  const handleAcceptExpressDelivery = async (item: DonationItem) => {
-    if (!user || item.userId !== user.uid || !item.receiverId) return;
-
-    try {
-      await updateDoc(doc(db, 'donations', item.id), {
-        status: 'in_transit',
-        expressDeliveryRequested: false
-      });
-      await addDoc(collection(db, 'notifications'), {
-        userId: item.receiverId,
-        title: 'Entrega expressa aceita',
-        message: 'O doador aceitou o envio expresso! O motorista parceiro já foi acionado para a coleta.',
-        createdAt: serverTimestamp(),
-        read: false
-      });
-      setItems((prev) => prev.map((currentItem) => (
-        currentItem.id === item.id
-          ? { ...currentItem, status: 'in_transit', expressDeliveryRequested: false }
-          : currentItem
-      )));
-      showToast('Coleta expressa confirmada e motorista acionado.', 'success');
-    } catch (error) {
-      console.error('Erro ao aceitar coleta expressa:', error);
-      showToast('Não foi possível aceitar a coleta expressa. Tente novamente.', 'error');
     }
   };
 
@@ -1390,19 +1336,18 @@ export default function App() {
       await updateDoc(userRef, {
         credits: nextCredits
       });
-      const isExpressDelivery = currentSelectedFreight.type === 'express';
+      if (currentSelectedFreight.type !== 'standard') {
+        showToast('A entrega expressa estará disponível em breve.', 'info');
+        return;
+      }
       await updateDoc(doc(db, 'donations', selectedItemForRedeem.id), {
         status: 'reserved',
         receiverId: user.uid,
-        expressDeliveryRequested: isExpressDelivery,
-        expressDeliveryRequestedAt: isExpressDelivery ? serverTimestamp() : null
       });
       await addDoc(collection(db, 'notifications'), {
         userId: donorId,
-        title: isExpressDelivery ? 'Solicitação Expressa!' : 'Item resgatado',
-        message: isExpressDelivery
-          ? 'Solicitação Expressa! O recebedor contratou entrega expressa. Você tem 15 minutos para confirmar que o item está pronto.'
-          : `Seu item ${selectedItemForRedeem.title} foi solicitado por ${user.name}!`,
+        title: 'Item resgatado',
+        message: `Seu item ${selectedItemForRedeem.title} foi solicitado por ${user.name}!`,
         createdAt: serverTimestamp(),
         read: false
       });
@@ -1416,8 +1361,6 @@ export default function App() {
                 isRedeemed: true,
                 status: 'reserved',
                 receiverId: user.uid,
-                expressDeliveryRequested: isExpressDelivery,
-                expressDeliveryRequestedAt: isExpressDelivery ? new Date() : null
               }
             : item
         )
@@ -1437,7 +1380,7 @@ export default function App() {
         cashComplement: 0,
         insuranceFee: isInsuranceSelected ? 3.90 : 0,
         totalCashPaid: isInsuranceSelected ? currentSelectedFreight.price + 3.90 : currentSelectedFreight.price,
-        deliveryType: currentSelectedFreight.type === 'express' ? 'express' : 'standard',
+        deliveryType: 'standard',
         carrierName: currentSelectedFreight.carrierName || currentSelectedFreight.name,
         freightType: currentSelectedFreight.type,
         freightName: currentSelectedFreight.name,
@@ -2277,18 +2220,6 @@ export default function App() {
                             <span className="block text-[10px] text-slate-500 truncate">
                               {item.category} · {item.credits} créditos
                             </span>
-                            {item.expressDeliveryRequested && (
-                              <>
-                                <span className="block text-[10px] font-bold text-red-600 truncate">
-                                  Entrega Expressa Solicitada - Aceite em até 15 min
-                                </span>
-                                {item.expressDeliveryRequestedAt && (
-                                  <span className="block text-[9px] font-semibold text-red-500">
-                                    Restam {Math.max(0, 15 - Math.floor((currentTime - item.expressDeliveryRequestedAt.getTime()) / 60000))} min para aceitar
-                                  </span>
-                                )}
-                              </>
-                            )}
                           </span>
                           <button
                             type="button"
@@ -2328,7 +2259,7 @@ export default function App() {
                     {profileHistoryItems.map((item) => (
                       <div
                         key={item.id}
-                        className={`flex flex-col gap-2 p-2 rounded-xl border ${item.expressDeliveryRequested && item.userId === user?.uid ? 'bg-red-50 border-red-300' : 'bg-slate-50 border-slate-100'}`}
+                        className="flex flex-col gap-2 p-2 rounded-xl bg-slate-50 border border-slate-100"
                       >
                         <div className="flex items-center gap-2.5">
                           <img
@@ -2355,7 +2286,7 @@ export default function App() {
                           </span>
                         </div>
 
-                        {item.status === 'reserved' && user?.uid === item.receiverId && (
+                        {(item.status === 'reserved' || item.status === 'in_transit') && user?.uid === item.receiverId && (
                           <div className="w-full">
                             <button
                               type="button"
@@ -2368,19 +2299,9 @@ export default function App() {
                         )}
 
                         {item.status === 'reserved' && user?.uid === item.userId && (
-                          item.expressDeliveryRequested ? (
-                            <button
-                              type="button"
-                              onClick={() => void handleAcceptExpressDelivery(item)}
-                              className="w-full px-2 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold transition-colors"
-                            >
-                              Aceitar &amp; Confirmar Coleta Expressa (15 min)
-                            </button>
-                          ) : (
-                            <span className="inline-flex items-center w-fit px-2 py-1 rounded-md text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200">
-                              Aguardando confirmação de quem recebeu
-                            </span>
-                          )
+                          <span className="inline-flex items-center w-fit px-2 py-1 rounded-md text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200">
+                            Aguardando confirmação de quem recebeu
+                          </span>
                         )}
                       </div>
                     ))}
@@ -2668,50 +2589,23 @@ export default function App() {
                     {/* Organized Selectable Shipping Radio Options */}
                     {isCepCalculated && (
                       <div className="space-y-3 max-h-64 overflow-y-auto no-scrollbar pr-1">
-                        {/* [Opções Imediatas - Moto / Cidade] */}
+                        {/* Entrega Expressa desativada na V1 */}
                         <div>
                           <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">
-                            Opções Imediatas - Moto / Cidade
+                            Entrega Expressa
                           </span>
                           <div className="space-y-1.5">
-                            {FREIGHT_OPTIONS.filter((f) => f.category === 'imediata' && selectedItemForDetails.allowExpressDelivery).map((opt) => (
-                              <label
-                                key={opt.id}
-                                onClick={() => {
-                                  if (selectedItemForDetails.allowExpressDelivery) setSelectedFreightId(opt.id);
-                                }}
-                                className={`p-2.5 rounded-xl border-2 flex items-center justify-between transition-all ${
-                                  !selectedItemForDetails.allowExpressDelivery ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                                } ${
-                                  selectedFreightId === opt.id
-                                    ? 'border-[#14A76C] bg-emerald-50/60 shadow-2xs'
-                                    : 'border-slate-200 bg-white hover:border-slate-300'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2.5">
-                                  <input
-                                    type="radio"
-                                    name="freightOption"
-                                    checked={selectedFreightId === opt.id}
-                                    onChange={() => setSelectedFreightId(opt.id)}
-                                    disabled={!selectedItemForDetails.allowExpressDelivery}
-                                    className="accent-[#14A76C]"
-                                  />
-                                  <span className="text-base">{opt.icon}</span>
-                                  <div>
-                                    <span className="text-xs font-bold text-slate-800 block">
-                                      {opt.name}
-                                    </span>
-                                    <span className="text-[10px] text-slate-500 block">
-                                      ({opt.deliveryTime})
-                                    </span>
-                                  </div>
+                            <div className="p-2.5 rounded-xl border-2 border-slate-200 bg-slate-100 opacity-50 flex items-center justify-between cursor-not-allowed">
+                              <div className="flex items-center gap-2.5">
+                                <input type="radio" name="freightOption" disabled className="accent-[#14A76C]" />
+                                <span className="text-base">⚡</span>
+                                <div>
+                                  <span className="text-xs font-bold text-slate-800 block">Entrega Expressa (15 min)</span>
+                                  <span className="text-[10px] text-slate-500 block">Disponível em breve</span>
                                 </div>
-                                <span className="text-xs font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                                  R$ {opt.price.toFixed(2).replace('.', ',')}
-                                </span>
-                              </label>
-                            ))}
+                              </div>
+                              <span className="text-[9px] font-extrabold text-amber-700 bg-amber-100 px-2 py-1 rounded-md border border-amber-300">Em breve</span>
+                            </div>
                           </div>
                         </div>
 
@@ -2724,12 +2618,8 @@ export default function App() {
                             {FREIGHT_OPTIONS.filter((f) => f.category === 'padrao').map((opt) => (
                               <label
                                 key={opt.id}
-                                onClick={() => {
-                                  if (selectedItemForDetails.allowStandardDelivery) setSelectedFreightId(opt.id);
-                                }}
-                                className={`p-2.5 rounded-xl border-2 flex items-center justify-between transition-all ${
-                                  !selectedItemForDetails.allowStandardDelivery ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                                } ${
+                                onClick={() => setSelectedFreightId(opt.id)}
+                                className={`p-2.5 rounded-xl border-2 flex items-center justify-between cursor-pointer transition-all ${
                                   selectedFreightId === opt.id
                                     ? 'border-[#14A76C] bg-emerald-50/60 shadow-2xs'
                                     : 'border-slate-200 bg-white hover:border-slate-300'
@@ -2741,7 +2631,6 @@ export default function App() {
                                     name="freightOption"
                                     checked={selectedFreightId === opt.id}
                                     onChange={() => setSelectedFreightId(opt.id)}
-                                    disabled={!selectedItemForDetails.allowStandardDelivery}
                                     className="accent-[#14A76C] shrink-0"
                                   />
                                   <span className="text-base shrink-0">{opt.icon}</span>
@@ -2766,15 +2655,6 @@ export default function App() {
                                 </span>
                               </label>
                             ))}
-                          </div>
-                        </div>
-
-                        {/* [Opções de Grande Porte - Móveis/Eletro] */}
-                        <div>
-                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">
-                            Opções de Grande Porte - Móveis/Eletro
-                          </span>
-                          <div className="space-y-1.5">
                           </div>
                         </div>
 
@@ -3714,25 +3594,6 @@ export default function App() {
                           ></textarea>
                         </div>
 
-                        <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50 space-y-2">
-                          <span className="block text-[11px] font-bold text-slate-700">
-                            Opções de entrega
-                          </span>
-                          {[
-                            { label: 'Permitir Entrega Padrão', value: allowStandardDelivery, setValue: setAllowStandardDelivery },
-                            { label: 'Disponível para Entrega Expressa 15 min', value: allowExpressDelivery, setValue: setAllowExpressDelivery }
-                          ].map((option) => (
-                            <label key={option.label} className="flex items-center gap-2 text-[11px] font-medium text-slate-700 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={option.value}
-                                onChange={(event) => option.setValue(event.target.checked)}
-                                className="accent-[#14A76C]"
-                              />
-                              <span>{option.label}</span>
-                            </label>
-                          ))}
-                        </div>
                       </div>
                     )}
 
@@ -4869,9 +4730,7 @@ export default function App() {
                     Resgate Confirmado! 🎉
                   </h2>
                   <p className="text-xs text-slate-500 font-medium max-w-[280px]">
-                    {successRedeemData.deliveryType === 'express'
-                      ? 'Solicitação de coleta imediata enviada ao doador.'
-                      : 'Sua doação já está sendo preparada pelo doador.'}
+                    Sua doação já está sendo preparada pelo doador.
                   </p>
                 </div>
 
@@ -4915,20 +4774,7 @@ export default function App() {
 
                 {/* Status / Próximos Passos Banner */}
                 {(() => {
-                  const selectedDeliveryType = successRedeemData.deliveryType;
-                  const selectedCarrierName = successRedeemData.carrierName || 'Uber';
-
-                  return selectedDeliveryType === 'express' ? (
-                    <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 my-3 flex items-center gap-3">
-                      <div className="bg-amber-500 text-white p-2 rounded-xl text-lg">⚡</div>
-                      <div>
-                        <p className="text-xs font-bold text-amber-900">Status: Aguardando Aceite Imediato (15 min)</p>
-                        <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                          O doador tem até 15 minutos para confirmar que o item está pronto. Assim que ele aceitar, o motorista do {selectedCarrierName} será acionado.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
+                  return (
                     <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200 my-3 flex items-center gap-3">
                       <div className="bg-emerald-500 text-white p-2 rounded-xl text-lg">📦</div>
                       <div>
