@@ -694,7 +694,7 @@ export default function App() {
   const [newCategory, setNewCategory] = useState('Roupas');
   const [newCredits, setNewCredits] = useState<number>(100);
   const [newLocation, setNewLocation] = useState('São Paulo, SP');
-  const [newCondition, setNewCondition] = useState('Seminovo - Excelente estado');
+  const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newIsFeatured, setNewIsFeatured] = useState<boolean>(false);
@@ -723,7 +723,6 @@ export default function App() {
   }, [isDonateModalOpen]);
 
   const handleGeminiValuation = async (conditionOverride = newCondition) => {
-    if (isVisionPricingLocked) return;
     const requestId = ++pricingRequestId.current;
     if (!newTitle.trim()) {
       setNewCredits(100);
@@ -737,7 +736,7 @@ export default function App() {
 
     setIsPricingAnalyzing(true);
     try {
-      const pricing = await fetchGeminiValuation(newTitle.trim(), conditionOverride);
+      const pricing = await fetchGeminiValuation(newTitle.trim(), newCategory, conditionOverride);
       if (requestId !== pricingRequestId.current) return;
       setNewCredits(pricing.suggestedCredits);
       setNewCreditsBase(pricing.suggestedCredits);
@@ -782,6 +781,17 @@ export default function App() {
       if (requestId === pricingRequestId.current) setIsPricingAnalyzing(false);
     }
   };
+
+  const valuationHandlerRef = useRef(handleGeminiValuation);
+  valuationHandlerRef.current = handleGeminiValuation;
+
+  useEffect(() => {
+    if (!newTitle.trim() || isVisionPricingLocked) return;
+    const timer = window.setTimeout(() => {
+      void valuationHandlerRef.current(newCondition);
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [newTitle, newCondition, newCategory, isVisionPricingLocked]);
 
   // Toast System
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -839,7 +849,7 @@ export default function App() {
       setNewCreditsBase(suggestedCredits);
       setCreditsMin(Math.round(suggestedCredits * 0.8));
       setCreditsMax(Math.round(suggestedCredits * 1.2));
-      setNewCondition('Seminovo - Excelente estado');
+      setNewCondition('Usado - Excelente');
       setIsVisionPricingLocked(true);
       setPricingJustification('Valor estimado pelo Gemini Vision com base no mercado brasileiro.');
       setAiSuggested(true);
@@ -1224,7 +1234,7 @@ export default function App() {
     setNewImageUrl('');
     setNewImageFile(null);
     setNewExtraPhotos([]);
-    setNewCondition('Seminovo - Excelente estado');
+    setNewCondition('Usado - Excelente');
     setPricingJustification('');
     setIsPricingAnalyzing(false);
     setNewDescription('');
@@ -3484,14 +3494,15 @@ export default function App() {
                             value={newCondition}
                             onChange={(e) => {
                               setNewCondition(e.target.value);
+                              setIsVisionPricingLocked(false);
                               void handleGeminiValuation(e.target.value);
                             }}
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                           >
-                            <option value="Novo na caixa">Novo</option>
-                            <option value="Seminovo - Excelente estado">Seminovo - Excelente estado</option>
-                            <option value="Usado - Bom estado">Usado em bom estado</option>
-                            <option value="Usado - Com marcas de uso">Com marcas de uso</option>
+                            <option value="Novo na caixa">Novo na caixa</option>
+                            <option value="Usado - Excelente">Usado - Excelente</option>
+                            <option value="Usado - Marcas de uso">Usado - Marcas de uso</option>
+                            <option value="Para conserto/peças">Para conserto/peças</option>
                           </select>
                         </div>
 

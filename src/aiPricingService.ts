@@ -37,11 +37,10 @@ const ALLOWED_CATEGORIES = [
 
 // Fatores de Conservação
 const CONDITION_MULTIPLIERS: Record<string, number> = {
-  "Novo / Lacrado": 1.0,
   "Novo na caixa": 1.0,
-  "Seminovo - Excelente estado": 0.8,
-  "Usado - Bom estado": 0.6,
-  "Usado - Com marcas de uso": 0.4,
+  "Usado - Excelente": 0.8,
+  "Usado - Marcas de uso": 0.55,
+  "Para conserto/peças": 0.2,
 };
 
 function createPricingResult(
@@ -67,6 +66,7 @@ function createPricingResult(
 
 export async function fetchGeminiValuation(
   title: string,
+  category: string,
   condition: string
 ): Promise<PricingResult> {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
@@ -74,7 +74,7 @@ export async function fetchGeminiValuation(
     throw new Error('VITE_GEMINI_API_KEY não configurada');
   }
 
-  const prompt = `Você é o avaliador oficial do app Já Doei. Avalie o valor MÉDIO de mercado em Reais (BRL) para este item usado no Brasil. Escolha obrigatoriamente uma categoria exatamente desta lista: Papelaria & Escritório; Casa, Cozinha & Utensílios; Moda & Calçados Adulto; Moda & Calçados Infantil; Brinquedos & Jogos; Bebês & Maternidade; Eletrônicos & Acessórios; Eletrodomésticos & Portáteis; Livros & Mídia; Esporte & Lazer; Beleza & Cuidado Pessoal; Móveis & Decoração; Pet Shop; Outros. ATENÇÃO: Seja realista com miudezas e itens simples de papelaria/escritório (ex: canetas, lapiseiras, cadernos usados, copos simples valem entre R$ 3,00 e R$ 15,00 = 3 a 15 créditos). NÃO atribua valores altos a itens simples de baixíssimo valor comercial. Título: '${title}', Estado: '${condition}'. Responda estritamente em JSON: { "category": "categoria exata da lista", "estimatedMarketValueBRL": number, "justification": string }.`;
+  const prompt = `Avalie o item '${title}' na categoria '${category}' com o estado de conservação '${condition}'. APLIQUE FATOR DE DEPRECIAÇÃO RÍGIDO: Novo na Caixa: 100% do preço de mercado seminovo. Usado Excelente: 80% do valor. Usado com Marcas de Uso: 50% a 60% do valor. Com defeito / Para peças: máximo 20% do valor. Escolha obrigatoriamente uma categoria exatamente desta lista: Papelaria & Escritório; Casa, Cozinha & Utensílios; Moda & Calçados Adulto; Moda & Calçados Infantil; Brinquedos & Jogos; Bebês & Maternidade; Eletrônicos & Acessórios; Eletrodomésticos & Portáteis; Livros & Mídia; Esporte & Lazer; Beleza & Cuidado Pessoal; Móveis & Decoração; Pet Shop; Outros. Responda em JSON com { "category": "categoria exata da lista", "estimatedMarketValueBRL": number, "justification": string }.`;
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
