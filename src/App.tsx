@@ -91,6 +91,7 @@ interface DonationItem {
   donorAvatar?: string;
   userId?: string | null;
   receiverId?: string | null;
+  userLocation?: string;
   isLargeItem?: boolean;
 }
 
@@ -309,6 +310,7 @@ export default function App() {
           donorAvatar: data.donorAvatar,
           userId: data.userId || null,
           receiverId: data.receiverId || null,
+          userLocation: data.userLocation || data.location || undefined,
           isLargeItem: data.isLargeItem === true,
           isFavorite: false,
           isRedeemed: ['reserved', 'completed'].includes(data.status || 'available')
@@ -332,7 +334,14 @@ export default function App() {
   // Auth State
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
   const [authTab, setAuthTab] = useState<'login' | 'signup'>('login');
-  const [user, setUser] = useState<{ uid: string; name: string; email: string; photoURL?: string | null } | null>(null);
+  const [user, setUser] = useState<{
+    uid: string;
+    name: string;
+    email: string;
+    photoURL?: string | null;
+    city?: string;
+    location?: string;
+  } | null>(null);
   const [authName, setAuthName] = useState<string>('');
   const [authEmail, setAuthEmail] = useState<string>('');
   const [authWhatsapp, setAuthWhatsapp] = useState<string>('');
@@ -397,13 +406,17 @@ export default function App() {
 
   // Keeps the logged-in user (name, email, photo) in sync with Firebase Auth
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        const profileSnapshot = await getDoc(doc(db, 'users', firebaseUser.uid));
+        const profile = profileSnapshot.exists() ? profileSnapshot.data() : {};
         setUser({
           uid: firebaseUser.uid,
           name: firebaseUser.displayName || 'Usuário Já Doei',
           email: firebaseUser.email || '',
-          photoURL: firebaseUser.photoURL
+          photoURL: firebaseUser.photoURL,
+          city: profile.city,
+          location: profile.location
         });
       } else {
         setUser(null);
@@ -817,14 +830,66 @@ export default function App() {
     }, 3800);
   };
 
-  // Simulates fetching the user's precise location via GPS
+  const getProfileLocation = () => user?.city?.trim() || user?.location?.trim() || 'Cotia, SP';
+
+  const formatReverseGeocodedLocation = (address: Record<string, string>) => {
+    const neighborhood = address.suburb || address.neighbourhood || address.quarter;
+    const city = address.city || address.town || address.village || address.municipality;
+    const state = address.state_code || address.state;
+    if (neighborhood && city) return `${neighborhood}, ${city}`;
+    if (city && state) return `${city}, ${state}`;
+    return getProfileLocation();
+  };
+
   const handleUseGps = () => {
     setIsLocatingGps(true);
-    window.setTimeout(() => {
-      setNewLocation('Localização atual (GPS)');
+    let settled = false;
+    const finishWithFallback = () => {
+      if (settled) return;
+      settled = true;
+      setNewLocation(getProfileLocation());
       setIsLocatingGps(false);
-      showToast('📍 Localização atualizada via GPS', 'success');
-    }, 1000);
+      showToast('Não foi possível obter o GPS. Usando a localização do seu perfil.', 'info');
+    };
+    const timeoutId = window.setTimeout(finishWithFallback, 2000);
+
+    if (!navigator.geolocation) {
+      window.clearTimeout(timeoutId);
+      finishWithFallback();
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+      if (settled) return;
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}&zoom=18&addressdetails=1`,
+          { headers: { Accept: 'application/json' } }
+        );
+        if (!response.ok) throw new Error(`Geocodificação retornou HTTP ${response.status}`);
+        const data = await response.json() as { address?: Record<string, string> };
+        if (!data.address) throw new Error('Resposta de geocodificação sem endereço');
+        window.clearTimeout(timeoutId);
+        settled = true;
+        setNewLocation(formatReverseGeocodedLocation(data.address));
+        setIsLocatingGps(false);
+        showToast('📍 Localização atualizada via GPS', 'success');
+      } catch (error) {
+        console.error('Erro na geocodificação reversa:', error);
+        finishWithFallback();
+      }
+    }, (error) => {
+      console.warn('GPS indisponível:', error);
+      window.clearTimeout(timeoutId);
+      finishWithFallback();
+    }, { enableHighAccuracy: true, timeout: 1800, maximumAge: 300000 });
+  };
+
+  const getDisplayLocation = (item: DonationItem) => {
+    const location = item.location?.trim();
+    return location && location !== 'Localização atual (GPS)'
+      ? location
+      : item.userLocation || getProfileLocation();
   };
 
   const handleAiSuggestion = async (selectedUrl?: string) => {
@@ -1200,6 +1265,7 @@ export default function App() {
       category: newCategory,
       credits: donationCredits,
       location: newLocation.trim() || 'São Paulo, SP',
+      userLocation: getProfileLocation(),
       condition: newCondition,
       image: finalImageUrl,
       imageUrl: finalImageUrl,
@@ -1894,7 +1960,7 @@ export default function App() {
                             </h3>
                             <div className="flex items-center gap-1 text-[10px] text-slate-500 mt-1">
                               <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span className="truncate">{item.location}</span>
+                              <span className="truncate">{getDisplayLocation(item)}</span>
                             </div>
                           </div>
                         </div>
@@ -1977,7 +2043,7 @@ export default function App() {
                           </h3>
                           <div className="flex items-center gap-1 text-[10px] text-slate-500 mt-1">
                             <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span className="truncate">{item.location}</span>
+                            <span className="truncate">{getDisplayLocation(item)}</span>
                           </div>
                         </div>
                       </div>
@@ -2312,7 +2378,7 @@ export default function App() {
                             <h4 className="text-xs font-semibold text-slate-800 truncate">
                               {item.title}
                             </h4>
-                            <span className="text-[10px] text-slate-500">{item.location}</span>
+                            <span className="text-[10px] text-slate-500">{getDisplayLocation(item)}</span>
                           </div>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 ${
                             item.status === 'completed'
@@ -4154,7 +4220,7 @@ export default function App() {
                                 </h4>
                                 <div className="flex items-center gap-1 text-[10px] text-slate-500 mt-1">
                                   <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                                  <span className="truncate">{item.location}</span>
+                                  <span className="truncate">{getDisplayLocation(item)}</span>
                                 </div>
                               </div>
                             </div>
