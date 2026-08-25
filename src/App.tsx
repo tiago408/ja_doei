@@ -223,6 +223,7 @@ const CATEGORIES = [
   'Móveis',
   'Casa & Cozinha',
   'Eletrônicos',
+  'Eletrodomésticos',
   'Outros'
 ];
 
@@ -839,7 +840,7 @@ export default function App() {
       const categoryAliases: Record<string, string> = {
         roupas: 'Roupas', vestuario: 'Roupas', calçados: 'Calçados', calcados: 'Calçados',
         livros: 'Livros', brinquedos: 'Outros', móveis: 'Móveis', moveis: 'Móveis',
-        eletrônicos: 'Eletrônicos', eletronicos: 'Eletrônicos', 'casa e cozinha': 'Casa & Cozinha',
+        eletrônicos: 'Eletrônicos', eletronicos: 'Eletrônicos', eletrodomésticos: 'Eletrodomésticos', eletrodomesticos: 'Eletrodomésticos', 'casa e cozinha': 'Casa & Cozinha',
         'casa & cozinha': 'Casa & Cozinha', outros: 'Outros'
       };
       const normalizedCategory = categoryAliases[analysis.category.toLowerCase()] || 'Outros';
@@ -903,23 +904,27 @@ export default function App() {
     const objectUrl = URL.createObjectURL(file);
     image.onload = () => {
       URL.revokeObjectURL(objectUrl);
-      const scale = Math.min(1, 800 / Math.max(image.naturalWidth, image.naturalHeight));
+      let scale = Math.min(1, 800 / Math.max(image.naturalWidth, image.naturalHeight));
       const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
       const context = canvas.getContext('2d');
       if (!context) {
         reject(new Error('Não foi possível preparar a imagem para análise'));
         return;
       }
 
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
       let quality = 0.7;
-      let compressed = canvas.toDataURL('image/jpeg', quality);
-      while (compressed.length * 0.75 > 200 * 1024 && quality > 0.3) {
-        quality -= 0.1;
+      let compressed = '';
+      do {
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
         compressed = canvas.toDataURL('image/jpeg', quality);
-      }
+        if (compressed.length * 0.75 > 200 * 1024) {
+          if (quality > 0.3) quality = Math.max(0.3, quality - 0.1);
+          else scale *= 0.8;
+        }
+      } while (compressed.length * 0.75 > 200 * 1024 && scale > 0.1);
       resolve(compressed);
     };
     image.onerror = () => {
