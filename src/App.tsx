@@ -91,6 +91,7 @@ interface DonationItem {
   donorAvatar?: string;
   userId?: string | null;
   receiverId?: string | null;
+  isLargeItem?: boolean;
 }
 
 export interface FreightOption {
@@ -107,6 +108,17 @@ export interface FreightOption {
 }
 
 const FREIGHT_OPTIONS: FreightOption[] = [
+  {
+    id: 'lalamove_partner',
+    category: 'padrao',
+    categoryLabel: 'Contratação externa',
+    name: 'Carreto & Utilitário (Lalamove Partner)',
+    carrierName: 'Lalamove Partner',
+    price: 0,
+    deliveryTime: 'Cotação em tempo real',
+    icon: '🚛',
+    type: 'standard'
+  },
   {
     id: 'ja_doei_express',
     category: 'padrao',
@@ -297,6 +309,7 @@ export default function App() {
           donorAvatar: data.donorAvatar,
           userId: data.userId || null,
           receiverId: data.receiverId || null,
+          isLargeItem: data.isLargeItem === true,
           isFavorite: false,
           isRedeemed: ['reserved', 'completed'].includes(data.status || 'available')
         };
@@ -1038,7 +1051,7 @@ export default function App() {
   // Open Product Details
   const handleOpenDetails = (item: DonationItem) => {
     setSelectedItemForDetails(item);
-    setSelectedFreightId('ja_doei_express');
+    setSelectedFreightId(item.isLargeItem ? 'lalamove_partner' : 'ja_doei_express');
     setIsCepCalculated(true);
   };
 
@@ -1326,6 +1339,13 @@ export default function App() {
       console.error('Erro ao confirmar recebimento do item:', error);
       showToast('Não foi possível confirmar o recebimento. Tente novamente.', 'error');
     }
+  };
+
+  const handleCallLalamove = (item: DonationItem) => {
+    const lalamoveUrl = new URL('https://www.lalamove.com/pt-br/');
+    lalamoveUrl.searchParams.set('pickupAddress', item.location);
+    lalamoveUrl.searchParams.set('item', item.title);
+    window.open(lalamoveUrl.toString(), '_blank', 'noopener,noreferrer');
   };
 
   const handleConfirmRedeem = async () => {
@@ -2315,6 +2335,16 @@ export default function App() {
                           </div>
                         )}
 
+                        {item.isLargeItem && user?.uid === item.receiverId && (
+                          <button
+                            type="button"
+                            onClick={() => handleCallLalamove(item)}
+                            className="w-full px-2 py-2 rounded-md bg-[#14A76C] hover:bg-[#108958] text-white text-[10px] font-bold transition-colors"
+                          >
+                            Chamar Carreto Lalamove
+                          </button>
+                        )}
+
                         {item.status === 'reserved' && user?.uid === item.userId && (
                           <span className="inline-flex items-center w-fit px-2 py-1 rounded-md text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200">
                             Aguardando confirmação de quem recebeu
@@ -2570,7 +2600,9 @@ export default function App() {
                       </h3>
                       {currentSelectedFreight && (
                         <span className="text-[10px] font-bold text-[#14A76C] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                          {currentSelectedFreight.price === 0
+                          {currentSelectedFreight.id === 'lalamove_partner'
+                            ? 'Frete a pagar direto à Lalamove'
+                            : currentSelectedFreight.price === 0
                             ? 'Grátis'
                             : `R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}`}
                         </span>
@@ -2612,7 +2644,7 @@ export default function App() {
                             Opções Padrão / Econômica
                           </span>
                           <div className="space-y-1.5">
-                            {FREIGHT_OPTIONS.filter((f) => f.category === 'padrao').map((opt) => (
+                            {FREIGHT_OPTIONS.filter((f) => f.category === 'padrao' && (f.id !== 'lalamove_partner' || selectedItemForDetails.isLargeItem)).map((opt) => (
                               <label
                                 key={opt.id}
                                 onClick={() => setSelectedFreightId(opt.id)}
@@ -2643,12 +2675,16 @@ export default function App() {
                                       )}
                                     </div>
                                     <span className="text-[10px] text-slate-500 block">
-                                      ({opt.deliveryTime})
+                                      {opt.id === 'lalamove_partner'
+                                        ? 'Cotação em tempo real baseada na distância e modelo do veículo (Fiorino, Pick-up ou Caminhão)'
+                                        : `(${opt.deliveryTime})`}
                                     </span>
                                   </div>
                                 </div>
-                                <span className="text-xs font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 shrink-0 ml-1">
-                                  R$ {opt.price.toFixed(2).replace('.', ',')}
+                                <span className={`text-xs font-bold bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 shrink-0 ml-1 ${opt.id === 'lalamove_partner' ? 'text-amber-700' : 'text-slate-900'}`}>
+                                  {opt.id === 'lalamove_partner'
+                                    ? 'Frete a pagar direto à Lalamove'
+                                    : `R$ ${opt.price.toFixed(2).replace('.', ',')}`}
                                 </span>
                               </label>
                             ))}
@@ -2822,10 +2858,11 @@ export default function App() {
                                 {currentSelectedFreight.name}
                               </span>
                               <span className="text-[10px] text-slate-600 block">
-                                {currentSelectedFreight.deliveryTime} •{' '}
-                                {currentSelectedFreight.price === 0
+                                {currentSelectedFreight.id === 'lalamove_partner'
+                                  ? 'Cotação em tempo real'
+                                  : `${currentSelectedFreight.deliveryTime} • ${currentSelectedFreight.price === 0
                                   ? 'Grátis'
-                                  : `R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}`}
+                                  : `R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}`}`}
                               </span>
                             </div>
                           </div>
@@ -2848,7 +2885,9 @@ export default function App() {
                             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                               <span>Pagamento do Frete</span>
                               <span className="text-[10px] font-extrabold text-[#FF8243] bg-[#FF8243]/10 px-2 py-0.5 rounded-full">
-                                R$ {currentSelectedFreight.price.toFixed(2).replace('.', ',')}
+                                {currentSelectedFreight.id === 'lalamove_partner'
+                                  ? 'Frete externo'
+                                  : `R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}`}
                               </span>
                             </span>
                           </div>
