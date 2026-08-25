@@ -711,6 +711,7 @@ export default function App() {
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newIsFeatured, setNewIsFeatured] = useState<boolean>(false);
+  const [isLargeItem, setIsLargeItem] = useState<boolean>(false);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState<boolean>(false);
   const [isPricingAnalyzing, setIsPricingAnalyzing] = useState<boolean>(false);
   const [aiSuggested, setAiSuggested] = useState<boolean>(false);
@@ -857,6 +858,7 @@ export default function App() {
 
       setNewTitle(analysis.title);
       setNewCategory(normalizedCategory);
+      if (normalizedCategory === 'Móveis & Decoração') setIsLargeItem(true);
       setNewDescription(analysis.description);
       setNewCredits(suggestedCredits);
       setNewCreditsBase(suggestedCredits);
@@ -1203,6 +1205,7 @@ export default function App() {
       imageUrl: finalImageUrl,
       description: newDescription.trim() || 'Item doado recentemente na comunidade em ótimo estado.',
       isFeatured: newIsFeatured,
+      isLargeItem,
       status: 'available',
       userId: user?.uid || null,
       userName: user?.name || 'Você',
@@ -1252,6 +1255,7 @@ export default function App() {
     setIsPricingAnalyzing(false);
     setNewDescription('');
     setNewIsFeatured(false);
+    setIsLargeItem(false);
     setAiSuggested(false);
     setIsAnalyzingImage(false);
     setIsSubmittingDonation(false);
@@ -2644,7 +2648,9 @@ export default function App() {
                             Opções Padrão / Econômica
                           </span>
                           <div className="space-y-1.5">
-                            {FREIGHT_OPTIONS.filter((f) => f.category === 'padrao' && (f.id !== 'lalamove_partner' || selectedItemForDetails.isLargeItem)).map((opt) => (
+                            {FREIGHT_OPTIONS.filter((f) => selectedItemForDetails.isLargeItem
+                              ? f.id === 'lalamove_partner'
+                              : f.id !== 'lalamove_partner').map((opt) => (
                               <label
                                 key={opt.id}
                                 onClick={() => setSelectedFreightId(opt.id)}
@@ -3516,7 +3522,11 @@ export default function App() {
                           </label>
                           <select
                             value={newCategory}
-                            onChange={(e) => setNewCategory(e.target.value)}
+                            onChange={(e) => {
+                              const category = e.target.value;
+                              setNewCategory(category);
+                              setIsLargeItem(category === 'Móveis & Decoração');
+                            }}
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                           >
                             {DONATION_CATEGORIES.map((category) => (
@@ -3524,6 +3534,16 @@ export default function App() {
                             ))}
                           </select>
                         </div>
+
+                        <label className="flex items-start gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50 text-[11px] font-semibold text-amber-900 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isLargeItem}
+                            onChange={(event) => setIsLargeItem(event.target.checked)}
+                            className="mt-0.5 accent-[#FF8243]"
+                          />
+                          <span>Item de Grande Porte / Pesado (Exige furgão ou carreto Lalamove)</span>
+                        </label>
 
                         <div>
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">

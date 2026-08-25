@@ -74,7 +74,7 @@ export async function fetchGeminiValuation(
     throw new Error('VITE_GEMINI_API_KEY não configurada');
   }
 
-  const prompt = `Avalie o item '${title}' na categoria '${category}' com o estado de conservação '${condition}'. APLIQUE FATOR DE DEPRECIAÇÃO RÍGIDO: Novo na Caixa: 100% do preço de mercado seminovo. Usado Excelente: 80% do valor. Usado com Marcas de Uso: 50% a 60% do valor. Com defeito / Para peças: máximo 20% do valor. Escolha obrigatoriamente uma categoria exatamente desta lista: Papelaria & Escritório; Casa, Cozinha & Utensílios; Moda & Calçados Adulto; Moda & Calçados Infantil; Brinquedos & Jogos; Bebês & Maternidade; Eletrônicos & Acessórios; Eletrodomésticos & Portáteis; Livros & Mídia; Esporte & Lazer; Beleza & Cuidado Pessoal; Móveis & Decoração; Pet Shop; Outros. Responda em JSON com { "category": "categoria exata da lista", "estimatedMarketValueBRL": number, "justification": string }.`;
+  const prompt = `Avalie o item '${title}' na categoria '${category}' com o estado de conservação '${condition}'. APLIQUE FATOR DE DEPRECIAÇÃO RÍGIDO: Novo na Caixa: 100% do preço de mercado seminovo. Usado Excelente: 80% do valor. Usado com Marcas de Uso: 50% a 60% do valor. Com defeito / Para peças: máximo 20% do valor. ATENÇÃO: Móveis estruturados (ex: Sofá, Sofá-cama, Mesa de jantar, Armário, Cama) possuem alto valor agregado. JAMAIS atribua valores baixos (como 12 ou 20 créditos) a móveis. Sofá, Sofá-cama e estofados em bom estado: R$ 180 a R$ 450. Mesas, Armários e Camas: R$ 150 a R$ 400. Ajuste o valor conforme o Estado de Conservação informado. Escolha obrigatoriamente uma categoria exatamente desta lista: Papelaria & Escritório; Casa, Cozinha & Utensílios; Moda & Calçados Adulto; Moda & Calçados Infantil; Brinquedos & Jogos; Bebês & Maternidade; Eletrônicos & Acessórios; Eletrodomésticos & Portáteis; Livros & Mídia; Esporte & Lazer; Beleza & Cuidado Pessoal; Móveis & Decoração; Pet Shop; Outros. Responda em JSON com { "category": "categoria exata da lista", "estimatedMarketValueBRL": number, "justification": string }.`;
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
@@ -210,7 +210,7 @@ export function calculateItemCredits(
   else if (/(caneta|lapiseira|caderno|copo simples|miudeza)/.test(lowerTitle)) estimatedMarketValueBRL = 15;
   else if (categoryKey === 'eletrodomesticos') estimatedMarketValueBRL = 375;
   else if (categoryKey === 'eletronicos') estimatedMarketValueBRL = 850;
-  else if (categoryKey === 'moveis') estimatedMarketValueBRL = 450;
+  else if (categoryKey === 'moveis_decoracao') estimatedMarketValueBRL = /(sofá|sofa|estofado)/.test(lowerTitle) ? 315 : 275;
   else if (categoryKey === 'vestuario') estimatedMarketValueBRL = 85;
   else if (categoryKey === 'livros_brinquedos') estimatedMarketValueBRL = 48;
 
