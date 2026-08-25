@@ -707,6 +707,7 @@ export default function App() {
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'publishing'>('idle');
   const pricingRequestId = useRef(0);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isDonateModalOpen) {
@@ -798,7 +799,15 @@ export default function App() {
 
     const requestId = ++pricingRequestId.current;
     try {
-      const analysis = await analyzeImageWithGemini(finalUrl);
+      const analysis = await Promise.race([
+        analyzeImageWithGemini(finalUrl),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => reject(new Error('Tempo limite da análise de imagem excedido')), 3500);
+        })
+      ]);
+      if (!analysis.title.trim()) {
+        throw new Error('A análise de imagem retornou o fallback seguro');
+      }
       if (requestId !== pricingRequestId.current) return;
 
       const categoryAliases: Record<string, string> = {
@@ -825,8 +834,16 @@ export default function App() {
     } catch (error) {
       if (requestId !== pricingRequestId.current) return;
       console.error('Falha na leitura da foto pelo Gemini Vision:', error);
+      setNewCategory('Outros');
+      setNewDescription('');
+      setNewCredits(50);
+      setNewCreditsBase(50);
+      setCreditsMin(40);
+      setCreditsMax(60);
       setAiSuggested(false);
-      showToast('A leitura por foto falhou. Verifique sua conexão e tente novamente.', 'error');
+      setDonateStep(2);
+      showToast('A leitura por foto falhou. Digite o título do item para continuar.', 'error');
+      window.setTimeout(() => titleInputRef.current?.focus(), 0);
     } finally {
       if (requestId === pricingRequestId.current) setIsAnalyzingImage(false);
     }
@@ -1097,7 +1114,7 @@ export default function App() {
     e.preventDefault();
 
     if (donateStep === 1) {
-      if (!newImageUrl || isAnalyzingImage || !aiSuggested) {
+      if (!newImageUrl) {
         showToast('Tire uma foto para a IA calcular os créditos.', 'error');
         return;
       }
@@ -3418,8 +3435,12 @@ export default function App() {
                           </label>
                           <input
                             type="text"
+                            ref={titleInputRef}
                             value={newTitle}
-                            onChange={(e) => setNewTitle(e.target.value)}
+                            onChange={(e) => {
+                              setNewTitle(e.target.value);
+                              setIsVisionPricingLocked(false);
+                            }}
                             onBlur={() => { void handleGeminiValuation(); }}
                             placeholder="Ex: Vaso de Cerâmica, Jaqueta Jeans..."
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"

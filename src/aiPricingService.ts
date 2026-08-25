@@ -101,17 +101,18 @@ export async function fetchGeminiValuation(
 }
 
 export async function analyzeImageWithGemini(base64Image: string): Promise<ImageAnalysisResult> {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('VITE_GEMINI_API_KEY não configurada');
-  }
+  try {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('VITE_GEMINI_API_KEY não configurada');
+    }
 
-  const cleanBase64 = base64Image.replace(/^data:image\/[^;]+;base64,/, '').trim();
-  if (!cleanBase64) {
-    throw new Error('Imagem inválida para análise visual');
-  }
+    const cleanBase64 = base64Image.replace(/^data:image\/[^;]+;base64,/, '').trim();
+    if (!cleanBase64) {
+      throw new Error('Imagem inválida para análise visual');
+    }
 
-  const prompt = `Analise esta imagem e retorne estritamente um JSON com:
+    const prompt = `Analise esta imagem e retorne estritamente um JSON com:
 {
   "title": "Nome preciso do item identificando marca/modelo se visível",
   "category": "Categoria correspondente",
@@ -123,7 +124,7 @@ REGRAS RÍGIDAS DE PREÇO (1 Real = 1 Crédito):
 - Roupas/Calçados básicos: R$ 20 a R$ 60.
 - Eletros pequenos/Brinquedos estruturados: R$ 80 a R$ 200.
 - Móveis/Eletros de grande porte: R$ 200 a R$ 500.`;
-  const response = await fetch(
+    const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
       method: 'POST',
@@ -138,30 +139,39 @@ REGRAS RÍGIDAS DE PREÇO (1 Real = 1 Crédito):
         generationConfig: { responseMimeType: 'application/json' }
       })
     }
-  );
+    );
 
-  if (!response.ok) throw new Error(`Gemini retornou HTTP ${response.status}`);
-  const data = await response.json();
-  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (typeof responseText !== 'string') throw new Error('Resposta do Gemini sem conteúdo');
+    if (!response.ok) throw new Error(`Gemini retornou HTTP ${response.status}`);
+    const data = await response.json();
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (typeof responseText !== 'string') throw new Error('Resposta do Gemini sem conteúdo');
 
-  const result = JSON.parse(responseText.replace(/^```json\s*|\s*```$/g, '').trim()) as Partial<ImageAnalysisResult>;
-  if (
-    typeof result.title !== 'string' ||
-    typeof result.category !== 'string' ||
-    typeof result.description !== 'string' ||
-    typeof result.estimatedMarketValueBRL !== 'number' ||
-    !Number.isFinite(result.estimatedMarketValueBRL)
-  ) {
-    throw new Error('Resposta de análise visual inválida');
+    const result = JSON.parse(responseText.replace(/^```json\s*|\s*```$/g, '').trim()) as Partial<ImageAnalysisResult>;
+    if (
+      typeof result.title !== 'string' ||
+      typeof result.category !== 'string' ||
+      typeof result.description !== 'string' ||
+      typeof result.estimatedMarketValueBRL !== 'number' ||
+      !Number.isFinite(result.estimatedMarketValueBRL)
+    ) {
+      throw new Error('Resposta de análise visual inválida');
+    }
+
+    return {
+      title: result.title.trim(),
+      category: result.category.trim(),
+      description: result.description.trim(),
+      estimatedMarketValueBRL: Math.min(500, Math.max(5, Math.round(result.estimatedMarketValueBRL)))
+    };
+  } catch (error) {
+    console.warn('Visão IA indisponível, usando fallback de texto', error);
+    return {
+      title: '',
+      category: 'Outros',
+      description: '',
+      estimatedMarketValueBRL: 50
+    };
   }
-
-  return {
-    title: result.title.trim(),
-    category: result.category.trim(),
-    description: result.description.trim(),
-    estimatedMarketValueBRL: Math.min(500, Math.max(5, Math.round(result.estimatedMarketValueBRL)))
-  };
 }
 
 export function calculateItemCredits(
