@@ -215,17 +215,24 @@ const INITIAL_ITEMS: DonationItem[] = [
   }
 ];
 
-const CATEGORIES = [
-  'Todas',
-  'Roupas',
-  'Calçados',
-  'Livros',
-  'Móveis',
-  'Casa & Cozinha',
-  'Eletrônicos',
-  'Eletrodomésticos',
+const DONATION_CATEGORIES = [
+  'Papelaria & Escritório',
+  'Casa, Cozinha & Utensílios',
+  'Moda & Calçados Adulto',
+  'Moda & Calçados Infantil',
+  'Brinquedos & Jogos',
+  'Bebês & Maternidade',
+  'Eletrônicos & Acessórios',
+  'Eletrodomésticos & Portáteis',
+  'Livros & Mídia',
+  'Esporte & Lazer',
+  'Beleza & Cuidado Pessoal',
+  'Móveis & Decoração',
+  'Pet Shop',
   'Outros'
-];
+] as const;
+
+const CATEGORIES = ['Todas', ...DONATION_CATEGORIES];
 
 // Simple Google "G" logo used on the Auth Modal social button
 function GoogleIcon({ className }: { className?: string }) {
@@ -734,6 +741,9 @@ export default function App() {
       if (requestId !== pricingRequestId.current) return;
       setNewCredits(pricing.suggestedCredits);
       setNewCreditsBase(pricing.suggestedCredits);
+      if (DONATION_CATEGORIES.includes(pricing.category as (typeof DONATION_CATEGORIES)[number])) {
+        setNewCategory(pricing.category);
+      }
       setCreditsMin(pricing.minAllowedCredits);
       setCreditsMax(pricing.maxAllowedCredits);
       setRequiresModeration(pricing.requiresModeration);
@@ -741,12 +751,19 @@ export default function App() {
     } catch (error) {
       if (requestId !== pricingRequestId.current) return;
       const categoryKey: Record<string, string> = {
-        'Casa & Cozinha': 'eletrodomesticos',
-        Eletrônicos: 'eletronicos',
-        Móveis: 'moveis',
-        Roupas: 'vestuario',
-        Calçados: 'vestuario',
-        Livros: 'livros_brinquedos',
+        'Papelaria & Escritório': 'papelaria_escritorio',
+        'Casa, Cozinha & Utensílios': 'casa_cozinha_utensilios',
+        'Moda & Calçados Adulto': 'moda_adulto',
+        'Moda & Calçados Infantil': 'moda_infantil',
+        'Brinquedos & Jogos': 'brinquedos_jogos',
+        'Bebês & Maternidade': 'bebes_maternidade',
+        'Eletrônicos & Acessórios': 'eletronicos_acessorios',
+        'Eletrodomésticos & Portáteis': 'eletrodomesticos_portateis',
+        'Livros & Mídia': 'livros_midia',
+        'Esporte & Lazer': 'esporte_lazer',
+        'Beleza & Cuidado Pessoal': 'beleza_cuidado_pessoal',
+        'Móveis & Decoração': 'moveis_decoracao',
+        'Pet Shop': 'pet_shop',
         Outros: 'outros',
       };
       const pricing = calculateItemCredits(
@@ -810,13 +827,9 @@ export default function App() {
       }
       if (requestId !== pricingRequestId.current) return;
 
-      const categoryAliases: Record<string, string> = {
-        roupas: 'Roupas', vestuario: 'Roupas', calçados: 'Calçados', calcados: 'Calçados',
-        livros: 'Livros', brinquedos: 'Outros', móveis: 'Móveis', moveis: 'Móveis',
-        eletrônicos: 'Eletrônicos', eletronicos: 'Eletrônicos', eletrodomésticos: 'Eletrodomésticos', eletrodomesticos: 'Eletrodomésticos', 'casa e cozinha': 'Casa & Cozinha',
-        'casa & cozinha': 'Casa & Cozinha', outros: 'Outros'
-      };
-      const normalizedCategory = categoryAliases[analysis.category.toLowerCase()] || 'Outros';
+      const normalizedCategory = DONATION_CATEGORIES.includes(
+        analysis.category as (typeof DONATION_CATEGORIES)[number]
+      ) ? analysis.category : 'Outros';
       const suggestedCredits = analysis.estimatedMarketValueBRL;
 
       setNewTitle(analysis.title);
@@ -3457,7 +3470,7 @@ export default function App() {
                             onChange={(e) => setNewCategory(e.target.value)}
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                           >
-                            {CATEGORIES.filter((category) => category !== 'Todas').map((category) => (
+                            {DONATION_CATEGORIES.map((category) => (
                               <option key={category} value={category}>{category}</option>
                             ))}
                           </select>

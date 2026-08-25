@@ -18,6 +18,23 @@ export interface ImageAnalysisResult {
   estimatedMarketValueBRL: number;
 }
 
+const ALLOWED_CATEGORIES = [
+  'Papelaria & Escritório',
+  'Casa, Cozinha & Utensílios',
+  'Moda & Calçados Adulto',
+  'Moda & Calçados Infantil',
+  'Brinquedos & Jogos',
+  'Bebês & Maternidade',
+  'Eletrônicos & Acessórios',
+  'Eletrodomésticos & Portáteis',
+  'Livros & Mídia',
+  'Esporte & Lazer',
+  'Beleza & Cuidado Pessoal',
+  'Móveis & Decoração',
+  'Pet Shop',
+  'Outros'
+] as const;
+
 // Fatores de Conservação
 const CONDITION_MULTIPLIERS: Record<string, number> = {
   "Novo / Lacrado": 1.0,
@@ -57,7 +74,7 @@ export async function fetchGeminiValuation(
     throw new Error('VITE_GEMINI_API_KEY não configurada');
   }
 
-  const prompt = `Você é o avaliador oficial do app Já Doei. Avalie o valor MÉDIO de mercado em Reais (BRL) para este item usado no Brasil. ATENÇÃO: Seja realista com miudezas e itens simples de papelaria/escritório (ex: canetas, lapiseiras, cadernos usados, copos simples valem entre R$ 3,00 e R$ 15,00 = 3 a 15 créditos). NÃO atribua valores altos a itens simples de baixíssimo valor comercial. Título: '${title}', Estado: '${condition}'. Responda estritamente em JSON: { "estimatedMarketValueBRL": number, "justification": string }.`;
+  const prompt = `Você é o avaliador oficial do app Já Doei. Avalie o valor MÉDIO de mercado em Reais (BRL) para este item usado no Brasil. Escolha obrigatoriamente uma categoria exatamente desta lista: Papelaria & Escritório; Casa, Cozinha & Utensílios; Moda & Calçados Adulto; Moda & Calçados Infantil; Brinquedos & Jogos; Bebês & Maternidade; Eletrônicos & Acessórios; Eletrodomésticos & Portáteis; Livros & Mídia; Esporte & Lazer; Beleza & Cuidado Pessoal; Móveis & Decoração; Pet Shop; Outros. ATENÇÃO: Seja realista com miudezas e itens simples de papelaria/escritório (ex: canetas, lapiseiras, cadernos usados, copos simples valem entre R$ 3,00 e R$ 15,00 = 3 a 15 créditos). NÃO atribua valores altos a itens simples de baixíssimo valor comercial. Título: '${title}', Estado: '${condition}'. Responda estritamente em JSON: { "category": "categoria exata da lista", "estimatedMarketValueBRL": number, "justification": string }.`;
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
@@ -82,6 +99,7 @@ export async function fetchGeminiValuation(
 
   const jsonText = responseText.replace(/^```json\s*|\s*```$/g, '').trim();
   const valuation = JSON.parse(jsonText) as {
+    category?: string;
     estimatedMarketValueBRL?: number;
     justification?: string;
   };
@@ -92,12 +110,18 @@ export async function fetchGeminiValuation(
     throw new Error('Valor de mercado inválido na resposta do Gemini');
   }
 
-  return createPricingResult(
+  const pricingResult = createPricingResult(
     title,
     condition,
     Math.max(0, valuation.estimatedMarketValueBRL),
     valuation.justification || 'Valor estimado pelo Gemini com base no mercado brasileiro.'
   );
+  return {
+    ...pricingResult,
+    category: ALLOWED_CATEGORIES.includes(valuation.category as (typeof ALLOWED_CATEGORIES)[number])
+      ? valuation.category!
+      : 'Outros'
+  };
 }
 
 export async function analyzeImageWithGemini(base64Image: string): Promise<ImageAnalysisResult> {
@@ -115,7 +139,7 @@ export async function analyzeImageWithGemini(base64Image: string): Promise<Image
     const prompt = `Analise esta imagem e retorne estritamente um JSON com:
 {
   "title": "Nome preciso do item identificando marca/modelo se visível",
-  "category": "Categoria correspondente",
+  "category": "Uma categoria exatamente da lista: Papelaria & Escritório; Casa, Cozinha & Utensílios; Moda & Calçados Adulto; Moda & Calçados Infantil; Brinquedos & Jogos; Bebês & Maternidade; Eletrônicos & Acessórios; Eletrodomésticos & Portáteis; Livros & Mídia; Esporte & Lazer; Beleza & Cuidado Pessoal; Móveis & Decoração; Pet Shop; Outros",
   "description": "Breve descrição do estado de conservação visível",
   "estimatedMarketValueBRL": número de 5 a 500
 }
