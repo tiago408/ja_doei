@@ -239,42 +239,6 @@ function GoogleIcon({ className }: { className?: string }) {
   );
 }
 
-// Photo presets helper for form (labels match CATEGORIES exactly)
-const PHOTO_PRESETS = [
-  { label: 'Roupas', url: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&q=80&w=600' },
-  { label: 'Calçados', url: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=600' },
-  { label: 'Livros', url: 'https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&q=80&w=600' },
-  { label: 'Eletrônicos', url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=600' },
-  { label: 'Móveis', url: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=600' },
-  { label: 'Casa & Cozinha', url: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&q=80&w=600' },
-];
-
-const AI_CREDIT_TABLE: Record<string, number> = {
-  Roupas: 30,
-  'Calçados': 40,
-  Eletrônicos: 100,
-  Livros: 20,
-  Móveis: 80,
-  'Casa & Cozinha': 50,
-  Outros: 25,
-};
-
-// Maps known preset photos straight to their category, simulating recognition
-const PHOTO_PRESET_CATEGORY_MAP: Record<string, string> = PHOTO_PRESETS.reduce(
-  (acc, preset) => ({ ...acc, [preset.url]: preset.label }),
-  {} as Record<string, string>
-);
-
-// Deterministic pseudo-random category pick for any other photo URL, simulating AI image analysis
-function guessCategoryFromUrl(url: string): string {
-  const knownCategories = Object.keys(AI_CREDIT_TABLE);
-  let hash = 0;
-  for (let i = 0; i < url.length; i++) {
-    hash = (hash * 31 + url.charCodeAt(i)) >>> 0;
-  }
-  return knownCategories[hash % knownCategories.length];
-}
-
 interface AppNotification {
   id: string;
   title: string;
@@ -727,7 +691,7 @@ export default function App() {
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newIsFeatured, setNewIsFeatured] = useState<boolean>(false);
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [isAnalyzingImage, setIsAnalyzingImage] = useState<boolean>(false);
   const [isPricingAnalyzing, setIsPricingAnalyzing] = useState<boolean>(false);
   const [aiSuggested, setAiSuggested] = useState<boolean>(false);
   const [pricingJustification, setPricingJustification] = useState<string>('');
@@ -824,12 +788,12 @@ export default function App() {
   const handleAiSuggestion = async (selectedUrl?: string) => {
     const finalUrl = (selectedUrl ?? newImageUrl ?? '').trim();
     if (!finalUrl) {
-      setIsAnalyzing(false);
+      setIsAnalyzingImage(false);
       setAiSuggested(false);
       return;
     }
 
-    setIsAnalyzing(true);
+    setIsAnalyzingImage(true);
     setAiSuggested(false);
 
     const requestId = ++pricingRequestId.current;
@@ -860,19 +824,11 @@ export default function App() {
       setDonateStep(2);
     } catch (error) {
       if (requestId !== pricingRequestId.current) return;
-      console.warn('Gemini Vision indisponível; usando sugestão local:', error);
-      const suggestedCategory = PHOTO_PRESET_CATEGORY_MAP[finalUrl] || guessCategoryFromUrl(finalUrl);
-      const suggestedCredits = AI_CREDIT_TABLE[suggestedCategory] ?? 15;
-      setNewCategory(suggestedCategory);
-      setNewCredits(suggestedCredits);
-      setNewCreditsBase(suggestedCredits);
-      setCreditsMin(Math.round(suggestedCredits * 0.8));
-      setCreditsMax(Math.round(suggestedCredits * 1.2));
-      setIsVisionPricingLocked(true);
-      setAiSuggested(true);
-      setDonateStep(2);
+      console.error('Falha na leitura da foto pelo Gemini Vision:', error);
+      setAiSuggested(false);
+      showToast('A leitura por foto falhou. Verifique sua conexão e tente novamente.', 'error');
     } finally {
-      if (requestId === pricingRequestId.current) setIsAnalyzing(false);
+      if (requestId === pricingRequestId.current) setIsAnalyzingImage(false);
     }
   };
 
@@ -939,12 +895,12 @@ export default function App() {
     if (!file) return;
 
     setNewImageFile(file);
-    setIsAnalyzing(true);
+    setIsAnalyzingImage(true);
     void resizeImageForAnalysis(file)
       .then((compressedImage) => handlePhotoSelected(compressedImage))
       .catch((error) => {
         console.error('Erro ao comprimir imagem para análise:', error);
-        setIsAnalyzing(false);
+        setIsAnalyzingImage(false);
         showToast('Não foi possível preparar a foto. Tente novamente.', 'error');
       });
     e.target.value = '';
@@ -1141,7 +1097,7 @@ export default function App() {
     e.preventDefault();
 
     if (donateStep === 1) {
-      if (!newImageUrl || isAnalyzing || !aiSuggested) {
+      if (!newImageUrl || isAnalyzingImage || !aiSuggested) {
         showToast('Tire uma foto para a IA calcular os créditos.', 'error');
         return;
       }
@@ -1244,7 +1200,7 @@ export default function App() {
     setNewDescription('');
     setNewIsFeatured(false);
     setAiSuggested(false);
-    setIsAnalyzing(false);
+    setIsAnalyzingImage(false);
     setIsSubmittingDonation(false);
     setUploadPhase('idle');
     setDonateStep(1);
@@ -3344,7 +3300,7 @@ export default function App() {
                               alt="Pré-visualização da foto do item"
                               className="w-full max-w-full box-border h-44 object-cover"
                             />
-                            {isAnalyzing && (
+                            {isAnalyzingImage && (
                               <div className="absolute inset-0 flex items-center justify-center bg-slate-900/45 text-white">
                                 <span className="flex items-center gap-2 rounded-full bg-slate-900/75 px-3 py-2 text-xs font-bold">
                                   <Sparkles className="w-4 h-4 animate-pulse" />
@@ -3358,7 +3314,7 @@ export default function App() {
                                 setNewImageUrl('');
                                 setNewImageFile(null);
                                 setIsVisionPricingLocked(false);
-                                setIsAnalyzing(false);
+                                setIsAnalyzingImage(false);
                                 setAiSuggested(false);
                               }}
                               className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-900/60 text-white hover:bg-slate-900/80 transition-all"
@@ -3388,7 +3344,7 @@ export default function App() {
                           </label>
                         )}
 
-                        {isAnalyzing && (
+                        {isAnalyzingImage && (
                           <div className="flex items-center gap-2 rounded-xl border border-[#14A76C]/20 bg-emerald-50 p-2 text-[11px] font-semibold text-[#14A76C]">
                             <Sparkles className="w-4 h-4 animate-pulse" />
                             <span>Analisando imagem via IA...</span>
