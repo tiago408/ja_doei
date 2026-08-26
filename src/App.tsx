@@ -719,7 +719,7 @@ export default function App() {
   // New Item Form State
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Moda & Calçados Adulto');
-  const [newCredits, setNewCredits] = useState<number | null>(null);
+  const [newCredits, setNewCredits] = useState<number>(0);
   const [newLocation, setNewLocation] = useState('São Paulo, SP');
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newImageUrl, setNewImageUrl] = useState('');
@@ -731,9 +731,9 @@ export default function App() {
   const [isPricingLoading, setIsPricingLoading] = useState<boolean>(false);
   const [aiSuggested, setAiSuggested] = useState<boolean>(false);
   const [pricingJustification, setPricingJustification] = useState<string>('');
-  const [newCreditsBase, setNewCreditsBase] = useState<number | null>(null);
-  const [creditsMin, setCreditsMin] = useState<number | null>(null);
-  const [creditsMax, setCreditsMax] = useState<number | null>(null);
+  const [newCreditsBase, setNewCreditsBase] = useState<number>(0);
+  const [creditsMin, setCreditsMin] = useState<number>(0);
+  const [creditsMax, setCreditsMax] = useState<number>(0);
   const [pricingError, setPricingError] = useState<string>('');
   const [isCategoryManuallySelected, setIsCategoryManuallySelected] = useState<boolean>(false);
   const [requiresModeration, setRequiresModeration] = useState<boolean>(false);
@@ -752,15 +752,18 @@ export default function App() {
     }
   }, [isDonateModalOpen]);
 
-  const handleGeminiValuation = async (conditionOverride = newCondition) => {
+  const handleGeminiValuation = async (
+    conditionOverride = newCondition,
+    categoryOverride = newCategory
+  ) => {
     const requestId = ++pricingRequestId.current;
     if (!newTitle.trim()) {
       setIsPricingAnalyzing(false);
       setIsPricingLoading(false);
-      setNewCredits(null);
-      setNewCreditsBase(null);
-      setCreditsMin(null);
-      setCreditsMax(null);
+      setNewCredits(0);
+      setNewCreditsBase(0);
+      setCreditsMin(0);
+      setCreditsMax(0);
       setPricingError('');
       setRequiresModeration(false);
       setPricingJustification('Digite o título do item para obter uma avaliação de mercado.');
@@ -770,12 +773,12 @@ export default function App() {
     setIsPricingAnalyzing(true);
     setIsPricingLoading(true);
     setPricingError('');
-    setNewCredits(null);
-    setNewCreditsBase(null);
-    setCreditsMin(null);
-    setCreditsMax(null);
+    setNewCredits(0);
+    setNewCreditsBase(0);
+    setCreditsMin(0);
+    setCreditsMax(0);
     try {
-      const pricing = await analyzeItem(undefined, newTitle.trim(), newCategory, conditionOverride);
+      const pricing = await analyzeItem(undefined, newTitle.trim(), categoryOverride, conditionOverride);
       if (requestId !== pricingRequestId.current) return;
       setNewCredits(pricing.credits);
       setNewCreditsBase(pricing.credits);
@@ -789,10 +792,10 @@ export default function App() {
     } catch (error) {
       if (requestId !== pricingRequestId.current) return;
       console.error('Gemini indisponível; precificação não calculada:', error);
-      setNewCredits(null);
-      setNewCreditsBase(null);
-      setCreditsMin(null);
-      setCreditsMax(null);
+      setNewCredits(0);
+      setNewCreditsBase(0);
+      setCreditsMin(0);
+      setCreditsMax(0);
       setPricingJustification('');
       setPricingError('Não foi possível estimar automaticamente. Digite o título e categoria para calcular.');
     } finally {
@@ -916,10 +919,10 @@ export default function App() {
       if (requestId !== pricingRequestId.current) return;
       console.error('Falha na leitura da foto pelo Gemini Vision:', error);
       setNewDescription('');
-      setNewCredits(null);
-      setNewCreditsBase(null);
-      setCreditsMin(null);
-      setCreditsMax(null);
+      setNewCredits(0);
+      setNewCreditsBase(0);
+      setCreditsMin(0);
+      setCreditsMax(0);
       setPricingError('Não foi possível estimar automaticamente. Digite o título e categoria para calcular.');
       setAiSuggested(false);
       setDonateStep(2);
@@ -931,16 +934,13 @@ export default function App() {
   };
 
   const handleCreditsStep = (delta: number) => {
-    if (newCredits === null || creditsMin === null || creditsMax === null) return;
-    setNewCredits((prev) => prev === null
-      ? prev
-      : Math.min(creditsMax, Math.max(creditsMin, prev + delta)));
+    if (creditsMin <= 0 || creditsMax <= 0) return;
+    setNewCredits((prev) => Math.min(creditsMax, Math.max(creditsMin, prev + delta)));
   };
 
   const handleCreditsInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = Number(e.target.value);
     if (Number.isNaN(raw)) return;
-    if (creditsMin === null || creditsMax === null) return;
     setNewCredits(Math.min(creditsMax, Math.max(creditsMin, raw)));
   };
 
@@ -949,7 +949,7 @@ export default function App() {
     () => !items.some((i) => (user ? i.userId === user.uid : false) || i.donorName === 'Você'),
     [items, user]
   );
-  const firstDonationBonus = isFirstDonation && newCredits !== null ? Math.round(newCredits * 0.15) : 0;
+  const firstDonationBonus = isFirstDonation ? Math.round(newCredits * 0.15) : 0;
 
   // Sets the chosen photo (upload, camera or preset) and kicks off the AI simulation
   const handlePhotoSelected = (url: string) => {
@@ -1221,7 +1221,7 @@ export default function App() {
       return;
     }
 
-    if (newCredits === null) {
+    if (newCredits <= 0) {
       showToast('Aguarde a avaliação da IA antes de publicar o item.', 'error');
       return;
     }
@@ -1297,10 +1297,10 @@ export default function App() {
     // Reset Form
     setNewTitle('');
     setNewCategory('Moda & Calçados Adulto');
-    setNewCredits(null);
-    setNewCreditsBase(null);
-    setCreditsMin(null);
-    setCreditsMax(null);
+    setNewCredits(0);
+    setNewCreditsBase(0);
+    setCreditsMin(0);
+    setCreditsMax(0);
     setPricingError('');
     setIsPricingLoading(false);
     setNewImageUrl('');
@@ -3585,6 +3585,7 @@ export default function App() {
                               setIsCategoryManuallySelected(true);
                               setPricingError('');
                               setIsLargeItem(category === 'Móveis & Decoração');
+                              void handleGeminiValuation(newCondition, category);
                             }}
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                           >
@@ -3659,7 +3660,7 @@ export default function App() {
                             </span>
                             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-800 px-2 py-0.5 border border-emerald-200">
                               <CheckCircle2 className="w-3 h-3" />
-                              {!pricingError && newCreditsBase !== null
+                              {!pricingError && newCreditsBase > 0
                                 ? `Base da IA: ${newCreditsBase}`
                                 : 'Aguardando título...'}
                             </span>
@@ -3668,23 +3669,23 @@ export default function App() {
                             <button
                               type="button"
                               onClick={() => handleCreditsStep(-5)}
-                              disabled={newCredits === null || creditsMin === null || newCredits <= creditsMin}
+                              disabled={creditsMin <= 0 || creditsMax <= 0 || newCredits <= creditsMin}
                               className="w-9 h-9 shrink-0 rounded-full bg-white border border-slate-200 text-slate-600 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 active:scale-95 transition-all"
                             >
                               −
                             </button>
                             <input
                               type="number"
-                              value={newCredits ?? ''}
-                              min={creditsMin ?? undefined}
-                              max={creditsMax ?? undefined}
+                              value={newCredits}
+                              min={creditsMin}
+                              max={creditsMax}
                               onChange={handleCreditsInputChange}
                               className="flex-1 text-center px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                             />
                             <button
                               type="button"
                               onClick={() => handleCreditsStep(5)}
-                              disabled={newCredits === null || creditsMax === null || newCredits >= creditsMax}
+                              disabled={creditsMax <= 0 || newCredits >= creditsMax}
                               className="w-9 h-9 shrink-0 rounded-full bg-white border border-slate-200 text-slate-600 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 active:scale-95 transition-all"
                             >
                               +
@@ -3693,7 +3694,7 @@ export default function App() {
                           <p className="text-[10px] text-slate-500 mt-1.5 text-center">
                             {isPricingLoading
                               ? 'Avaliando item com IA...'
-                              : creditsMin !== null && creditsMax !== null
+                              : creditsMin > 0 && creditsMax > 0
                               ? `Faixa permitida: ${creditsMin} a ${creditsMax} créditos (±20%)`
                               : 'Aguardando título...'}
                           </p>
