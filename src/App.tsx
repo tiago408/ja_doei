@@ -746,10 +746,15 @@ export default function App() {
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   const getCategoryFallbackCredits = (category: string) => {
-    if (category === 'Eletrônicos & Acessórios' || category === 'Eletrodomésticos & Portáteis' || category === 'Móveis & Decoração') return 120;
-    if (category === 'Música & Instrumentos') return 70;
-    if (category === 'Casa, Cozinha & Utensílios' || category === 'Papelaria & Escritório') return 15;
-    return 30;
+    const safeFallbacks: Record<string, number> = {
+      'Eletrônicos & Acessórios': 120,
+      'Eletrodomésticos & Portáteis': 120,
+      'Móveis & Decoração': 120,
+      'Música & Instrumentos': 70,
+      'Casa, Cozinha & Utensílios': 50,
+      'Papelaria & Escritório': 50
+    };
+    return safeFallbacks[category] ?? 30;
   };
 
   useEffect(() => {
@@ -776,6 +781,10 @@ export default function App() {
     setIsPricingAnalyzing(true);
     setIsPricingLoading(true);
     setPricingError('');
+    setNewCredits(0);
+    setNewCreditsBase(0);
+    setCreditsMin(0);
+    setCreditsMax(0);
     try {
       const pricing = await fetchGeminiValuation(newTitle.trim(), newCategory, conditionOverride);
       if (requestId !== pricingRequestId.current) return;
@@ -3656,7 +3665,9 @@ export default function App() {
                             </span>
                             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-800 px-2 py-0.5 border border-emerald-200">
                               <CheckCircle2 className="w-3 h-3" />
-                              Base da IA: {newCreditsBase}
+                              {!pricingError && newCreditsBase > 0
+                                ? `Base da IA: ${newCreditsBase}`
+                                : 'Aguardando título...'}
                             </span>
                           </div>
                           <div className="flex items-center gap-2">

@@ -74,6 +74,7 @@ export async function fetchGeminiValuation(
 ): Promise<PricingResult> {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
+    console.warn('Chave do Gemini não configurada nas variáveis de ambiente.');
     throw new Error('VITE_GEMINI_API_KEY não configurada');
   }
 
@@ -159,6 +160,7 @@ export async function analyzeImageWithGemini(
   try {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
     if (!apiKey) {
+      console.warn('Chave do Gemini não configurada nas variáveis de ambiente.');
       throw new Error('VITE_GEMINI_API_KEY não configurada');
     }
 
