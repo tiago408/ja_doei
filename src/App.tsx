@@ -68,7 +68,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { db, storage, auth } from './firebase';
-import { analyzeImageWithGemini, fetchGeminiValuation } from './aiPricingService';
+import { analyzeItem } from './aiPricingService';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
 
@@ -719,7 +719,7 @@ export default function App() {
   // New Item Form State
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Moda & Calçados Adulto');
-  const [newCredits, setNewCredits] = useState<number>(0);
+  const [newCredits, setNewCredits] = useState<number | null>(null);
   const [newLocation, setNewLocation] = useState('São Paulo, SP');
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newImageUrl, setNewImageUrl] = useState('');
@@ -731,10 +731,11 @@ export default function App() {
   const [isPricingLoading, setIsPricingLoading] = useState<boolean>(false);
   const [aiSuggested, setAiSuggested] = useState<boolean>(false);
   const [pricingJustification, setPricingJustification] = useState<string>('');
-  const [newCreditsBase, setNewCreditsBase] = useState<number>(0);
-  const [creditsMin, setCreditsMin] = useState<number>(0);
-  const [creditsMax, setCreditsMax] = useState<number>(0);
+  const [newCreditsBase, setNewCreditsBase] = useState<number | null>(null);
+  const [creditsMin, setCreditsMin] = useState<number | null>(null);
+  const [creditsMax, setCreditsMax] = useState<number | null>(null);
   const [pricingError, setPricingError] = useState<string>('');
+  const [isCategoryManuallySelected, setIsCategoryManuallySelected] = useState<boolean>(false);
   const [requiresModeration, setRequiresModeration] = useState<boolean>(false);
   const [donateStep, setDonateStep] = useState<number>(1);
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
@@ -744,18 +745,6 @@ export default function App() {
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'publishing'>('idle');
   const pricingRequestId = useRef(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
-
-  const getCategoryFallbackCredits = (category: string) => {
-    const safeFallbacks: Record<string, number> = {
-      'Eletrônicos & Acessórios': 120,
-      'Eletrodomésticos & Portáteis': 120,
-      'Móveis & Decoração': 120,
-      'Música & Instrumentos': 70,
-      'Casa, Cozinha & Utensílios': 50,
-      'Papelaria & Escritório': 50
-    };
-    return safeFallbacks[category] ?? 30;
-  };
 
   useEffect(() => {
     if (isDonateModalOpen) {
@@ -768,10 +757,10 @@ export default function App() {
     if (!newTitle.trim()) {
       setIsPricingAnalyzing(false);
       setIsPricingLoading(false);
-      setNewCredits(0);
-      setNewCreditsBase(0);
-      setCreditsMin(0);
-      setCreditsMax(0);
+      setNewCredits(null);
+      setNewCreditsBase(null);
+      setCreditsMin(null);
+      setCreditsMax(null);
       setPricingError('');
       setRequiresModeration(false);
       setPricingJustification('Digite o título do item para obter uma avaliação de mercado.');
@@ -781,31 +770,30 @@ export default function App() {
     setIsPricingAnalyzing(true);
     setIsPricingLoading(true);
     setPricingError('');
-    setNewCredits(0);
-    setNewCreditsBase(0);
-    setCreditsMin(0);
-    setCreditsMax(0);
+    setNewCredits(null);
+    setNewCreditsBase(null);
+    setCreditsMin(null);
+    setCreditsMax(null);
     try {
-      const pricing = await fetchGeminiValuation(newTitle.trim(), newCategory, conditionOverride);
+      const pricing = await analyzeItem(undefined, newTitle.trim(), newCategory, conditionOverride);
       if (requestId !== pricingRequestId.current) return;
-      setNewCredits(pricing.suggestedCredits);
-      setNewCreditsBase(pricing.suggestedCredits);
+      setNewCredits(pricing.credits);
+      setNewCreditsBase(pricing.credits);
       if (DONATION_CATEGORIES.includes(pricing.category as (typeof DONATION_CATEGORIES)[number])) {
         setNewCategory(pricing.category);
       }
-      setCreditsMin(pricing.minAllowedCredits);
-      setCreditsMax(pricing.maxAllowedCredits);
-      setRequiresModeration(pricing.requiresModeration);
+      setCreditsMin(pricing.credits);
+      setCreditsMax(pricing.credits);
+      setRequiresModeration(false);
       setPricingJustification(pricing.justification);
     } catch (error) {
       if (requestId !== pricingRequestId.current) return;
-      const fallbackCredits = getCategoryFallbackCredits(newCategory);
-      console.error('Gemini indisponível; usando estimativa de segurança por categoria:', error);
-      setNewCredits(fallbackCredits);
-      setNewCreditsBase(fallbackCredits);
-      setCreditsMin(Math.round(fallbackCredits * 0.8));
-      setCreditsMax(Math.round(fallbackCredits * 1.2));
-      setPricingJustification('Estimativa de segurança por categoria enquanto a IA não está disponível.');
+      console.error('Gemini indisponível; precificação não calculada:', error);
+      setNewCredits(null);
+      setNewCreditsBase(null);
+      setCreditsMin(null);
+      setCreditsMax(null);
+      setPricingJustification('');
       setPricingError('Não foi possível estimar automaticamente. Digite o título e categoria para calcular.');
     } finally {
       if (requestId === pricingRequestId.current) {
@@ -901,30 +889,25 @@ export default function App() {
     const requestId = ++pricingRequestId.current;
     try {
       const analysis = await Promise.race([
-        analyzeImageWithGemini(finalUrl, newTitle, newCategory, newCondition),
+        analyzeItem(finalUrl, newTitle, newCategory, newCondition),
         new Promise<never>((_, reject) => {
           window.setTimeout(() => reject(new Error('Tempo limite da análise de imagem excedido')), 3500);
         })
       ]);
-      if (!analysis.title.trim()) {
-        throw new Error('A análise de imagem retornou o fallback seguro');
-      }
       if (requestId !== pricingRequestId.current) return;
 
       const normalizedCategory = DONATION_CATEGORIES.includes(
         analysis.category as (typeof DONATION_CATEGORIES)[number]
       ) ? analysis.category : 'Outros';
-      const suggestedCredits = analysis.estimatedMarketValueBRL;
-
       setPricingError('');
-      setNewTitle(analysis.title);
-      setNewCategory(normalizedCategory);
+      if (!newTitle.trim()) setNewTitle(analysis.title);
+      if (!isCategoryManuallySelected) setNewCategory(normalizedCategory);
       if (normalizedCategory === 'Móveis & Decoração') setIsLargeItem(true);
-      setNewDescription(analysis.justification || '');
-      setNewCredits(suggestedCredits);
-      setNewCreditsBase(suggestedCredits);
-      setCreditsMin(Math.round(suggestedCredits * 0.8));
-      setCreditsMax(Math.round(suggestedCredits * 1.2));
+      setNewDescription(analysis.justification);
+      setNewCredits(analysis.credits);
+      setNewCreditsBase(analysis.credits);
+      setCreditsMin(analysis.credits);
+      setCreditsMax(analysis.credits);
       setNewCondition('Usado - Excelente');
       setPricingJustification('Valor estimado pelo Gemini Vision com base no mercado brasileiro.');
       setAiSuggested(true);
@@ -933,11 +916,10 @@ export default function App() {
       if (requestId !== pricingRequestId.current) return;
       console.error('Falha na leitura da foto pelo Gemini Vision:', error);
       setNewDescription('');
-      const fallbackCredits = getCategoryFallbackCredits(newCategory);
-      setNewCredits(fallbackCredits);
-      setNewCreditsBase(fallbackCredits);
-      setCreditsMin(Math.round(fallbackCredits * 0.8));
-      setCreditsMax(Math.round(fallbackCredits * 1.2));
+      setNewCredits(null);
+      setNewCreditsBase(null);
+      setCreditsMin(null);
+      setCreditsMax(null);
       setPricingError('Não foi possível estimar automaticamente. Digite o título e categoria para calcular.');
       setAiSuggested(false);
       setDonateStep(2);
@@ -949,12 +931,16 @@ export default function App() {
   };
 
   const handleCreditsStep = (delta: number) => {
-    setNewCredits((prev) => Math.min(creditsMax, Math.max(creditsMin, prev + delta)));
+    if (newCredits === null || creditsMin === null || creditsMax === null) return;
+    setNewCredits((prev) => prev === null
+      ? prev
+      : Math.min(creditsMax, Math.max(creditsMin, prev + delta)));
   };
 
   const handleCreditsInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = Number(e.target.value);
     if (Number.isNaN(raw)) return;
+    if (creditsMin === null || creditsMax === null) return;
     setNewCredits(Math.min(creditsMax, Math.max(creditsMin, raw)));
   };
 
@@ -963,7 +949,7 @@ export default function App() {
     () => !items.some((i) => (user ? i.userId === user.uid : false) || i.donorName === 'Você'),
     [items, user]
   );
-  const firstDonationBonus = isFirstDonation ? Math.round(newCredits * 0.15) : 0;
+  const firstDonationBonus = isFirstDonation && newCredits !== null ? Math.round(newCredits * 0.15) : 0;
 
   // Sets the chosen photo (upload, camera or preset) and kicks off the AI simulation
   const handlePhotoSelected = (url: string) => {
@@ -1235,10 +1221,15 @@ export default function App() {
       return;
     }
 
+    if (newCredits === null) {
+      showToast('Aguarde a avaliação da IA antes de publicar o item.', 'error');
+      return;
+    }
+
     if (isSubmittingDonation) return;
 
     const fallbackImg = 'https://images.unsplash.com/photo-1532629345422-7515f3d16bb0?w=500';
-    const donationCredits = Number(newCredits) || 10;
+    const donationCredits = newCredits;
 
     setIsSubmittingDonation(true);
 
@@ -1306,11 +1297,12 @@ export default function App() {
     // Reset Form
     setNewTitle('');
     setNewCategory('Moda & Calçados Adulto');
-    setNewCredits(0);
-    setNewCreditsBase(0);
-    setCreditsMin(0);
-    setCreditsMax(0);
+    setNewCredits(null);
+    setNewCreditsBase(null);
+    setCreditsMin(null);
+    setCreditsMax(null);
     setPricingError('');
+    setIsPricingLoading(false);
     setNewImageUrl('');
     setNewImageFile(null);
     setNewExtraPhotos([]);
@@ -1321,6 +1313,7 @@ export default function App() {
     setNewDescription('');
     setNewIsFeatured(false);
     setIsLargeItem(false);
+    setIsCategoryManuallySelected(false);
     setAiSuggested(false);
     setIsAnalyzingImage(false);
     setIsSubmittingDonation(false);
@@ -3589,6 +3582,7 @@ export default function App() {
                             onChange={(e) => {
                               const category = e.target.value;
                               setNewCategory(category);
+                              setIsCategoryManuallySelected(true);
                               setPricingError('');
                               setIsLargeItem(category === 'Móveis & Decoração');
                             }}
@@ -3665,7 +3659,7 @@ export default function App() {
                             </span>
                             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-800 px-2 py-0.5 border border-emerald-200">
                               <CheckCircle2 className="w-3 h-3" />
-                              {!pricingError && newCreditsBase > 0
+                              {!pricingError && newCreditsBase !== null
                                 ? `Base da IA: ${newCreditsBase}`
                                 : 'Aguardando título...'}
                             </span>
@@ -3674,23 +3668,23 @@ export default function App() {
                             <button
                               type="button"
                               onClick={() => handleCreditsStep(-5)}
-                              disabled={newCredits <= creditsMin}
+                              disabled={newCredits === null || creditsMin === null || newCredits <= creditsMin}
                               className="w-9 h-9 shrink-0 rounded-full bg-white border border-slate-200 text-slate-600 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 active:scale-95 transition-all"
                             >
                               −
                             </button>
                             <input
                               type="number"
-                              value={newCredits}
-                              min={creditsMin}
-                              max={creditsMax}
+                              value={newCredits ?? ''}
+                              min={creditsMin ?? undefined}
+                              max={creditsMax ?? undefined}
                               onChange={handleCreditsInputChange}
                               className="flex-1 text-center px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                             />
                             <button
                               type="button"
                               onClick={() => handleCreditsStep(5)}
-                              disabled={newCredits >= creditsMax}
+                              disabled={newCredits === null || creditsMax === null || newCredits >= creditsMax}
                               className="w-9 h-9 shrink-0 rounded-full bg-white border border-slate-200 text-slate-600 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 active:scale-95 transition-all"
                             >
                               +
@@ -3698,15 +3692,11 @@ export default function App() {
                           </div>
                           <p className="text-[10px] text-slate-500 mt-1.5 text-center">
                             {isPricingLoading
-                              ? 'Calculando valoração por IA...'
-                              : `Faixa permitida: ${creditsMin} a ${creditsMax} créditos (±20%)`}
+                              ? 'Avaliando item com IA...'
+                              : creditsMin !== null && creditsMax !== null
+                              ? `Faixa permitida: ${creditsMin} a ${creditsMax} créditos (±20%)`
+                              : 'Aguardando título...'}
                           </p>
-                          {isPricingAnalyzing && (
-                            <div className="mt-2 flex items-center justify-center gap-1.5 text-[10px] font-semibold text-[#14A76C]">
-                              <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-                              <span>Analisando item via IA...</span>
-                            </div>
-                          )}
                           {pricingJustification && !isPricingAnalyzing && (
                             <p className="mt-2 text-[10px] leading-snug text-slate-500">
                               {pricingJustification}
@@ -3788,7 +3778,7 @@ export default function App() {
                         <div className="w-full max-w-full box-border p-3 rounded-2xl border border-[#14A76C]/20 bg-emerald-50/40 space-y-1.5">
                           <div className="flex items-center justify-between text-[11px] text-slate-600">
                             <span>Créditos do Item</span>
-                            <span className="font-semibold text-slate-800">{newCredits} créditos</span>
+                            <span className="font-semibold text-slate-800">{newCredits ?? 'Aguardando'} créditos</span>
                           </div>
                           {isFirstDonation && (
                             <div className="flex items-center justify-between text-[11px] text-slate-600">
@@ -3800,7 +3790,7 @@ export default function App() {
                             <span>Total a receber</span>
                             <span className="flex items-center gap-1 text-[#14A76C]">
                               <Coins className="w-3.5 h-3.5" />
-                              {newCredits + firstDonationBonus} créditos
+                              {newCredits !== null ? newCredits + firstDonationBonus : 'Aguardando'} créditos
                             </span>
                           </div>
                         </div>

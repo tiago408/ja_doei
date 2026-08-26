@@ -2,15 +2,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // src/aiPricingService.ts
 
-export interface PricingResult {
+export interface ItemAnalysisResult {
+  title: string;
   category: string;
-  detectedModel: string;
-  estimatedMarketValueBRL: number;
-  suggestedCredits: number;
-  minAllowedCredits: number;
-  maxAllowedCredits: number;
+  credits: number;
   justification: string;
-  requiresModeration: boolean;
 }
 
 export interface ImageAnalysisResult {
@@ -38,223 +34,51 @@ const ALLOWED_CATEGORIES = [
   'Outros'
 ] as const;
 
-// Fatores de Conservação
-const CONDITION_MULTIPLIERS: Record<string, number> = {
-  "Novo na caixa": 1.0,
-  "Usado - Excelente": 0.8,
-  "Usado - Marcas de uso": 0.55,
-  "Para conserto/peças": 0.2,
-};
-
-function createPricingResult(
-  title: string,
-  condition: string,
-  estimatedMarketValueBRL: number,
-  justification: string
-): PricingResult {
-  const conditionMultiplier = CONDITION_MULTIPLIERS[condition] || 0.7;
-  const suggestedCredits = Math.round(estimatedMarketValueBRL * conditionMultiplier);
-
-  return {
-    category: 'outros',
-    detectedModel: title,
-    estimatedMarketValueBRL,
-    suggestedCredits,
-    minAllowedCredits: Math.round(suggestedCredits * 0.8),
-    maxAllowedCredits: Math.round(suggestedCredits * 1.2),
-    justification,
-    requiresModeration: suggestedCredits > 500,
-  };
-}
-
-export async function fetchGeminiValuation(
-  title: string,
-  category: string,
-  condition: string
-): Promise<PricingResult> {
+export async function analyzeItem(
+  imageBase64?: string,
+  titleText?: string,
+  categoryText?: string,
+  conditionText?: string
+): Promise<ItemAnalysisResult> {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
     console.warn('Chave do Gemini não configurada nas variáveis de ambiente.');
     throw new Error('VITE_GEMINI_API_KEY não configurada');
   }
 
-  const prompt = `Avalie o item '${title}' na categoria '${category}' com o estado de conservação '${condition}'. APLIQUE FATOR DE DEPRECIAÇÃO RÍGIDO: Novo na Caixa: 100% do preço de mercado seminovo. Usado Excelente: 80% do valor. Usado com Marcas de Uso: 50% a 60% do valor. Com defeito / Para peças: máximo 20% do valor. ATENÇÃO: Móveis estruturados (ex: Sofá, Sofá-cama, Mesa de jantar, Armário, Cama) possuem alto valor agregado. JAMAIS atribua valores baixos a móveis. Sofá, Sofá-cama e estofados em bom estado: R$ 180 a R$ 450. Mesas, Armários e Camas: R$ 150 a R$ 400. Instrumentos Musicais (Ukulele, Violão etc.): R$ 70 a R$ 250 ou mais. Colecionáveis e Brinquedos Especializados (Toy Art, Action Figures): R$ 50 a R$ 180 ou mais. Ajuste o valor conforme o Estado de Conservação informado. Escolha obrigatoriamente uma categoria exatamente desta lista: Papelaria & Escritório; Casa, Cozinha & Utensílios; Moda & Calçados Adulto; Moda & Calçados Infantil; Brinquedos & Jogos; Bebês & Maternidade; Eletrônicos & Acessórios; Eletrodomésticos & Portáteis; Livros & Mídia; Esporte & Lazer; Beleza & Cuidado Pessoal; Móveis & Decoração; Pet Shop; Música & Instrumentos; Outros. Responda em JSON com { "category": "categoria exata da lista", "estimatedMarketValueBRL": number, "justification": string }.`;
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json' },
-      }),
-    }
-  );
+  const cleanBase64 = imageBase64?.replace(/^data:image\/[^;]+;base64,/, '').trim();
+  if (!cleanBase64 && !titleText?.trim()) throw new Error('Informe uma imagem ou título para análise');
 
-  if (!response.ok) {
-    throw new Error(`Gemini retornou HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (typeof responseText !== 'string') {
-    throw new Error('Resposta do Gemini sem conteúdo');
-  }
-
-  const jsonText = responseText.replace(/^```json\s*|\s*```$/g, '').trim();
-  const valuation = JSON.parse(jsonText) as {
-    category?: string;
-    estimatedMarketValueBRL?: number;
-    justification?: string;
-  };
-  if (
-    typeof valuation.estimatedMarketValueBRL !== 'number' ||
-    !Number.isFinite(valuation.estimatedMarketValueBRL)
-  ) {
-    throw new Error('Valor de mercado inválido na resposta do Gemini');
-  }
-
-  const pricingResult = createPricingResult(
-    title,
-    condition,
-    Math.max(0, valuation.estimatedMarketValueBRL),
-    valuation.justification || 'Valor estimado pelo Gemini com base no mercado brasileiro.'
-  );
-  return {
-    ...pricingResult,
-    category: ALLOWED_CATEGORIES.includes(valuation.category as (typeof ALLOWED_CATEGORIES)[number])
-      ? valuation.category!
-      : 'Outros'
-  };
-}
-
-export function resizeBase64Image(base64Image: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => {
-      const scale = Math.min(1, 800 / Math.max(image.naturalWidth, image.naturalHeight));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-      const context = canvas.getContext('2d');
-      if (!context) {
-        reject(new Error('Não foi possível criar o Canvas para a imagem'));
-        return;
-      }
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', 0.7));
-    };
-    image.onerror = () => reject(new Error('Não foi possível carregar a imagem Base64'));
-    image.src = base64Image.startsWith('data:')
-      ? base64Image
-      : `data:image/jpeg;base64,${base64Image}`;
-  });
-}
-
-export async function analyzeImageWithGemini(
-  base64Image: string,
-  fallbackTitle = '',
-  fallbackCategory = 'Outros',
-  fallbackCondition = 'Usado - Excelente'
-): Promise<ImageAnalysisResult> {
-  try {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey) {
-      console.warn('Chave do Gemini não configurada nas variáveis de ambiente.');
-      throw new Error('VITE_GEMINI_API_KEY não configurada');
-    }
-
-    const compressedImage = await resizeBase64Image(base64Image);
-    const cleanBase64 = compressedImage.replace(/^data:image\/[^;]+;base64,/, '').trim();
-    if (!cleanBase64) {
-      throw new Error('Imagem inválida para análise visual');
-    }
-
-    const prompt = `Analise esta imagem. Identifique o produto, sua marca, a categoria mais adequada e o valor estimado de mercado em reais (BRL) para um item nesta condição. Responda ESTRITAMENTE em formato JSON contendo { title, category, estimatedMarketValueBRL, justification }.
-  Analise esta imagem e retorne estritamente um JSON com:
+  const prompt = `Você é o avaliador oficial de doações do app Já Doei.
+Analise a IMAGEM enviada e/ou o TÍTULO ('${titleText || ''}'), CATEGORIA ('${categoryText || ''}') e ESTADO ('${conditionText || ''}').
+Sua missão é identificar o item exato e seu valor estimado de mercado em BRL (R$).
+Exemplo: Uma Garrafa Térmica Track & Field vale R$ 120 (120 créditos). Um Sofá vale R$ 300 (300 créditos).
+Retorne ESTRITAMENTE um JSON no formato:
 {
-  "title": "Nome preciso do item identificando marca/modelo se visível",
-  "category": "Uma categoria exatamente da lista: Papelaria & Escritório; Casa, Cozinha & Utensílios; Moda & Calçados Adulto; Moda & Calçados Infantil; Brinquedos & Jogos; Bebês & Maternidade; Eletrônicos & Acessórios; Eletrodomésticos & Portáteis; Livros & Mídia; Esporte & Lazer; Beleza & Cuidado Pessoal; Móveis & Decoração; Pet Shop; Música & Instrumentos; Outros",
-  "estimatedMarketValueBRL": número de 5 a 500,
-  "justification": "Justificativa breve da avaliação e do estado visível"
-}
-REGRAS RÍGIDAS DE PREÇO (1 Real = 1 Crédito):
-- Miudezas/Papelaria/Utensílios simples: R$ 5 a R$ 15 (jamais passe de 15 créditos).
-- Roupas/Calçados básicos: R$ 20 a R$ 60.
-- Eletros pequenos/Brinquedos estruturados: R$ 80 a R$ 200.
-- Móveis/Eletros de grande porte: R$ 200 a R$ 500.`;
-    const client = new GoogleGenerativeAI(apiKey);
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent([
-      { text: prompt },
-      { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } }
-    ]);
-    const responseText = result.response.text();
-    if (typeof responseText !== 'string') throw new Error('Resposta do Gemini sem conteúdo');
-
-    const analysis = JSON.parse(responseText.replace(/^```json\s*|\s*```$/g, '').trim()) as Partial<ImageAnalysisResult>;
-    if (
-      typeof analysis.title !== 'string' ||
-      typeof analysis.category !== 'string' ||
-      typeof analysis.justification !== 'string' ||
-      typeof analysis.estimatedMarketValueBRL !== 'number' ||
-      !Number.isFinite(analysis.estimatedMarketValueBRL)
-    ) {
-      throw new Error('Resposta de análise visual inválida');
-    }
-
-    return {
-      title: analysis.title.trim(),
-      category: analysis.category.trim(),
-      estimatedMarketValueBRL: Math.min(500, Math.max(5, Math.round(analysis.estimatedMarketValueBRL))),
-      justification: analysis.justification.trim()
-    };
-  } catch (error) {
-    console.warn('Visão IA indisponível, usando fallback de texto', error);
-    if (fallbackTitle.trim()) {
-      try {
-        const pricing = await fetchGeminiValuation(fallbackTitle.trim(), fallbackCategory, fallbackCondition);
-        return {
-          title: fallbackTitle.trim(),
-          category: pricing.category,
-          estimatedMarketValueBRL: pricing.suggestedCredits,
-          justification: pricing.justification
-        };
-      } catch (textError) {
-        console.warn('Fallback de texto indisponível:', textError);
-      }
-    }
-    return {
-      title: '',
-      category: 'Outros',
-      estimatedMarketValueBRL: 0
-    };
-  }
-}
-
-export function calculateItemCredits(
-  title: string,
-  categoryKey: string,
-  condition: string
-): PricingResult {
-  const lowerTitle = title.toLowerCase();
-  let estimatedMarketValueBRL = 15;
-  if (lowerTitle.includes("nespresso") || lowerTitle.includes("cafeteira")) estimatedMarketValueBRL = 380;
-  else if (lowerTitle.includes("geladeira") || lowerTitle.includes("sofa")) estimatedMarketValueBRL = 700;
-  else if (/(caneta|lapiseira|caderno|copo simples|miudeza)/.test(lowerTitle)) estimatedMarketValueBRL = 15;
-  else if (categoryKey === 'eletrodomesticos') estimatedMarketValueBRL = 375;
-  else if (categoryKey === 'eletronicos') estimatedMarketValueBRL = 850;
-  else if (categoryKey === 'moveis_decoracao') estimatedMarketValueBRL = /(sofá|sofa|estofado)/.test(lowerTitle) ? 315 : 275;
-  else if (categoryKey === 'musica_instrumentos') estimatedMarketValueBRL = 160;
-  else if (categoryKey === 'vestuario') estimatedMarketValueBRL = 85;
-  else if (categoryKey === 'livros_brinquedos') estimatedMarketValueBRL = 48;
-
-  const pricing = createPricingResult(
-    title,
-    condition,
-    estimatedMarketValueBRL,
-    `Item avaliado com base no valor médio de mercado (R$ ${estimatedMarketValueBRL}) ajustado pelo estado (${condition}).`
-  );
-
-  return { ...pricing, category: categoryKey };
+  "title": "Nome do Produto Identificado",
+  "category": "Nome da Categoria Correta",
+  "credits": 120,
+  "justification": "Explicação breve"
+}`;
+  const client = new GoogleGenerativeAI(apiKey);
+  const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [{ text: prompt }];
+  if (cleanBase64) parts.push({ inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } });
+  const result = await model.generateContent(parts);
+  const responseText = result.response.text();
+  const analysis = JSON.parse(responseText.replace(/^```json\s*|\s*```$/g, '').trim()) as Partial<ItemAnalysisResult>;
+  if (
+    typeof analysis.title !== 'string' ||
+    typeof analysis.category !== 'string' ||
+    typeof analysis.credits !== 'number' ||
+    !Number.isFinite(analysis.credits) ||
+    analysis.credits <= 0 ||
+    typeof analysis.justification !== 'string'
+  ) throw new Error('Resposta inválida do Gemini');
+  return {
+    title: analysis.title.trim(),
+    category: ALLOWED_CATEGORIES.includes(analysis.category as (typeof ALLOWED_CATEGORIES)[number]) ? analysis.category : 'Outros',
+    credits: Math.round(analysis.credits),
+    justification: analysis.justification.trim()
+  };
 }
