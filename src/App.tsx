@@ -757,7 +757,7 @@ export default function App() {
     categoryOverride = newCategory
   ) => {
     const requestId = ++pricingRequestId.current;
-    if (!newTitle.trim()) {
+    if (!newTitle.trim() || !categoryOverride.trim()) {
       setIsPricingAnalyzing(false);
       setIsPricingLoading(false);
       setNewCredits(0);
@@ -766,7 +766,7 @@ export default function App() {
       setCreditsMax(0);
       setPricingError('');
       setRequiresModeration(false);
-      setPricingJustification('Digite o título do item para obter uma avaliação de mercado.');
+      setPricingJustification('Digite o título e selecione a categoria para obter uma avaliação de mercado.');
       return;
     }
 
@@ -898,6 +898,9 @@ export default function App() {
         })
       ]);
       if (requestId !== pricingRequestId.current) return;
+      if (!analysis.title.trim() || !analysis.category.trim() || analysis.credits <= 0) {
+        throw new Error('A IA não retornou título, categoria e créditos válidos');
+      }
 
       const normalizedCategory = DONATION_CATEGORIES.includes(
         analysis.category as (typeof DONATION_CATEGORIES)[number]

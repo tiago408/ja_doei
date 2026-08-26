@@ -1,84 +1,55 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// src/aiPricingService.ts
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+const genAI = new GoogleGenerativeAI(apiKey);
 
-export interface ItemAnalysisResult {
+export interface EvaluationResult {
   title: string;
   category: string;
   credits: number;
   justification: string;
 }
 
-export interface ImageAnalysisResult {
-  title: string;
-  category: string;
-  estimatedMarketValueBRL: number;
-  justification?: string;
-}
+export async function evaluateItemWithGemini(
+  titleText: string,
+  categoryText: string,
+  conditionText: string
+): Promise<EvaluationResult | null> {
+  try {
+    if (!apiKey) {
+      console.warn("Chave VITE_GEMINI_API_KEY não configurada.");
+      return null;
+    }
 
-const ALLOWED_CATEGORIES = [
-  'Papelaria & Escritório',
-  'Casa, Cozinha & Utensílios',
-  'Moda & Calçados Adulto',
-  'Moda & Calçados Infantil',
-  'Brinquedos & Jogos',
-  'Bebês & Maternidade',
-  'Eletrônicos & Acessórios',
-  'Eletrodomésticos & Portáteis',
-  'Livros & Mídia',
-  'Esporte & Lazer',
-  'Beleza & Cuidado Pessoal',
-  'Móveis & Decoração',
-  'Pet Shop',
-  'Música & Instrumentos',
-  'Outros'
-] as const;
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const prompt = `
+      Você é o avaliador de doações do app Já Doei.
+      Avalie o item com os seguintes dados:
+      - Título: "${titleText}"
+      - Categoria informada: "${categoryText}"
+      - Estado de uso: "${conditionText}"
 
-export async function analyzeItem(
-  imageBase64?: string,
-  titleText?: string,
-  categoryText?: string,
-  conditionText?: string
-): Promise<ItemAnalysisResult> {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) {
-    console.warn('Chave do Gemini não configurada nas variáveis de ambiente.');
-    throw new Error('VITE_GEMINI_API_KEY não configurada');
+      Estime o valor em BRL de um item equivalente no mercado de seminovos e converta 1 BRL = 1 Crédito.
+      Exemplos:
+      - Garrafa Térmica Track & Field: ~120 a 150 créditos.
+      - Sofá-cama: ~250 a 400 créditos.
+      - Ukulele / Instrumentos: ~90 a 180 créditos.
+
+      Responda ESTRITAMENTE em formato JSON com esta estrutura (sem markdown extra):
+      {
+        "title": "${titleText}",
+        "category": "Escolha a categoria mais adequada",
+        "credits": 120,
+        "justification": "Explicação curta em 1 frase"
+      }
+    `;
+
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+    const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleanJson) as EvaluationResult;
+  } catch (error) {
+    console.error("Erro na avaliação do Gemini:", error);
+    return null;
   }
-
-  const cleanBase64 = imageBase64?.replace(/^data:image\/[^;]+;base64,/, '').trim();
-  if (!cleanBase64 && !titleText?.trim()) throw new Error('Informe uma imagem ou título para análise');
-
-  const prompt = `Você é o avaliador oficial de doações do app Já Doei.
-Analise a IMAGEM enviada e/ou o TÍTULO ('${titleText || ''}'), CATEGORIA ('${categoryText || ''}') e ESTADO ('${conditionText || ''}').
-Sua missão é identificar o item exato e seu valor estimado de mercado em BRL (R$).
-Exemplo: Uma Garrafa Térmica Track & Field vale R$ 120 (120 créditos). Um Sofá vale R$ 300 (300 créditos).
-Retorne ESTRITAMENTE um JSON no formato:
-{
-  "title": "Nome do Produto Identificado",
-  "category": "Nome da Categoria Correta",
-  "credits": 120,
-  "justification": "Explicação breve"
-}`;
-  const client = new GoogleGenerativeAI(apiKey);
-  const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
-  const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [{ text: prompt }];
-  if (cleanBase64) parts.push({ inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } });
-  const result = await model.generateContent(parts);
-  const responseText = result.response.text();
-  const analysis = JSON.parse(responseText.replace(/^```json\s*|\s*```$/g, '').trim()) as Partial<ItemAnalysisResult>;
-  if (
-    typeof analysis.title !== 'string' ||
-    typeof analysis.category !== 'string' ||
-    typeof analysis.credits !== 'number' ||
-    !Number.isFinite(analysis.credits) ||
-    analysis.credits <= 0 ||
-    typeof analysis.justification !== 'string'
-  ) throw new Error('Resposta inválida do Gemini');
-  return {
-    title: analysis.title.trim(),
-    category: ALLOWED_CATEGORIES.includes(analysis.category as (typeof ALLOWED_CATEGORIES)[number]) ? analysis.category : 'Outros',
-    credits: Math.round(analysis.credits),
-    justification: analysis.justification.trim()
-  };
 }
