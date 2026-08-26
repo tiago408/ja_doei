@@ -745,6 +745,13 @@ export default function App() {
   const pricingRequestId = useRef(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
+  const getCategoryFallbackCredits = (category: string) => {
+    if (category === 'Eletrônicos & Acessórios' || category === 'Eletrodomésticos & Portáteis' || category === 'Móveis & Decoração') return 120;
+    if (category === 'Música & Instrumentos') return 70;
+    if (category === 'Casa, Cozinha & Utensílios' || category === 'Papelaria & Escritório') return 15;
+    return 30;
+  };
+
   useEffect(() => {
     if (isDonateModalOpen) {
       setDonateStep(1);
@@ -783,12 +790,13 @@ export default function App() {
       setPricingJustification(pricing.justification);
     } catch (error) {
       if (requestId !== pricingRequestId.current) return;
-      console.warn('Gemini indisponível; precificação não calculada:', error);
-      setNewCredits(0);
-      setNewCreditsBase(0);
-      setCreditsMin(0);
-      setCreditsMax(0);
-      setPricingJustification('');
+      const fallbackCredits = getCategoryFallbackCredits(newCategory);
+      console.error('Gemini indisponível; usando estimativa de segurança por categoria:', error);
+      setNewCredits(fallbackCredits);
+      setNewCreditsBase(fallbackCredits);
+      setCreditsMin(Math.round(fallbackCredits * 0.8));
+      setCreditsMax(Math.round(fallbackCredits * 1.2));
+      setPricingJustification('Estimativa de segurança por categoria enquanto a IA não está disponível.');
       setPricingError('Não foi possível estimar automaticamente. Digite o título e categoria para calcular.');
     } finally {
       if (requestId === pricingRequestId.current) {
@@ -915,12 +923,12 @@ export default function App() {
     } catch (error) {
       if (requestId !== pricingRequestId.current) return;
       console.error('Falha na leitura da foto pelo Gemini Vision:', error);
-      setNewCategory('Outros');
       setNewDescription('');
-      setNewCredits(0);
-      setNewCreditsBase(0);
-      setCreditsMin(0);
-      setCreditsMax(0);
+      const fallbackCredits = getCategoryFallbackCredits(newCategory);
+      setNewCredits(fallbackCredits);
+      setNewCreditsBase(fallbackCredits);
+      setCreditsMin(Math.round(fallbackCredits * 0.8));
+      setCreditsMax(Math.round(fallbackCredits * 1.2));
       setPricingError('Não foi possível estimar automaticamente. Digite o título e categoria para calcular.');
       setAiSuggested(false);
       setDonateStep(2);
