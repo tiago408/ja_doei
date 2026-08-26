@@ -68,7 +68,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { db, storage, auth } from './firebase';
-import { analyzeItem } from './aiPricingService';
+import { evaluateItemWithGemini } from './aiPricingService';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
 
@@ -719,7 +719,7 @@ export default function App() {
   // New Item Form State
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Moda & Calçados Adulto');
-  const [newCredits, setNewCredits] = useState<number>(0);
+  const [newCredits, setNewCredits] = useState<number>(100);
   const [newLocation, setNewLocation] = useState('São Paulo, SP');
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newImageUrl, setNewImageUrl] = useState('');
@@ -731,9 +731,9 @@ export default function App() {
   const [isPricingLoading, setIsPricingLoading] = useState<boolean>(false);
   const [aiSuggested, setAiSuggested] = useState<boolean>(false);
   const [pricingJustification, setPricingJustification] = useState<string>('');
-  const [newCreditsBase, setNewCreditsBase] = useState<number>(0);
-  const [creditsMin, setCreditsMin] = useState<number>(0);
-  const [creditsMax, setCreditsMax] = useState<number>(0);
+  const [newCreditsBase, setNewCreditsBase] = useState<number>(100);
+  const [creditsMin, setCreditsMin] = useState<number>(80);
+  const [creditsMax, setCreditsMax] = useState<number>(120);
   const [pricingError, setPricingError] = useState<string>('');
   const [isCategoryManuallySelected, setIsCategoryManuallySelected] = useState<boolean>(false);
   const [requiresModeration, setRequiresModeration] = useState<boolean>(false);
@@ -745,6 +745,35 @@ export default function App() {
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'publishing'>('idle');
   const pricingRequestId = useRef(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
+
+  const resetForm = () => {
+    setNewTitle('');
+    setNewCategory('Moda & Calçados Adulto');
+    setNewCredits(100);
+    setNewLocation('São Paulo, SP');
+    setNewCondition('Usado - Excelente');
+    setNewImageUrl('');
+    setNewDescription('');
+    setNewIsFeatured(false);
+    setIsLargeItem(false);
+    setIsAnalyzingImage(false);
+    setIsPricingAnalyzing(false);
+    setIsPricingLoading(false);
+    setAiSuggested(false);
+    setPricingJustification('');
+    setNewCreditsBase(100);
+    setCreditsMin(80);
+    setCreditsMax(120);
+    setPricingError('');
+    setIsCategoryManuallySelected(false);
+    setRequiresModeration(false);
+    setDonateStep(1);
+    setIsLocatingGps(false);
+    setNewExtraPhotos([]);
+    setIsSubmittingDonation(false);
+    setNewImageFile(null);
+    setUploadPhase('idle');
+  };
 
   useEffect(() => {
     if (isDonateModalOpen) {
@@ -778,8 +807,9 @@ export default function App() {
     setCreditsMin(0);
     setCreditsMax(0);
     try {
-      const pricing = await analyzeItem(undefined, newTitle.trim(), categoryOverride, conditionOverride);
+      const pricing = await evaluateItemWithGemini(newTitle.trim(), categoryOverride, conditionOverride);
       if (requestId !== pricingRequestId.current) return;
+      if (!pricing) throw new Error('O Gemini não retornou uma avaliação válida');
       setNewCredits(pricing.credits);
       setNewCreditsBase(pricing.credits);
       if (DONATION_CATEGORIES.includes(pricing.category as (typeof DONATION_CATEGORIES)[number])) {
@@ -892,13 +922,13 @@ export default function App() {
     const requestId = ++pricingRequestId.current;
     try {
       const analysis = await Promise.race([
-        analyzeItem(finalUrl, newTitle, newCategory, newCondition),
+        evaluateItemWithGemini(newTitle || 'Item fotografado', newCategory, newCondition),
         new Promise<never>((_, reject) => {
           window.setTimeout(() => reject(new Error('Tempo limite da análise de imagem excedido')), 3500);
         })
       ]);
       if (requestId !== pricingRequestId.current) return;
-      if (!analysis.title.trim() || !analysis.category.trim() || analysis.credits <= 0) {
+      if (!analysis || !analysis.title.trim() || !analysis.category.trim() || analysis.credits <= 0) {
         throw new Error('A IA não retornou título, categoria e créditos válidos');
       }
 
@@ -2428,7 +2458,7 @@ export default function App() {
         {(activeTab === 'home' || activeTab === 'search') && (
           <button
             type="button"
-            onClick={() => { if (requireAuth()) setIsDonateModalOpen(true); }}
+            onClick={() => { if (requireAuth()) { resetForm(); setIsDonateModalOpen(true); } }}
             className="fixed bottom-20 right-4 z-40 bg-[#14A76C] hover:bg-[#108958] text-white shadow-xl rounded-full p-4 flex items-center gap-1.5 active:scale-95 transition-all"
             title="Doar item"
           >
@@ -2468,7 +2498,7 @@ export default function App() {
             {/* CENTRAL FLOATING BUTTON: "+ Doar" */}
             <div className="relative -top-5 flex flex-col items-center">
               <button
-                onClick={() => { if (requireAuth()) setIsDonateModalOpen(true); }}
+                onClick={() => { if (requireAuth()) { resetForm(); setIsDonateModalOpen(true); } }}
                 className="w-12 h-12 rounded-full bg-[#14A76C] hover:bg-[#108958] active:scale-95 text-white shadow-md flex items-center justify-center border-4 border-[#F5F0E1] transition-all group"
                 title="Doar um item"
               >
@@ -3394,7 +3424,7 @@ export default function App() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setIsDonateModalOpen(false)}
+                    onClick={() => { resetForm(); setIsDonateModalOpen(false); }}
                     className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
                     title="Fechar"
                   >
@@ -4019,7 +4049,7 @@ export default function App() {
                   <div
                     onClick={() => {
                       setIsEarnModalOpen(false);
-                      if (requireAuth()) setIsDonateModalOpen(true);
+                      if (requireAuth()) { resetForm(); setIsDonateModalOpen(true); }
                     }}
                     className="p-3 rounded-xl border border-slate-200 hover:border-[#14A76C] bg-slate-50 hover:bg-emerald-50/50 cursor-pointer transition-all flex items-center justify-between group"
                   >
@@ -4179,7 +4209,7 @@ export default function App() {
                             type="button"
                             onClick={() => {
                               setBaguncaDonor(null);
-                              if (requireAuth()) setIsDonateModalOpen(true);
+                              if (requireAuth()) { resetForm(); setIsDonateModalOpen(true); }
                             }}
                             className="bg-[#14A76C] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm"
                           >
