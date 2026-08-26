@@ -781,7 +781,7 @@ export default function App() {
     }
   }, [isDonateModalOpen]);
 
-  const handleGeminiValuation = async (
+  const handleCalculatePricing = async (
     conditionOverride = newCondition,
     categoryOverride = newCategory
   ) => {
@@ -3599,7 +3599,9 @@ export default function App() {
                               setNewTitle(e.target.value);
                               setPricingError('');
                             }}
-                            onBlur={() => { void handleGeminiValuation(); }}
+                            onBlur={() => {
+                              if (newTitle.trim().length >= 3) void handleCalculatePricing();
+                            }}
                             placeholder="Ex: Vaso de Cerâmica, Jaqueta Jeans..."
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                             required
@@ -3618,7 +3620,7 @@ export default function App() {
                               setIsCategoryManuallySelected(true);
                               setPricingError('');
                               setIsLargeItem(category === 'Móveis & Decoração');
-                              void handleGeminiValuation(newCondition, category);
+                              void handleCalculatePricing(newCondition, category);
                             }}
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                           >
@@ -3647,7 +3649,7 @@ export default function App() {
                             onChange={(e) => {
                               setNewCondition(e.target.value);
                               setPricingError('');
-                              void handleGeminiValuation(e.target.value);
+                              void handleCalculatePricing(e.target.value);
                             }}
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                           >
