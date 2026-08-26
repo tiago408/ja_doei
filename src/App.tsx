@@ -68,7 +68,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { db, storage, auth } from './firebase';
-import { analyzeImageWithGemini, calculateItemCredits, fetchGeminiValuation } from './aiPricingService';
+import { analyzeImageWithGemini, fetchGeminiValuation } from './aiPricingService';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
 
@@ -719,7 +719,7 @@ export default function App() {
   // New Item Form State
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Moda & Calçados Adulto');
-  const [newCredits, setNewCredits] = useState<number>(100);
+  const [newCredits, setNewCredits] = useState<number>(0);
   const [newLocation, setNewLocation] = useState('São Paulo, SP');
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newImageUrl, setNewImageUrl] = useState('');
@@ -731,10 +731,10 @@ export default function App() {
   const [isPricingLoading, setIsPricingLoading] = useState<boolean>(false);
   const [aiSuggested, setAiSuggested] = useState<boolean>(false);
   const [pricingJustification, setPricingJustification] = useState<string>('');
-  const [newCreditsBase, setNewCreditsBase] = useState<number>(100);
-  const [creditsMin, setCreditsMin] = useState<number>(80);
-  const [creditsMax, setCreditsMax] = useState<number>(120);
-  const [isVisionPricingLocked, setIsVisionPricingLocked] = useState<boolean>(false);
+  const [newCreditsBase, setNewCreditsBase] = useState<number>(0);
+  const [creditsMin, setCreditsMin] = useState<number>(0);
+  const [creditsMax, setCreditsMax] = useState<number>(0);
+  const [pricingError, setPricingError] = useState<string>('');
   const [requiresModeration, setRequiresModeration] = useState<boolean>(false);
   const [donateStep, setDonateStep] = useState<number>(1);
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
@@ -754,17 +754,21 @@ export default function App() {
   const handleGeminiValuation = async (conditionOverride = newCondition) => {
     const requestId = ++pricingRequestId.current;
     if (!newTitle.trim()) {
-      setNewCredits(100);
-      setNewCreditsBase(100);
-      setCreditsMin(80);
-      setCreditsMax(120);
+      setIsPricingAnalyzing(false);
+      setIsPricingLoading(false);
+      setNewCredits(0);
+      setNewCreditsBase(0);
+      setCreditsMin(0);
+      setCreditsMax(0);
+      setPricingError('');
       setRequiresModeration(false);
       setPricingJustification('Digite o título do item para obter uma avaliação de mercado.');
       return;
     }
 
     setIsPricingAnalyzing(true);
-      setIsPricingLoading(true);
+    setIsPricingLoading(true);
+    setPricingError('');
     try {
       const pricing = await fetchGeminiValuation(newTitle.trim(), newCategory, conditionOverride);
       if (requestId !== pricingRequestId.current) return;
@@ -779,35 +783,13 @@ export default function App() {
       setPricingJustification(pricing.justification);
     } catch (error) {
       if (requestId !== pricingRequestId.current) return;
-      const categoryKey: Record<string, string> = {
-        'Papelaria & Escritório': 'papelaria_escritorio',
-        'Casa, Cozinha & Utensílios': 'casa_cozinha_utensilios',
-        'Moda & Calçados Adulto': 'moda_adulto',
-        'Moda & Calçados Infantil': 'moda_infantil',
-        'Brinquedos & Jogos': 'brinquedos_jogos',
-        'Bebês & Maternidade': 'bebes_maternidade',
-        'Eletrônicos & Acessórios': 'eletronicos_acessorios',
-        'Eletrodomésticos & Portáteis': 'eletrodomesticos_portateis',
-        'Livros & Mídia': 'livros_midia',
-        'Esporte & Lazer': 'esporte_lazer',
-        'Beleza & Cuidado Pessoal': 'beleza_cuidado_pessoal',
-        'Móveis & Decoração': 'moveis_decoracao',
-        'Música & Instrumentos': 'musica_instrumentos',
-        'Pet Shop': 'pet_shop',
-        Outros: 'outros',
-      };
-      const pricing = calculateItemCredits(
-        newTitle.trim(),
-        categoryKey[newCategory] || 'outros',
-        conditionOverride
-      );
-      setNewCredits(pricing.suggestedCredits);
-      setNewCreditsBase(pricing.suggestedCredits);
-      setCreditsMin(pricing.minAllowedCredits);
-      setCreditsMax(pricing.maxAllowedCredits);
-      setRequiresModeration(pricing.requiresModeration);
-      setPricingJustification(`${pricing.justification} (Avaliação local.)`);
-      console.warn('Gemini indisponível; usando avaliação local:', error);
+      console.warn('Gemini indisponível; precificação não calculada:', error);
+      setNewCredits(0);
+      setNewCreditsBase(0);
+      setCreditsMin(0);
+      setCreditsMax(0);
+      setPricingJustification('');
+      setPricingError('Não foi possível estimar automaticamente. Digite o título e categoria para calcular.');
     } finally {
       if (requestId === pricingRequestId.current) {
         setIsPricingAnalyzing(false);
@@ -815,17 +797,6 @@ export default function App() {
       }
     }
   };
-
-  const valuationHandlerRef = useRef(handleGeminiValuation);
-  valuationHandlerRef.current = handleGeminiValuation;
-
-  useEffect(() => {
-    if (!newTitle.trim() || isVisionPricingLocked) return;
-    const timer = window.setTimeout(() => {
-      void valuationHandlerRef.current(newCondition);
-    }, 400);
-    return () => window.clearTimeout(timer);
-  }, [newTitle, newCondition, newCategory, isVisionPricingLocked]);
 
   // Toast System
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -928,6 +899,7 @@ export default function App() {
       ) ? analysis.category : 'Outros';
       const suggestedCredits = analysis.estimatedMarketValueBRL;
 
+      setPricingError('');
       setNewTitle(analysis.title);
       setNewCategory(normalizedCategory);
       if (normalizedCategory === 'Móveis & Decoração') setIsLargeItem(true);
@@ -937,7 +909,6 @@ export default function App() {
       setCreditsMin(Math.round(suggestedCredits * 0.8));
       setCreditsMax(Math.round(suggestedCredits * 1.2));
       setNewCondition('Usado - Excelente');
-      setIsVisionPricingLocked(true);
       setPricingJustification('Valor estimado pelo Gemini Vision com base no mercado brasileiro.');
       setAiSuggested(true);
       setDonateStep(2);
@@ -946,7 +917,11 @@ export default function App() {
       console.error('Falha na leitura da foto pelo Gemini Vision:', error);
       setNewCategory('Outros');
       setNewDescription('');
-      setNewCredits(50);
+      setNewCredits(0);
+      setNewCreditsBase(0);
+      setCreditsMin(0);
+      setCreditsMax(0);
+      setPricingError('Não foi possível estimar automaticamente. Digite o título e categoria para calcular.');
       setAiSuggested(false);
       setDonateStep(2);
       showToast('A leitura por foto falhou. Digite o título do item para continuar.', 'error');
@@ -1314,14 +1289,17 @@ export default function App() {
     // Reset Form
     setNewTitle('');
     setNewCategory('Moda & Calçados Adulto');
-    setNewCredits(100);
-    setNewCreditsBase(100);
-    setIsVisionPricingLocked(false);
+    setNewCredits(0);
+    setNewCreditsBase(0);
+    setCreditsMin(0);
+    setCreditsMax(0);
+    setPricingError('');
     setNewImageUrl('');
     setNewImageFile(null);
     setNewExtraPhotos([]);
     setNewCondition('Usado - Excelente');
     setPricingJustification('');
+    setPricingError('');
     setIsPricingAnalyzing(false);
     setNewDescription('');
     setNewIsFeatured(false);
@@ -3468,7 +3446,6 @@ export default function App() {
                               onClick={() => {
                                 setNewImageUrl('');
                                 setNewImageFile(null);
-                                setIsVisionPricingLocked(false);
                                 setIsAnalyzingImage(false);
                                 setAiSuggested(false);
                               }}
@@ -3577,7 +3554,7 @@ export default function App() {
                             value={newTitle}
                             onChange={(e) => {
                               setNewTitle(e.target.value);
-                              setIsVisionPricingLocked(false);
+                              setPricingError('');
                             }}
                             onBlur={() => { void handleGeminiValuation(); }}
                             placeholder="Ex: Vaso de Cerâmica, Jaqueta Jeans..."
@@ -3595,7 +3572,7 @@ export default function App() {
                             onChange={(e) => {
                               const category = e.target.value;
                               setNewCategory(category);
-                              setIsVisionPricingLocked(false);
+                              setPricingError('');
                               setIsLargeItem(category === 'Móveis & Decoração');
                             }}
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
@@ -3624,7 +3601,7 @@ export default function App() {
                             value={newCondition}
                             onChange={(e) => {
                               setNewCondition(e.target.value);
-                              setIsVisionPricingLocked(false);
+                              setPricingError('');
                               void handleGeminiValuation(e.target.value);
                             }}
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
@@ -3714,6 +3691,11 @@ export default function App() {
                           {pricingJustification && !isPricingAnalyzing && (
                             <p className="mt-2 text-[10px] leading-snug text-slate-500">
                               {pricingJustification}
+                            </p>
+                          )}
+                          {pricingError && !isPricingAnalyzing && (
+                            <p className="mt-2 text-[10px] leading-snug text-rose-600">
+                              {pricingError}
                             </p>
                           )}
                           {requiresModeration && (
