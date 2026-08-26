@@ -1,17 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-const GEMINI_CATEGORIES = [
-  'Música & Instrumentos',
-  'Casa, Cozinha & Utensílios',
-  'Móveis & Decoração',
-  'Eletrônicos & Tecnologia',
-  'Esporte & Lazer',
-  'Brinquedos & Jogos',
-  'Moda & Acessórios',
-  'Papelaria & Escritório',
-  'Livros & Mídias',
-  'Outros'
-] as const;
+import { GoogleGenerativeAI, type Part } from '@google/generative-ai';
 
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
@@ -24,46 +11,61 @@ export interface EvaluationResult {
 }
 
 export async function evaluateItemWithGemini(
-  titleText: string,
-  categoryText: string,
-  conditionText: string
+  imageBase64?: string,
+  titleText?: string,
+  categoryText?: string,
+  conditionText?: string
 ): Promise<EvaluationResult | null> {
+  if (!apiKey) {
+    console.warn('VITE_GEMINI_API_KEY não configurada.');
+    return null;
+  }
+
   try {
-    if (!apiKey) {
-      console.warn("Chave VITE_GEMINI_API_KEY não configurada.");
-      return null;
-    }
-
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
     const prompt = `
-      Você é o avaliador de doações do app Já Doei.
-      Avalie o item com os seguintes dados:
-      - Título: "${titleText}"
-      - Categoria informada: "${categoryText}"
-      - Estado de uso: "${conditionText}"
+      Você é o avaliador oficial do app Já Doei.
+      Analise o item (pela imagem e/ou pelas informações fornecidas):
+      - Título atual: "${titleText || ''}"
+      - Categoria informada: "${categoryText || ''}"
+      - Condição: "${conditionText || 'Usado - Excelente'}"
 
-      Estime o valor em BRL de um item equivalente no mercado de seminovos e converta 1 BRL = 1 Crédito.
-      Exemplos:
-      - Garrafa Térmica Track & Field: ~120 a 150 créditos.
-      - Sofá-cama: ~250 a 400 créditos.
-      - Ukulele / Instrumentos: ~90 a 180 créditos.
+      Instruções:
+      1. Identifique o produto com precisão. Se o título estiver vazio, gere um título comercial adequado.
+      2. Escolha a melhor categoria entre: ["Música & Instrumentos", "Casa, Cozinha & Utensílios", "Móveis & Decoração", "Eletrônicos & Tecnologia", "Esporte & Lazer", "Brinquedos & Jogos", "Moda & Acessórios", "Papelaria & Escritório", "Livros & Mídias", "Outros"].
+      3. Estime o valor em BRL de mercado para seminovos (1 BRL = 1 Crédito).
+         Regra de conservação: "Novo na caixa" = 100%, "Usado - Excelente" = 75-85%, "Usado - Bom" = 50-60%.
 
-      Categorias permitidas para a avaliação: ${GEMINI_CATEGORIES.join(', ')}.
-      Responda ESTRITAMENTE em formato JSON com esta estrutura (sem markdown extra):
+      Retorne EXCLUSIVAMENTE um JSON VÁLIDO no seguinte formato (sem formatação markdown \`\`\`json):
       {
-        "title": "${titleText}",
-        "category": "Escolha uma categoria da lista permitida",
-        "credits": 120,
-        "justification": "Explicação curta em 1 frase"
+        "title": "Nome Exato do Item",
+        "category": "Nome da Categoria",
+        "credits": 65,
+        "justification": "Explicacao curta de 1 frase"
       }
     `;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
-    const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    const contents: Array<string | Part> = [prompt];
+
+    if (imageBase64) {
+      const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      const imagePart: Part = {
+        inlineData: {
+          data: cleanBase64,
+          mimeType: 'image/jpeg'
+        }
+      } as Part;
+      contents.push(imagePart);
+    }
+
+    const result = await model.generateContent(contents);
+    const text = result.response.text().trim();
+    const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
     return JSON.parse(cleanJson) as EvaluationResult;
   } catch (error) {
-    console.error("Erro na avaliação do Gemini:", error);
+    console.error('Erro na chamada do Gemini:', error);
     return null;
   }
 }

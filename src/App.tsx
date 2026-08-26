@@ -731,6 +731,8 @@ export default function App() {
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Música & Instrumentos');
   const [newCredits, setNewCredits] = useState<number>(100);
+  const [suggestedCredits, setSuggestedCredits] = useState<number>(100);
+  const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
   const [newLocation, setNewLocation] = useState('São Paulo, SP');
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newImageUrl, setNewImageUrl] = useState('');
@@ -742,7 +744,6 @@ export default function App() {
   const [isPricingLoading, setIsPricingLoading] = useState<boolean>(false);
   const [aiSuggested, setAiSuggested] = useState<boolean>(false);
   const [pricingJustification, setPricingJustification] = useState<string>('');
-  const [newCreditsBase, setNewCreditsBase] = useState<number>(100);
   const [creditsMin, setCreditsMin] = useState<number>(80);
   const [creditsMax, setCreditsMax] = useState<number>(120);
   const [pricingError, setPricingError] = useState<string>('');
@@ -761,6 +762,7 @@ export default function App() {
     setNewTitle('');
     setNewCategory('Música & Instrumentos');
     setNewCredits(100);
+    setSuggestedCredits(100);
     setNewLocation('São Paulo, SP');
     setNewCondition('Usado - Excelente');
     setNewImageUrl('');
@@ -770,9 +772,9 @@ export default function App() {
     setIsAnalyzingImage(false);
     setIsPricingAnalyzing(false);
     setIsPricingLoading(false);
+    setIsLoadingPricing(false);
     setAiSuggested(false);
     setPricingJustification('');
-    setNewCreditsBase(100);
     setCreditsMin(80);
     setCreditsMax(120);
     setPricingError('');
@@ -797,11 +799,13 @@ export default function App() {
     categoryOverride = newCategory
   ) => {
     const requestId = ++pricingRequestId.current;
-    if (!newTitle.trim() || !categoryOverride.trim()) {
+    const title = newTitle.trim();
+    if (!title || !categoryOverride.trim()) {
       setIsPricingAnalyzing(false);
       setIsPricingLoading(false);
+      setIsLoadingPricing(false);
       setNewCredits(0);
-      setNewCreditsBase(0);
+      setSuggestedCredits(0);
       setCreditsMin(0);
       setCreditsMax(0);
       setPricingError('');
@@ -812,17 +816,23 @@ export default function App() {
 
     setIsPricingAnalyzing(true);
     setIsPricingLoading(true);
+    setIsLoadingPricing(true);
     setPricingError('');
     setNewCredits(0);
-    setNewCreditsBase(0);
+    setSuggestedCredits(0);
     setCreditsMin(0);
     setCreditsMax(0);
     try {
-      const pricing = await evaluateItemWithGemini(newTitle.trim(), categoryOverride, conditionOverride);
+      const pricing = await evaluateItemWithGemini(
+        undefined,
+        title,
+        categoryOverride,
+        conditionOverride
+      );
       if (requestId !== pricingRequestId.current) return;
       if (!pricing) throw new Error('O Gemini não retornou uma avaliação válida');
       setNewCredits(pricing.credits);
-      setNewCreditsBase(pricing.credits);
+      setSuggestedCredits(pricing.credits);
       if (DONATION_CATEGORIES.includes(pricing.category as (typeof DONATION_CATEGORIES)[number])) {
         setNewCategory(pricing.category);
       }
@@ -834,7 +844,7 @@ export default function App() {
       if (requestId !== pricingRequestId.current) return;
       console.error('Gemini indisponível; precificação não calculada:', error);
       setNewCredits(0);
-      setNewCreditsBase(0);
+      setSuggestedCredits(0);
       setCreditsMin(0);
       setCreditsMax(0);
       setPricingJustification('');
@@ -843,6 +853,7 @@ export default function App() {
       if (requestId === pricingRequestId.current) {
         setIsPricingAnalyzing(false);
         setIsPricingLoading(false);
+        setIsLoadingPricing(false);
       }
     }
   };
@@ -923,64 +934,6 @@ export default function App() {
     return item.userLocation || getProfileLocation();
   };
 
-  const handleAiSuggestion = async (selectedUrl?: string) => {
-    const finalUrl = (selectedUrl ?? newImageUrl ?? '').trim();
-    if (!finalUrl) {
-      setIsAnalyzingImage(false);
-      setAiSuggested(false);
-      return;
-    }
-
-    setIsAnalyzingImage(true);
-    setAiSuggested(false);
-
-    const requestId = ++pricingRequestId.current;
-    try {
-      const analysis = await Promise.race([
-        evaluateItemWithGemini(newTitle || 'Item fotografado', newCategory, newCondition),
-        new Promise<never>((_, reject) => {
-          window.setTimeout(() => reject(new Error('Tempo limite da análise de imagem excedido')), 3500);
-        })
-      ]);
-      if (requestId !== pricingRequestId.current) return;
-      if (!analysis || !analysis.title.trim() || !analysis.category.trim() || analysis.credits <= 0) {
-        throw new Error('A IA não retornou título, categoria e créditos válidos');
-      }
-
-      const normalizedCategory = DONATION_CATEGORIES.includes(
-        analysis.category as (typeof DONATION_CATEGORIES)[number]
-      ) ? analysis.category : 'Outros';
-      setPricingError('');
-      if (!newTitle.trim()) setNewTitle(analysis.title);
-      if (!isCategoryManuallySelected) setNewCategory(normalizedCategory);
-      if (normalizedCategory === 'Móveis & Decoração') setIsLargeItem(true);
-      setNewDescription(analysis.justification);
-      setNewCredits(analysis.credits);
-      setNewCreditsBase(analysis.credits);
-      setCreditsMin(analysis.credits);
-      setCreditsMax(analysis.credits);
-      setNewCondition('Usado - Excelente');
-      setPricingJustification('Valor estimado pelo Gemini Vision com base no mercado brasileiro.');
-      setAiSuggested(true);
-      setDonateStep(2);
-    } catch (error) {
-      if (requestId !== pricingRequestId.current) return;
-      console.error('Falha na leitura da foto pelo Gemini Vision:', error);
-      setNewDescription('');
-      setNewCredits(0);
-      setNewCreditsBase(0);
-      setCreditsMin(0);
-      setCreditsMax(0);
-      setPricingError('Não foi possível estimar automaticamente. Digite o título e categoria para calcular.');
-      setAiSuggested(false);
-      setDonateStep(2);
-      showToast('A leitura por foto falhou. Digite o título do item para continuar.', 'error');
-      window.setTimeout(() => titleInputRef.current?.focus(), 0);
-    } finally {
-      if (requestId === pricingRequestId.current) setIsAnalyzingImage(false);
-    }
-  };
-
   const handleCreditsStep = (delta: number) => {
     if (creditsMin <= 0 || creditsMax <= 0) return;
     setNewCredits((prev) => Math.min(creditsMax, Math.max(creditsMin, prev + delta)));
@@ -998,12 +951,6 @@ export default function App() {
     [items, user]
   );
   const firstDonationBonus = isFirstDonation ? Math.round(newCredits * 0.15) : 0;
-
-  // Sets the chosen photo (upload, camera or preset) and kicks off the AI simulation
-  const handlePhotoSelected = (url: string) => {
-    setNewImageUrl(url);
-    void handleAiSuggestion(url);
-  };
 
   const resizeImageForAnalysis = (file: File): Promise<string> => new Promise((resolve, reject) => {
     const image = new Image();
@@ -1040,20 +987,49 @@ export default function App() {
     image.src = objectUrl;
   });
 
-  const handlePhotoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setNewImageFile(file);
     setIsAnalyzingImage(true);
-    void resizeImageForAnalysis(file)
-      .then((compressedImage) => handlePhotoSelected(compressedImage))
-      .catch((error) => {
-        console.error('Erro ao comprimir imagem para análise:', error);
-        setIsAnalyzingImage(false);
-        showToast('Não foi possível preparar a foto. Tente novamente.', 'error');
-      });
-    e.target.value = '';
+    setIsLoadingPricing(true);
+    setIsPricingLoading(true);
+
+    try {
+      const base64Image = await resizeImageForAnalysis(file);
+      setNewImageUrl(base64Image);
+
+      const title = newTitle.trim() || 'Item fotografado';
+      const category = newCategory;
+      const condition = newCondition;
+      const result = await evaluateItemWithGemini(base64Image, title, category, condition);
+
+      if (result) {
+        if (!newTitle.trim()) setNewTitle(result.title);
+        if (!isCategoryManuallySelected) {
+          const normalizedCategory = DONATION_CATEGORIES.includes(
+            result.category as (typeof DONATION_CATEGORIES)[number]
+          ) ? result.category : 'Outros';
+          setNewCategory(normalizedCategory);
+        }
+        setPricingJustification(result.justification);
+        setNewCredits(result.credits);
+        setSuggestedCredits(result.credits);
+        setCreditsMin(result.credits);
+        setCreditsMax(result.credits);
+        setAiSuggested(true);
+      }
+    } catch (error) {
+      console.error('Erro ao analisar foto com o Gemini:', error);
+      setPricingError('Não foi possível estimar automaticamente. Digite o título e categoria para calcular.');
+      showToast('Não foi possível preparar a foto. Tente novamente.', 'error');
+    } finally {
+      setIsAnalyzingImage(false);
+      setIsLoadingPricing(false);
+      setIsPricingLoading(false);
+      e.target.value = '';
+    }
   };
 
   const MAX_EXTRA_PHOTOS = 4;
@@ -1346,7 +1322,7 @@ export default function App() {
     setNewTitle('');
     setNewCategory('Música & Instrumentos');
     setNewCredits(0);
-    setNewCreditsBase(0);
+    setSuggestedCredits(100);
     setCreditsMin(0);
     setCreditsMax(0);
     setPricingError('');
@@ -3710,8 +3686,8 @@ export default function App() {
                             </span>
                             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-800 px-2 py-0.5 border border-emerald-200">
                               <CheckCircle2 className="w-3 h-3" />
-                              {!pricingError && newCreditsBase > 0
-                                ? `Base da IA: ${newCreditsBase}`
+                              {!pricingError && suggestedCredits > 0
+                                ? `Base da IA: ${suggestedCredits}`
                                 : 'Aguardando título...'}
                             </span>
                           </div>
@@ -3742,7 +3718,7 @@ export default function App() {
                             </button>
                           </div>
                           <p className="text-[10px] text-slate-500 mt-1.5 text-center">
-                            {isPricingLoading
+                            {isPricingLoading || isLoadingPricing
                               ? 'Avaliando item com IA...'
                               : creditsMin > 0 && creditsMax > 0
                               ? `Faixa permitida: ${creditsMin} a ${creditsMax} créditos (±20%)`
