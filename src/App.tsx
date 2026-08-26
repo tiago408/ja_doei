@@ -892,7 +892,7 @@ export default function App() {
     const requestId = ++pricingRequestId.current;
     try {
       const analysis = await Promise.race([
-        analyzeImageWithGemini(finalUrl),
+        analyzeImageWithGemini(finalUrl, newTitle, newCategory, newCondition),
         new Promise<never>((_, reject) => {
           window.setTimeout(() => reject(new Error('Tempo limite da análise de imagem excedido')), 3500);
         })
@@ -911,7 +911,7 @@ export default function App() {
       setNewTitle(analysis.title);
       setNewCategory(normalizedCategory);
       if (normalizedCategory === 'Móveis & Decoração') setIsLargeItem(true);
-      setNewDescription(analysis.description);
+      setNewDescription(analysis.justification || '');
       setNewCredits(suggestedCredits);
       setNewCreditsBase(suggestedCredits);
       setCreditsMin(Math.round(suggestedCredits * 0.8));
