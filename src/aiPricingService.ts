@@ -1,5 +1,18 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+const GEMINI_CATEGORIES = [
+  'Música & Instrumentos',
+  'Casa, Cozinha & Utensílios',
+  'Móveis & Decoração',
+  'Eletrônicos & Tecnologia',
+  'Esporte & Lazer',
+  'Brinquedos & Jogos',
+  'Moda & Acessórios',
+  'Papelaria & Escritório',
+  'Livros & Mídias',
+  'Outros'
+] as const;
+
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
 
@@ -35,10 +48,11 @@ export async function evaluateItemWithGemini(
       - Sofá-cama: ~250 a 400 créditos.
       - Ukulele / Instrumentos: ~90 a 180 créditos.
 
+      Categorias permitidas para a avaliação: ${GEMINI_CATEGORIES.join(', ')}.
       Responda ESTRITAMENTE em formato JSON com esta estrutura (sem markdown extra):
       {
         "title": "${titleText}",
-        "category": "Escolha a categoria mais adequada",
+        "category": "Escolha uma categoria da lista permitida",
         "credits": 120,
         "justification": "Explicação curta em 1 frase"
       }

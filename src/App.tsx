@@ -229,20 +229,15 @@ const INITIAL_ITEMS: DonationItem[] = [
 ];
 
 const DONATION_CATEGORIES = [
-  'Papelaria & Escritório',
-  'Casa, Cozinha & Utensílios',
-  'Moda & Calçados Adulto',
-  'Moda & Calçados Infantil',
-  'Brinquedos & Jogos',
-  'Bebês & Maternidade',
-  'Eletrônicos & Acessórios',
-  'Eletrodomésticos & Portáteis',
-  'Livros & Mídia',
-  'Esporte & Lazer',
-  'Beleza & Cuidado Pessoal',
-  'Móveis & Decoração',
-  'Pet Shop',
   'Música & Instrumentos',
+  'Casa, Cozinha & Utensílios',
+  'Móveis & Decoração',
+  'Eletrônicos & Tecnologia',
+  'Esporte & Lazer',
+  'Brinquedos & Jogos',
+  'Moda & Acessórios',
+  'Papelaria & Escritório',
+  'Livros & Mídias',
   'Outros'
 ] as const;
 
@@ -411,14 +406,18 @@ export default function App() {
       if (firebaseUser) {
         const profileSnapshot = await getDoc(doc(db, 'users', firebaseUser.uid));
         const profile = profileSnapshot.exists() ? profileSnapshot.data() : {};
-        setUser({
+        const nextUser = {
           uid: firebaseUser.uid,
           name: firebaseUser.displayName || 'Usuário Já Doei',
           email: firebaseUser.email || '',
           photoURL: firebaseUser.photoURL,
           city: profile.city,
           location: profile.location
-        });
+        };
+        setUser(nextUser);
+        if (nextUser.city || nextUser.location) {
+          setNewLocation(nextUser.city?.trim() || nextUser.location?.trim() || 'São Paulo, SP');
+        }
       } else {
         setUser(null);
       }
@@ -426,6 +425,18 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const profileLocation = getProfileLocation();
+    if (profileLocation && !newLocation.trim()) {
+      setNewLocation(profileLocation);
+      return;
+    }
+    if (profileLocation && ['São Paulo, SP', 'Cotia, SP', 'Localização atual', 'Localização atual (GPS)', ''].includes(newLocation.trim())) {
+      setNewLocation(profileLocation);
+    }
+  }, [user?.uid, user?.city, user?.location]);
 
   // Syncs the credits balance in real time from the users/{uid} Firestore document
   useEffect(() => {
@@ -718,7 +729,7 @@ export default function App() {
 
   // New Item Form State
   const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState('Moda & Calçados Adulto');
+  const [newCategory, setNewCategory] = useState('Música & Instrumentos');
   const [newCredits, setNewCredits] = useState<number>(100);
   const [newLocation, setNewLocation] = useState('São Paulo, SP');
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
@@ -748,7 +759,7 @@ export default function App() {
 
   const resetForm = () => {
     setNewTitle('');
-    setNewCategory('Moda & Calçados Adulto');
+    setNewCategory('Música & Instrumentos');
     setNewCredits(100);
     setNewLocation('São Paulo, SP');
     setNewCondition('Usado - Excelente');
@@ -852,6 +863,7 @@ export default function App() {
     const neighborhood = address.suburb || address.neighbourhood || address.quarter;
     const city = address.city || address.town || address.village || address.municipality;
     const state = address.state_code || address.state;
+    if (neighborhood && city && state) return `${neighborhood}, ${city} - ${state}`;
     if (neighborhood && city) return `${neighborhood}, ${city}`;
     if (city && state) return `${city}, ${state}`;
     return getProfileLocation();
@@ -863,9 +875,10 @@ export default function App() {
     const finishWithFallback = () => {
       if (settled) return;
       settled = true;
-      setNewLocation(getProfileLocation());
+      const profileLocation = getProfileLocation();
+      setNewLocation(profileLocation);
       setIsLocatingGps(false);
-      showToast('Não foi possível obter o GPS. Usando a localização do seu perfil.', 'info');
+      showToast(`📍 Usando sua localização cadastrada: ${profileLocation}`, 'info');
     };
     const timeoutId = window.setTimeout(finishWithFallback, 2000);
 
@@ -887,9 +900,10 @@ export default function App() {
         if (!data.address) throw new Error('Resposta de geocodificação sem endereço');
         window.clearTimeout(timeoutId);
         settled = true;
-        setNewLocation(formatReverseGeocodedLocation(data.address));
+        const realLocation = formatReverseGeocodedLocation(data.address);
+        setNewLocation(realLocation);
         setIsLocatingGps(false);
-        showToast('📍 Localização atualizada via GPS', 'success');
+        showToast(`📍 Localização atualizada via GPS: ${realLocation}`, 'success');
       } catch (error) {
         console.error('Erro na geocodificação reversa:', error);
         finishWithFallback();
@@ -903,9 +917,10 @@ export default function App() {
 
   const getDisplayLocation = (item: DonationItem) => {
     const location = item.location?.trim();
-    return location && location !== 'Localização atual (GPS)'
-      ? location
-      : item.userLocation || getProfileLocation();
+    if (location && location !== 'Localização atual' && location !== 'Localização atual (GPS)') {
+      return location;
+    }
+    return item.userLocation || getProfileLocation();
   };
 
   const handleAiSuggestion = async (selectedUrl?: string) => {
@@ -1329,7 +1344,7 @@ export default function App() {
 
     // Reset Form
     setNewTitle('');
-    setNewCategory('Moda & Calçados Adulto');
+    setNewCategory('Música & Instrumentos');
     setNewCredits(0);
     setNewCreditsBase(0);
     setCreditsMin(0);
