@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI, type Part } from '@google/generative-ai';
 
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+// Inicializa com a versão estável da API (v1) para evitar erro 404
 const genAI = new GoogleGenerativeAI(apiKey);
 
 export interface EvaluationResult {
@@ -22,7 +23,7 @@ export async function evaluateItemWithGemini(
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }, { apiVersion: 'v1' });
 
     const prompt = `
       Você é o avaliador oficial do app Já Doei.
