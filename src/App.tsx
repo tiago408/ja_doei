@@ -242,6 +242,7 @@ const DONATION_CATEGORIES = [
   'Beleza & Cuidado Pessoal',
   'Móveis & Decoração',
   'Pet Shop',
+  'Música & Instrumentos',
   'Outros'
 ] as const;
 
@@ -717,7 +718,7 @@ export default function App() {
 
   // New Item Form State
   const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState('Roupas');
+  const [newCategory, setNewCategory] = useState('Moda & Calçados Adulto');
   const [newCredits, setNewCredits] = useState<number>(100);
   const [newLocation, setNewLocation] = useState('São Paulo, SP');
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
@@ -727,6 +728,7 @@ export default function App() {
   const [isLargeItem, setIsLargeItem] = useState<boolean>(false);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState<boolean>(false);
   const [isPricingAnalyzing, setIsPricingAnalyzing] = useState<boolean>(false);
+  const [isPricingLoading, setIsPricingLoading] = useState<boolean>(false);
   const [aiSuggested, setAiSuggested] = useState<boolean>(false);
   const [pricingJustification, setPricingJustification] = useState<string>('');
   const [newCreditsBase, setNewCreditsBase] = useState<number>(100);
@@ -762,6 +764,7 @@ export default function App() {
     }
 
     setIsPricingAnalyzing(true);
+      setIsPricingLoading(true);
     try {
       const pricing = await fetchGeminiValuation(newTitle.trim(), newCategory, conditionOverride);
       if (requestId !== pricingRequestId.current) return;
@@ -789,6 +792,7 @@ export default function App() {
         'Esporte & Lazer': 'esporte_lazer',
         'Beleza & Cuidado Pessoal': 'beleza_cuidado_pessoal',
         'Móveis & Decoração': 'moveis_decoracao',
+        'Música & Instrumentos': 'musica_instrumentos',
         'Pet Shop': 'pet_shop',
         Outros: 'outros',
       };
@@ -805,7 +809,10 @@ export default function App() {
       setPricingJustification(`${pricing.justification} (Avaliação local.)`);
       console.warn('Gemini indisponível; usando avaliação local:', error);
     } finally {
-      if (requestId === pricingRequestId.current) setIsPricingAnalyzing(false);
+      if (requestId === pricingRequestId.current) {
+        setIsPricingAnalyzing(false);
+        setIsPricingLoading(false);
+      }
     }
   };
 
@@ -940,9 +947,6 @@ export default function App() {
       setNewCategory('Outros');
       setNewDescription('');
       setNewCredits(50);
-      setNewCreditsBase(50);
-      setCreditsMin(40);
-      setCreditsMax(60);
       setAiSuggested(false);
       setDonateStep(2);
       showToast('A leitura por foto falhou. Digite o título do item para continuar.', 'error');
@@ -1309,7 +1313,7 @@ export default function App() {
 
     // Reset Form
     setNewTitle('');
-    setNewCategory('Roupas');
+    setNewCategory('Moda & Calçados Adulto');
     setNewCredits(100);
     setNewCreditsBase(100);
     setIsVisionPricingLocked(false);
@@ -3591,6 +3595,7 @@ export default function App() {
                             onChange={(e) => {
                               const category = e.target.value;
                               setNewCategory(category);
+                              setIsVisionPricingLocked(false);
                               setIsLargeItem(category === 'Móveis & Decoração');
                             }}
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
@@ -3696,7 +3701,9 @@ export default function App() {
                             </button>
                           </div>
                           <p className="text-[10px] text-slate-500 mt-1.5 text-center">
-                            Faixa permitida: {creditsMin} a {creditsMax} créditos (±20%)
+                            {isPricingLoading
+                              ? 'Calculando valoração por IA...'
+                              : `Faixa permitida: ${creditsMin} a ${creditsMax} créditos (±20%)`}
                           </p>
                           {isPricingAnalyzing && (
                             <div className="mt-2 flex items-center justify-center gap-1.5 text-[10px] font-semibold text-[#14A76C]">
