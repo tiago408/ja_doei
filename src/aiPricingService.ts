@@ -22,7 +22,7 @@ export async function evaluateItemWithGemini(
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const prompt = `
       Você é o avaliador oficial do app Já Doei.
