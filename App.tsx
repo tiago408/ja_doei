@@ -1367,6 +1367,7 @@ export default function App() {
 
   // Open Product Details
   const handleOpenDetails = (item: DonationItem) => {
+    setIsImageZoomed(false);
     setSelectedItemForDetails(item);
     setSelectedFreightId(item.isLargeItem ? 'lalamove_partner' : 'ja_doei_express');
     setIsCepCalculated(true);
@@ -2897,23 +2898,12 @@ export default function App() {
                 {/* Scrollable Modal Body */}
                 <div className="overflow-y-auto no-scrollbar flex-1 flex flex-col">
                   {/* Large Product Photo with Overlay Actions */}
-                <div
-                  className="relative h-80 sm:h-96 w-full bg-slate-100 overflow-hidden shrink-0 cursor-zoom-in"
-                  onClick={() => setIsImageZoomed(true)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      setIsImageZoomed(true);
-                    }
-                  }}
-                  aria-label="Ampliar imagem do produto"
-                >
+                <div className="relative h-80 sm:h-96 w-full bg-slate-100 overflow-hidden shrink-0">
                   <img
                     src={selectedItemForDetails.imageUrl}
                     alt={selectedItemForDetails.title}
-                    className="w-full h-full object-contain"
+                    className="w-full h-full object-contain cursor-zoom-in"
+                    onClick={() => setIsImageZoomed(true)}
                   />
                   <div className="absolute right-3 bottom-14 rounded-full bg-black/45 p-2 text-white pointer-events-none">
                     <Search className="w-4 h-4" aria-hidden="true" />
