@@ -746,6 +746,17 @@ export default function App() {
     bio?: string;
   } | null>(null);
 
+  useEffect(() => {
+    if (!baguncaDonor) return;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, [baguncaDonor]);
+
   const [chatModalItem, setChatModalItem] = useState<DonationItem | null>(null);
   const [chatInputText, setChatInputText] = useState<string>('');
   const [chatMessages, setChatMessages] = useState<Array<{ sender: 'user' | 'donor'; text: string; time: string }>>([]);
@@ -951,6 +962,14 @@ export default function App() {
   };
 
   const getProfileLocation = () => user?.city?.trim() || user?.location?.trim() || 'Cotia, SP';
+
+  const getUserInitials = (name: string) => name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'U';
 
   const formatReverseGeocodedLocation = (address: Record<string, string>) => {
     const neighborhood = address.suburb || address.neighbourhood || address.quarter;
@@ -1218,7 +1237,11 @@ export default function App() {
   const handleProfileMetricClick = (tab: 'available' | 'completed' | 'redeemed') => {
     setQuartinhoTab(tab);
     setActiveTab('profile');
-    handleOpenBagunca('Você', user?.photoURL || undefined, getProfileLocation());
+    handleOpenBagunca(
+      user?.name || 'Usuário Já Doei',
+      user?.photoURL || undefined,
+      user?.city || user?.location || getProfileLocation()
+    );
     requestAnimationFrame(() => quartinhoContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' }));
   };
 
@@ -2351,7 +2374,11 @@ export default function App() {
               {/* MEU QUARTINHO DA BAGUNÇA BUTTON */}
               <button
                 type="button"
-                onClick={() => handleOpenBagunca('Mariana Silva', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150', 'São Paulo, SP')}
+                onClick={() => handleOpenBagunca(
+                  user?.name || 'Usuário Já Doei',
+                  user?.photoURL || undefined,
+                  user?.city || user?.location || getProfileLocation()
+                )}
                 className="w-full p-3.5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:border-[#FF8243]/50 transition-all flex items-center justify-between group active:scale-98"
               >
                 <div className="flex items-center gap-3">
@@ -4326,12 +4353,12 @@ export default function App() {
         {/* MODAL 6: QUARTINHO DA BAGUNÇA (LOJINHA PESSOAL DO DOADOR) */}
         <AnimatePresence>
           {baguncaDonor && (
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-2 bg-slate-900/60 backdrop-blur-xs">
+            <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
               <motion.div
                 initial={{ opacity: 0, y: 120 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 120 }}
-                className="w-full sm:max-w-md bg-[#F5F0E1] rounded-t-[32px] sm:rounded-3xl shadow-2xl h-[85vh] flex flex-col border-0 overflow-hidden"
+                className="min-h-full w-full bg-[#F5F0E1] flex flex-col border-0"
               >
                 {/* Store Header Banner */}
                 <div className="bg-gradient-to-r from-[#14A76C] to-emerald-700 text-white p-4 relative shrink-0">
@@ -4357,14 +4384,20 @@ export default function App() {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <img
-                      src={
-                        baguncaDonor.avatar ||
-                        'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
-                      }
-                      alt={baguncaDonor.name}
-                      className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-md"
-                    />
+                    {baguncaDonor.avatar ? (
+                      <img
+                        src={baguncaDonor.avatar}
+                        alt={baguncaDonor.name}
+                        className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-md"
+                      />
+                    ) : (
+                      <div
+                        className="w-14 h-14 rounded-full bg-[#FF8243] text-white border-2 border-white shadow-md flex items-center justify-center text-lg font-black"
+                        aria-label={`Avatar de ${baguncaDonor.name}`}
+                      >
+                        {getUserInitials(baguncaDonor.name)}
+                      </div>
+                    )}
                     <div>
                       <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-200 flex items-center gap-1">
                         <Store className="w-3 h-3" />
