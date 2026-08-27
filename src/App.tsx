@@ -707,9 +707,21 @@ export default function App() {
     localStorage.getItem('ja-doei-last-check-in-date')
   );
   const [checkInStatus, setCheckInStatus] = useState<string>('Verificando o check-in de hoje...');
+
+  useEffect(() => {
+    if (!selectedItemForDetails) return;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, [selectedItemForDetails]);
+
   // Shipping & Logística state
-  const [cepInput, setCepInput] = useState<string>('01310-100');
-  const [isCepCalculated, setIsCepCalculated] = useState<boolean>(true);
+  const [cepInput, setCepInput] = useState<string>('');
+  const [isCepCalculated, setIsCepCalculated] = useState<boolean>(false);
   const [isCalculatingCep, setIsCalculatingCep] = useState<boolean>(false);
   const [selectedFreightId, setSelectedFreightId] = useState<string>('ja_doei_express');
 
@@ -754,7 +766,6 @@ export default function App() {
   const [isHelpModalOpen, setIsHelpModalOpen] = useState<boolean>(false);
   const [activeHelpTab, setActiveHelpTab] = useState<'geral' | 'faq' | 'resgatar' | 'doar'>('geral');
   const [isHelpShippingModalOpen, setIsHelpShippingModalOpen] = useState<boolean>(false);
-  const [activeShippingHelpTab, setActiveShippingHelpTab] = useState<'express' | 'traditional'>('express');
   const [isChatIaOpen, setIsChatIaOpen] = useState<boolean>(false);
   const [chatIaInput, setChatIaInput] = useState<string>('');
   const [chatIaMessages, setChatIaMessages] = useState<Array<{ sender: 'user' | 'bot'; text: string; time: string }>>([
@@ -2382,7 +2393,7 @@ export default function App() {
                       Como enviar meu desapego?
                     </h3>
                     <p className="text-[10px] text-slate-500 font-medium">
-                      Guia rápido sobre envio expresso e tradicional.
+                      Guia rápido sobre envio tradicional e ponto de coleta.
                     </p>
                   </div>
                 </div>
@@ -2649,21 +2660,21 @@ export default function App() {
         {/* MODAL 1: TELA DE DETALHES DO PRODUTO */}
         <AnimatePresence>
           {selectedItemForDetails && (
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-2 bg-slate-900/60 backdrop-blur-xs">
+            <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
               <motion.div
                 initial={{ opacity: 0, y: 120 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 120 }}
-                className="w-full sm:max-w-md bg-white rounded-t-[32px] sm:rounded-3xl p-0 shadow-2xl max-h-[90vh] flex flex-col border-0 overflow-hidden"
+                className="min-h-full w-full bg-white flex flex-col"
               >
                 {/* Scrollable Modal Body */}
                 <div className="overflow-y-auto no-scrollbar flex-1 flex flex-col">
                   {/* Large Product Photo with Overlay Actions */}
-                <div className="relative aspect-16/10 w-full bg-slate-100 overflow-hidden shrink-0">
+                <div className="relative h-80 sm:h-96 w-full bg-slate-100 overflow-hidden shrink-0">
                   <img
                     src={selectedItemForDetails.imageUrl}
                     alt={selectedItemForDetails.title}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-slate-950/30 pointer-events-none"></div>
 
@@ -5396,70 +5407,26 @@ export default function App() {
                     <h3 className="text-sm font-extrabold text-slate-800">Como funciona o envio do produto</h3>
                   </div>
 
-                  <div className="flex items-center gap-1.5 bg-white rounded-full p-1 border border-slate-200 shadow-2xs mb-4">
-                    <button
-                      type="button"
-                      onClick={() => setActiveShippingHelpTab('express')}
-                      className={`flex-1 py-2 rounded-full text-[11px] font-bold transition-all ${
-                        activeShippingHelpTab === 'express' ? 'bg-[#14A76C] text-white shadow-sm' : 'text-slate-500'
-                      }`}
-                    >
-                      Expresso
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveShippingHelpTab('traditional')}
-                      className={`flex-1 py-2 rounded-full text-[11px] font-bold transition-all ${
-                        activeShippingHelpTab === 'traditional' ? 'bg-[#14A76C] text-white shadow-sm' : 'text-slate-500'
-                      }`}
-                    >
-                      Tradicional
-                    </button>
-                  </div>
-
-                  {activeShippingHelpTab === 'express' ? (
-                    <div className="space-y-3 text-left">
+                  <div className="space-y-3 text-left">
                       <div className="rounded-2xl bg-white p-3 border border-slate-200">
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-[#14A76C] mb-2">Aceite rápido</p>
-                        <p className="text-xs text-slate-600 leading-relaxed">
-                          Você tem até 15 minutos para confirmar o aceite e liberar a coleta.
-                        </p>
-                      </div>
-                      <div className="rounded-2xl bg-white p-3 border border-slate-200">
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-[#14A76C] mb-2">Preparo</p>
-                        <p className="text-xs text-slate-600 leading-relaxed">
-                          Embale o item imediatamente em sacola ou caixa lacrada e identifique com o nome e endereço do recebedor.
-                        </p>
-                      </div>
-                      <div className="rounded-2xl bg-white p-3 border border-slate-200">
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-[#14A76C] mb-2">Coleta</p>
-                        <p className="text-xs text-slate-600 leading-relaxed">
-                          O motorista irá até o seu endereço. Verifique a placa e o nome no app e entregue o pacote com segurança.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 text-left">
-                      <div className="rounded-2xl bg-white p-3 border border-slate-200">
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-[#14A76C] mb-2">Etiqueta</p>
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-[#14A76C] mb-2">1. Etiqueta</p>
                         <p className="text-xs text-slate-600 leading-relaxed">
                           Baixe a etiqueta ou QR Code em <span className="font-bold text-slate-700">Minhas Doações &gt; Aguardando Envio</span>.
                         </p>
                       </div>
                       <div className="rounded-2xl bg-white p-3 border border-slate-200">
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-[#14A76C] mb-2">Embalagem</p>
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-[#14A76C] mb-2">2. Embalagem</p>
                         <p className="text-xs text-slate-600 leading-relaxed">
                           Acondicione o produto em caixa de papelão selada e fixe a etiqueta na parte externa.
                         </p>
                       </div>
                       <div className="rounded-2xl bg-white p-3 border border-slate-200">
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-[#14A76C] mb-2">Postagem</p>
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-[#14A76C] mb-2">3. Ponto de coleta</p>
                         <p className="text-xs text-slate-600 leading-relaxed">
                           Leve o pacote ao ponto de postagem indicado dentro do prazo limite e guarde o comprovante.
                         </p>
                       </div>
-                    </div>
-                  )}
+                  </div>
 
                   <div className="mt-4 rounded-2xl border border-[#FF8243]/25 bg-[#FF8243]/10 p-3">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-[#FF8243] mb-2">Recomendação de segurança</p>
