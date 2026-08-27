@@ -681,6 +681,13 @@ export default function App() {
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
   const [selectedItemForDetails, setSelectedItemForDetails] = useState<DonationItem | null>(null);
   const [selectedItemForRedeem, setSelectedItemForRedeem] = useState<DonationItem | null>(null);
+  const [streakDays, setStreakDays] = useState<number>(() => {
+    const savedStreak = Number(localStorage.getItem('ja-doei-streak-days'));
+    return Number.isFinite(savedStreak) ? Math.min(30, Math.max(0, savedStreak)) : 0;
+  });
+  const [lastCheckInDate, setLastCheckInDate] = useState<string | null>(() =>
+    localStorage.getItem('ja-doei-last-check-in-date')
+  );
   // Shipping & Logística state
   const [cepInput, setCepInput] = useState<string>('01310-100');
   const [isCepCalculated, setIsCepCalculated] = useState<boolean>(true);
@@ -1581,6 +1588,47 @@ export default function App() {
       setUserCredits((prev) => prev + amount);
     }
     showToast(`✨ Parabéns! +${amount} Créditos adicionados (${reason}).`, 'success');
+  };
+
+  const handleDailyCheckIn = () => {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    if (lastCheckInDate === todayKey) {
+      showToast('Check-in de hoje já realizado! Volte amanhã para manter a sequência', 'info');
+      return;
+    }
+
+    const previousDate = lastCheckInDate ? new Date(`${lastCheckInDate}T00:00:00`) : null;
+    const todayStart = new Date(`${todayKey}T00:00:00`);
+    const elapsedDays = previousDate
+      ? Math.floor((todayStart.getTime() - previousDate.getTime()) / (24 * 60 * 60 * 1000))
+      : null;
+    const nextStreak = elapsedDays === 1 ? Math.min(30, streakDays + 1) : 1;
+
+    setStreakDays(nextStreak);
+    setLastCheckInDate(todayKey);
+    localStorage.setItem('ja-doei-streak-days', String(nextStreak));
+    localStorage.setItem('ja-doei-last-check-in-date', todayKey);
+
+    if (elapsedDays !== null && elapsedDays > 1) {
+      showToast('Você pulou um dia. Sua sequência recomeçou em 1 dia.', 'info');
+    } else {
+      showToast(`Check-in realizado! Sequência: ${nextStreak}/30 dias.`, 'success');
+    }
+  };
+
+  const handleRedeemStreakReward = async () => {
+    if (streakDays < 30) {
+      showToast(`Complete 30 dias seguidos para resgatar. Progresso: ${streakDays}/30 dias.`, 'info');
+      return;
+    }
+
+    await handleClaimBonus(10, 'sequência de 30 dias');
+    setStreakDays(0);
+    setLastCheckInDate(null);
+    localStorage.setItem('ja-doei-streak-days', '0');
+    localStorage.removeItem('ja-doei-last-check-in-date');
   };
 
   return (
@@ -4119,17 +4167,35 @@ export default function App() {
 
                   {/* Option 2 */}
                   <div
-                    onClick={() => {
-                      setIsEarnModalOpen(false);
-                      handleClaimBonus(10, 'Login diário por 30 dias');
-                    }}
+                    onClick={handleDailyCheckIn}
                     className="p-3 rounded-xl border border-slate-200 hover:border-[#FF8243] bg-slate-50 hover:bg-amber-50/50 cursor-pointer transition-all group"
                   >
                     <h4 className="text-xs font-bold text-slate-800 group-hover:text-[#FF8243]">
-                      Realize login diariamente durante 30 dias e ao final ganhe 10 créditos
+                      Realize login diariamente durante 30 dias seguidos e ao final ganhe 10 créditos
                     </h4>
+                    <div className="mt-2">
+                      <div className="mb-1 flex items-center justify-between text-[10px] font-bold text-slate-600">
+                        <span>Progresso da sequência</span>
+                        <span>{streakDays}/30 dias</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-slate-200" aria-label={`${streakDays} de 30 dias concluídos`}>
+                        <div
+                          className="h-full rounded-full bg-[#FF8243] transition-all"
+                          style={{ width: `${(streakDays / 30) * 100}%` }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleRedeemStreakReward}
+                  disabled={streakDays < 30}
+                  className="w-full rounded-xl bg-[#FF8243] py-2.5 text-xs font-bold text-white transition-all hover:bg-[#ff712b] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                >
+                  {streakDays === 30 ? 'Resgatar 10 Créditos' : `Resgatar 10 Créditos (${streakDays}/30 dias)`}
+                </button>
 
                 <button
                   onClick={() => setIsEarnModalOpen(false)}
