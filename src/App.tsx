@@ -328,6 +328,24 @@ export default function App() {
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'home' | 'search' | 'favorites' | 'profile'>('home');
+  const mainScrollRef = useRef<HTMLElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const scrollMainToTop = () => {
+    mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleHomeNavigation = () => {
+    setActiveTab('home');
+    scrollMainToTop();
+  };
+
+  const handleSearchNavigation = () => {
+    setActiveTab('search');
+    scrollMainToTop();
+    requestAnimationFrame(() => searchInputRef.current?.focus());
+  };
 
   // Auth State
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
@@ -1710,7 +1728,7 @@ export default function App() {
         </AnimatePresence>
 
         {/* Scrollable Main Area */}
-        <main className="flex-1 overflow-y-auto no-scrollbar flex flex-col pb-24">
+        <main ref={mainScrollRef} className="flex-1 overflow-y-auto no-scrollbar flex flex-col pb-24">
           
           {/* HEADER (Fixed Top Design in Forest Green #14A76C) */}
           <header className="bg-[#14A76C] rounded-b-2xl shadow-md p-4 pt-safe text-white shrink-0">
@@ -1783,6 +1801,7 @@ export default function App() {
                 <div className="relative flex items-center">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
                   <input
+                    ref={searchInputRef}
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -2558,7 +2577,7 @@ export default function App() {
           <div className="mx-auto flex max-w-md items-center justify-around">
             {/* Home */}
             <button
-              onClick={() => setActiveTab('home')}
+              onClick={handleHomeNavigation}
               className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-full transition-all ${
                 activeTab === 'home'
                   ? 'text-[#14A76C] font-bold'
@@ -2571,7 +2590,7 @@ export default function App() {
 
             {/* Search */}
             <button
-              onClick={() => setActiveTab('search')}
+              onClick={handleSearchNavigation}
               className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-full transition-all ${
                 activeTab === 'search'
                   ? 'text-[#14A76C] font-bold'
