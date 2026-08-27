@@ -72,7 +72,8 @@ import { db, storage, auth } from './firebase';
 import { evaluateItemWithGemini } from './aiPricingService';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
-import dodoMascoteImg from './assets/dodo-mascote.png';
+
+const DODO_MASCOT_URL = 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f9a4.png';
 
 // Item Interface
 interface DonationItem {
@@ -2152,7 +2153,7 @@ export default function App() {
             <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3.5 border border-white/20 flex items-center justify-between shadow-inner">
               <div className="flex items-center gap-3">
                 <img
-                  src={dodoMascoteImg}
+                  src={DODO_MASCOT_URL}
                   alt="Dodo"
                   className="w-10 h-10 object-contain drop-shadow-md shrink-0"
                 />
@@ -2169,7 +2170,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setIsDodoInfoModalOpen(true)}
-                    className="text-xs text-white/80 underline flex items-center gap-1 hover:text-white"
+                    className="text-[11px] text-white/90 underline mt-1 block hover:text-white"
                   >
                     O que é um Dodo? ⓘ
                   </button>
@@ -2460,7 +2461,7 @@ export default function App() {
 
                             {/* Floating Credits Badge over Image */}
                             <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                              <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block mr-1" />
+                              <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
                               <span>{item.credits} Dodos</span>
                             </div>
 
@@ -2564,7 +2565,7 @@ export default function App() {
                           />
                           {/* Floating Credits Badge over Image */}
                           <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                            <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block mr-1" />
+                            <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
                             <span>{item.credits} Dodos</span>
                           </div>
                           <button
@@ -4773,30 +4774,30 @@ export default function App() {
               >
                 <div className="bg-[#14A76C] px-5 pb-4 pt-5 text-center">
                   <img
-                    src={dodoMascoteImg}
+                    src={DODO_MASCOT_URL}
                     alt="Dodo"
-                    className="mx-auto h-28 w-28 object-contain drop-shadow-md"
+                    className="w-24 h-24 mx-auto mb-3 object-contain drop-shadow-md"
                   />
-                  <h2 className="mt-2 text-base font-black text-white">🦤 Conheça a história do Dodo</h2>
+                  <h2 className="text-base font-black text-white">🦤 O Manifesto do Dodo</h2>
                 </div>
 
                 <div className="space-y-3 p-5">
                   <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
-                    <h3 className="text-xs font-extrabold text-emerald-900">O Guardião</h3>
+                    <h3 className="text-xs font-extrabold text-emerald-900">Símbolo da Regeneração</h3>
                     <p className="mt-1 text-[11px] leading-relaxed text-emerald-950">
-                      O Dodo renasce no Já Doei como o símbolo da regeneração e do cuidado com o planeta.
+                      O Dodo renasce no Já Doei como o guardião da economia circular e do cuidado com o planeta.
                     </p>
                   </section>
                   <section className="rounded-2xl border border-orange-200 bg-orange-50 p-3">
-                    <h3 className="text-xs font-extrabold text-orange-900">O Ato de Doar</h3>
+                    <h3 className="text-xs font-extrabold text-orange-900">Inspirado em Doar</h3>
                     <p className="mt-1 text-[11px] leading-relaxed text-orange-950">
-                      O nome faz alusão direta ao ato de DOAR. Cada Dodo representa o impacto positivo do seu desapego.
+                      O nome faz alusão direta ao ato de DOAR. Cada Dodo acumulado representa o impacto positivo do seu desapego na comunidade.
                     </p>
                   </section>
                   <section className="rounded-2xl border border-sky-200 bg-sky-50 p-3">
-                    <h3 className="text-xs font-extrabold text-sky-900">Economia Colaborativa</h3>
+                    <h3 className="text-xs font-extrabold text-sky-900">Não é Dinheiro</h3>
                     <p className="mt-1 text-[11px] leading-relaxed text-sky-950">
-                      Dodos não são dinheiro! São créditos de generosidade para você resgatar novos itens na comunidade de forma 100% gratuita.
+                      Dodos não são moedas bancárias, mas sim créditos de generosidade para resgatar novos itens 100% grátis.
                     </p>
                   </section>
                   <button
@@ -4804,7 +4805,7 @@ export default function App() {
                     onClick={() => setIsDodoInfoModalOpen(false)}
                     className="w-full rounded-xl bg-[#14A76C] py-3 text-xs font-bold text-white shadow-md transition-colors hover:bg-[#108958]"
                   >
-                    Entendi, vamos doar! 🚀
+                    Entendi, vamos circular! 🚀
                   </button>
                 </div>
               </motion.div>
@@ -5269,7 +5270,7 @@ export default function App() {
                                 </span>
                                 {/* Floating Credits Badge over Image */}
                                 <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                                  <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block mr-1" />
+                                  <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
                                   <span>{item.credits} Dodos</span>
                                 </div>
                               </div>
