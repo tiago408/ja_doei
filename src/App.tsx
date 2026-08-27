@@ -1348,7 +1348,12 @@ export default function App() {
   };
 
   const handleOpenDonationEdit = () => {
-    if (!user || !selectedItemForDetails || selectedItemForDetails.userId !== user.uid) return;
+    if (
+      !user ||
+      !selectedItemForDetails ||
+      selectedItemForDetails.userId !== user.uid ||
+      selectedItemForDetails.status !== 'available'
+    ) return;
     setEditDescription(selectedItemForDetails.description || '');
     setEditCredits(selectedItemForDetails.credits);
     setEditBaseCredits(selectedItemForDetails.aiSuggestedCredits ?? selectedItemForDetails.credits);
@@ -1372,7 +1377,12 @@ export default function App() {
 
   const handleSaveDonationEdit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!user || !selectedItemForDetails || selectedItemForDetails.userId !== user.uid) return;
+    if (
+      !user ||
+      !selectedItemForDetails ||
+      selectedItemForDetails.userId !== user.uid ||
+      selectedItemForDetails.status !== 'available'
+    ) return;
 
     setIsSavingDonationEdit(true);
     try {
@@ -3123,14 +3133,20 @@ export default function App() {
                 <div className="sticky bottom-0 bg-white p-4 border-t border-slate-200 z-10 space-y-2 shrink-0 shadow-lg">
                   {user && selectedItemForDetails.userId === user.uid && (
                     <>
-                      <button
-                        type="button"
-                        onClick={handleOpenDonationEdit}
-                        className="w-full py-2.5 rounded-2xl border border-[#14A76C]/40 bg-emerald-50 hover:bg-emerald-100 text-[#14A76C] text-xs font-bold flex items-center justify-center gap-2 transition-all"
-                      >
-                        <Pencil className="w-4 h-4" />
-                        <span>Editar Doação</span>
-                      </button>
+                      {selectedItemForDetails.status === 'available' ? (
+                        <button
+                          type="button"
+                          onClick={handleOpenDonationEdit}
+                          className="w-full py-2.5 rounded-2xl border border-[#14A76C]/40 bg-emerald-50 hover:bg-emerald-100 text-[#14A76C] text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                        >
+                          <Pencil className="w-4 h-4" />
+                          <span>Editar Doação</span>
+                        </button>
+                      ) : (
+                        <div className="w-full rounded-2xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-center text-[11px] font-semibold text-slate-500">
+                          Item já resgatado - não é possível editar
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={() => void handleDeleteDonation(selectedItemForDetails)}
@@ -3177,7 +3193,7 @@ export default function App() {
 
         {/* MODAL: EDITAR DOAÇÃO */}
         <AnimatePresence>
-          {isDonationEditOpen && selectedItemForDetails && user?.uid === selectedItemForDetails.userId && (
+          {isDonationEditOpen && selectedItemForDetails && user?.uid === selectedItemForDetails.userId && selectedItemForDetails.status === 'available' && (
             <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
               <motion.form
                 initial={{ opacity: 0, scale: 0.96 }}
