@@ -2150,13 +2150,13 @@ export default function App() {
             <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3.5 border border-white/20 flex items-center justify-between shadow-inner">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-[#FF8243] flex items-center justify-center text-white shadow-sm shrink-0">
-                  <Coins className="w-5 h-5 animate-pulse" />
+                  <span className="text-xl" aria-hidden="true">🦤</span>
                 </div>
                 <div>
                   <span className="text-[11px] uppercase tracking-wider text-emerald-100 font-medium block">
                     Seus Dodos
                   </span>
-                  <div className="text-lg font-black tracking-tight text-white flex items-center gap-1.5">
+                  <div className="text-xl font-black tracking-tight text-white flex items-center gap-1.5">
                     <span>{safeUserCredits}</span>
                     <span className="text-xs font-semibold text-emerald-200">
                       Dodos
@@ -2448,8 +2448,7 @@ export default function App() {
                             )}
 
                             {/* Floating Credits Badge over Image */}
-                            <div className="absolute bottom-1.5 left-1.5 bg-[#FF7A38] text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full flex items-center shadow-xs z-10">
-                              <Coins className="w-3.5 h-3.5 text-white inline mr-1 shrink-0" />
+                            <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-[11px] font-extrabold px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs z-10">
                               <span>🦤 {item.credits} Dodos</span>
                             </div>
 
@@ -2552,8 +2551,7 @@ export default function App() {
                             className="w-full h-full object-cover"
                           />
                           {/* Floating Credits Badge over Image */}
-                          <div className="absolute bottom-1.5 left-1.5 bg-[#FF7A38] text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full flex items-center shadow-xs z-10">
-                            <Coins className="w-3.5 h-3.5 text-white inline mr-1 shrink-0" />
+                          <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-[11px] font-extrabold px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs z-10">
                             <span>🦤 {item.credits} Dodos</span>
                           </div>
                           <button
@@ -3129,8 +3127,8 @@ export default function App() {
                       {selectedItemForDetails.category}
                     </span>
                     <span className="bg-[#FF7A38] text-white text-xs font-semibold px-3 py-1 rounded-full shadow-md flex items-center">
-                      <Coins className="w-4 h-4 text-white inline mr-1.5 shrink-0" />
-                      <span>🦤 {selectedItemForDetails.credits} Dodos</span>
+                      <span className="mr-1.5 text-sm" aria-hidden="true">🦤</span>
+                      <span>{selectedItemForDetails.credits} Dodos</span>
                     </span>
                   </div>
                 </div>
@@ -3991,12 +3989,12 @@ export default function App() {
 
                           <div className="flex justify-between items-center text-emerald-700 font-semibold">
                             <span className="text-left pr-2">Dodos Utilizados:</span>
-                            <span className="text-right shrink-0 font-bold">-{creditsUsed} Cts</span>
+                            <span className="text-right shrink-0 font-bold">🦤 -{creditsUsed} Dodos</span>
                           </div>
 
                           {cashComplement > 0 && (
                             <div className="flex justify-between items-center text-[#FF8243] font-bold">
-                              <span className="text-left pr-2">Complemento R$ ({missingCredits} Cts):</span>
+                              <span className="text-left pr-2">Complemento R$ ({missingCredits} Dodos):</span>
                               <span className="text-right shrink-0">R$ {cashComplement.toFixed(2).replace('.', ',')}</span>
                             </div>
                           )}
@@ -5199,8 +5197,7 @@ export default function App() {
                                   {item.category}
                                 </span>
                                 {/* Floating Credits Badge over Image */}
-                                <div className="absolute bottom-1.5 left-1.5 bg-[#FF7A38] text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full flex items-center shadow-xs z-10">
-                                  <Coins className="w-3.5 h-3.5 text-white inline mr-1 shrink-0" />
+                                <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-[11px] font-extrabold px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs z-10">
                                   <span>🦤 {item.credits} Dodos</span>
                                 </div>
                               </div>
