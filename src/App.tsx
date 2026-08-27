@@ -78,6 +78,7 @@ interface DonationItem {
   title: string;
   category: string;
   credits: number;
+  aiSuggestedCredits?: number;
   location: string;
   imageUrl: string;
   description?: string;
@@ -297,6 +298,7 @@ export default function App() {
           title: data.title,
           category: data.category,
           credits: data.credits,
+          aiSuggestedCredits: data.aiSuggestedCredits,
           location: data.location,
           condition: data.condition,
           imageUrl: data.imageUrl || data.image,
@@ -722,6 +724,13 @@ export default function App() {
   const [selectedItemForDetails, setSelectedItemForDetails] = useState<DonationItem | null>(null);
   const [selectedItemForRedeem, setSelectedItemForRedeem] = useState<DonationItem | null>(null);
   const [isImageZoomed, setIsImageZoomed] = useState<boolean>(false);
+  const [isDonationEditOpen, setIsDonationEditOpen] = useState<boolean>(false);
+  const [editDescription, setEditDescription] = useState<string>('');
+  const [editCredits, setEditCredits] = useState<number>(0);
+  const [editBaseCredits, setEditBaseCredits] = useState<number>(0);
+  const [editImagePreview, setEditImagePreview] = useState<string>('');
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [isSavingDonationEdit, setIsSavingDonationEdit] = useState<boolean>(false);
   const [streakDays, setStreakDays] = useState<number>(() => {
     const savedStreak = Number(localStorage.getItem('ja-doei-streak-days'));
     return Number.isFinite(savedStreak) ? Math.min(30, Math.max(0, savedStreak)) : 0;
@@ -1276,6 +1285,64 @@ export default function App() {
     setIsCepCalculated(true);
   };
 
+  const handleOpenDonationEdit = () => {
+    if (!user || !selectedItemForDetails || selectedItemForDetails.userId !== user.uid) return;
+    setEditDescription(selectedItemForDetails.description || '');
+    setEditCredits(selectedItemForDetails.credits);
+    setEditBaseCredits(selectedItemForDetails.aiSuggestedCredits ?? selectedItemForDetails.credits);
+    setEditImagePreview(selectedItemForDetails.imageUrl);
+    setEditImageFile(null);
+    setIsDonationEditOpen(true);
+  };
+
+  const handleEditPhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setEditImageFile(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') setEditImagePreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
+  const handleSaveDonationEdit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user || !selectedItemForDetails || selectedItemForDetails.userId !== user.uid) return;
+
+    setIsSavingDonationEdit(true);
+    try {
+      let imageUrl = selectedItemForDetails.imageUrl;
+      if (editImageFile) {
+        const imageRef = ref(storage, `donation_images/${user.uid}/${selectedItemForDetails.id}-${Date.now()}`);
+        const uploadSnapshot = await uploadBytes(imageRef, editImageFile);
+        imageUrl = await getDownloadURL(uploadSnapshot.ref);
+      }
+
+      const updatedFields = {
+        description: editDescription.trim() || 'Item doado recentemente na comunidade em ótimo estado.',
+        credits: editCredits,
+        imageUrl
+      };
+      await updateDoc(doc(db, 'donations', selectedItemForDetails.id), updatedFields);
+
+      const updatedItem = { ...selectedItemForDetails, ...updatedFields };
+      setItems((previousItems) => previousItems.map((item) => (
+        item.id === updatedItem.id ? updatedItem : item
+      )));
+      setSelectedItemForDetails(updatedItem);
+      setIsDonationEditOpen(false);
+      showToast('Doação atualizada com sucesso!', 'success');
+    } catch (error) {
+      console.error('Erro ao salvar alterações da doação:', error);
+      showToast('Não foi possível salvar as alterações. Tente novamente.', 'error');
+    } finally {
+      setIsSavingDonationEdit(false);
+    }
+  };
+
   const handleDeleteDonation = async (item: DonationItem) => {
     if (!user || item.userId !== user.uid) return;
     if (!window.confirm('Tem certeza que deseja excluir esta doação?')) return;
@@ -1423,6 +1490,7 @@ export default function App() {
       title: newTitle.trim(),
       category: newCategory,
       credits: donationCredits,
+      aiSuggestedCredits: suggestedCredits > 0 ? suggestedCredits : donationCredits,
       location: newLocation.trim() || 'São Paulo, SP',
       userLocation: getProfileLocation(),
       condition: newCondition,
@@ -2987,14 +3055,24 @@ export default function App() {
                 {/* Primary Action Buttons - Sticky Footer */}
                 <div className="sticky bottom-0 bg-white p-4 border-t border-slate-200 z-10 space-y-2 shrink-0 shadow-lg">
                   {user && selectedItemForDetails.userId === user.uid && (
-                    <button
-                      type="button"
-                      onClick={() => void handleDeleteDonation(selectedItemForDetails)}
-                      className="w-full py-2.5 rounded-2xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center justify-center gap-2 transition-all"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      <span>Excluir Doação</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleOpenDonationEdit}
+                        className="w-full py-2.5 rounded-2xl border border-[#14A76C]/40 bg-emerald-50 hover:bg-emerald-100 text-[#14A76C] text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                      >
+                        <Pencil className="w-4 h-4" />
+                        <span>Editar Doação</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteDonation(selectedItemForDetails)}
+                        className="w-full py-2.5 rounded-2xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Excluir Doação</span>
+                      </button>
+                    </>
                   )}
                   <button
                     type="button"
@@ -3026,6 +3104,114 @@ export default function App() {
                   </button>
                 </div>
               </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* MODAL: EDITAR DOAÇÃO */}
+        <AnimatePresence>
+          {isDonationEditOpen && selectedItemForDetails && user?.uid === selectedItemForDetails.userId && (
+            <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+              <motion.form
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                onSubmit={handleSaveDonationEdit}
+                className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl"
+              >
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-base font-black text-slate-800">Editar Doação</h2>
+                    <p className="text-[10px] text-slate-500">Atualize as informações do seu item.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsDonationEditOpen(false)}
+                    className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                    title="Fechar edição"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <label className="block text-xs font-bold text-slate-700">
+                  Descrição
+                  <textarea
+                    value={editDescription}
+                    onChange={(event) => setEditDescription(event.target.value)}
+                    rows={5}
+                    className="mt-1.5 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                    placeholder="Detalhe o estado e as características do produto"
+                  />
+                </label>
+
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                    <span>Créditos</span>
+                    <span>{editCredits} créditos</span>
+                  </div>
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Valor base da IA: {editBaseCredits}. Permitido: {Math.max(1, Math.round(editBaseCredits * 0.9))} a {Math.max(1, Math.round(editBaseCredits * 1.1))} créditos (±10%).
+                  </p>
+                  <div className="mt-2 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setEditCredits((current) => Math.max(Math.max(1, Math.round(editBaseCredits * 0.9)), current - 1))}
+                      disabled={editCredits <= Math.max(1, Math.round(editBaseCredits * 0.9))}
+                      className="h-9 w-9 shrink-0 rounded-full border border-slate-200 bg-white text-lg font-bold text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+                      title="Reduzir créditos"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="range"
+                      min={Math.max(1, Math.round(editBaseCredits * 0.9))}
+                      max={Math.max(1, Math.round(editBaseCredits * 1.1))}
+                      value={editCredits}
+                      onChange={(event) => setEditCredits(Number(event.target.value))}
+                      className="flex-1 accent-[#14A76C]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setEditCredits((current) => Math.min(Math.max(1, Math.round(editBaseCredits * 1.1)), current + 1))}
+                      disabled={editCredits >= Math.max(1, Math.round(editBaseCredits * 1.1))}
+                      className="h-9 w-9 shrink-0 rounded-full border border-slate-200 bg-white text-lg font-bold text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+                      title="Aumentar créditos"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <span className="block text-xs font-bold text-slate-700">Fotos</span>
+                  <label className="mt-1.5 flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 hover:border-[#14A76C] hover:bg-emerald-50/40">
+                    <Camera className="h-5 w-5 text-[#14A76C]" />
+                    <span className="text-[11px] font-semibold text-slate-600">Adicionar nova foto do produto</span>
+                    <input type="file" accept="image/*" onChange={handleEditPhotoChange} className="sr-only" />
+                  </label>
+                  {editImagePreview && (
+                    <img src={editImagePreview} alt="Pré-visualização da nova foto" className="mt-2 h-32 w-full rounded-xl object-cover" />
+                  )}
+                </div>
+
+                <div className="mt-5 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDonationEditOpen(false)}
+                    className="flex-1 rounded-xl bg-slate-100 py-3 text-xs font-bold text-slate-600 hover:bg-slate-200"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingDonationEdit}
+                    className="flex-1 rounded-xl bg-[#14A76C] py-3 text-xs font-bold text-white hover:bg-[#108958] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSavingDonationEdit ? 'Salvando...' : 'Salvar Alterações'}
+                  </button>
+                </div>
+              </motion.form>
             </div>
           )}
         </AnimatePresence>
