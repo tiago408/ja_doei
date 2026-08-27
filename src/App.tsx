@@ -688,6 +688,7 @@ export default function App() {
   const [lastCheckInDate, setLastCheckInDate] = useState<string | null>(() =>
     localStorage.getItem('ja-doei-last-check-in-date')
   );
+  const [checkInStatus, setCheckInStatus] = useState<string>('Verificando o check-in de hoje...');
   // Shipping & Logística state
   const [cepInput, setCepInput] = useState<string>('01310-100');
   const [isCepCalculated, setIsCepCalculated] = useState<boolean>(true);
@@ -1576,7 +1577,7 @@ export default function App() {
   };
 
   // Claim Bonus Credits
-  const handleClaimBonus = async (amount: number, reason: string) => {
+  const handleClaimBonus = async (amount: number, reason: string, showFeedback = true) => {
     if (user?.uid) {
       try {
         await updateDoc(doc(db, 'users', user.uid), { credits: increment(amount) });
@@ -1587,7 +1588,9 @@ export default function App() {
     } else {
       setUserCredits((prev) => prev + amount);
     }
-    showToast(`✨ Parabéns! +${amount} Créditos adicionados (${reason}).`, 'success');
+    if (showFeedback) {
+      showToast(`✨ Parabéns! +${amount} Créditos adicionados (${reason}).`, 'success');
+    }
   };
 
   const handleDailyCheckIn = () => {
@@ -1595,7 +1598,7 @@ export default function App() {
     const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
     if (lastCheckInDate === todayKey) {
-      showToast('Check-in de hoje já realizado! Volte amanhã para manter a sequência', 'info');
+      setCheckInStatus('✓ Check-in de hoje realizado! Volte amanhã para continuar sua sequência.');
       return;
     }
 
@@ -1612,21 +1615,26 @@ export default function App() {
     localStorage.setItem('ja-doei-last-check-in-date', todayKey);
 
     if (elapsedDays !== null && elapsedDays > 1) {
-      showToast('Você pulou um dia. Sua sequência recomeçou em 1 dia.', 'info');
+      setCheckInStatus('✓ Check-in realizado hoje. Você pulou um dia e sua sequência recomeçou em 1 dia.');
     } else {
-      showToast(`Check-in realizado! Sequência: ${nextStreak}/30 dias.`, 'success');
+      setCheckInStatus('✓ Check-in de hoje realizado! Volte amanhã para continuar sua sequência.');
     }
   };
 
+  useEffect(() => {
+    handleDailyCheckIn();
+  }, []);
+
   const handleRedeemStreakReward = async () => {
     if (streakDays < 30) {
-      showToast(`Complete 30 dias seguidos para resgatar. Progresso: ${streakDays}/30 dias.`, 'info');
+      setCheckInStatus(`Complete 30 dias seguidos para resgatar. Progresso atual: ${streakDays}/30 dias.`);
       return;
     }
 
-    await handleClaimBonus(10, 'sequência de 30 dias');
+    await handleClaimBonus(10, 'sequência de 30 dias', false);
     setStreakDays(0);
     setLastCheckInDate(null);
+    setCheckInStatus('Créditos resgatados. Comece uma nova sequência amanhã.');
     localStorage.setItem('ja-doei-streak-days', '0');
     localStorage.removeItem('ja-doei-last-check-in-date');
   };
@@ -4167,8 +4175,7 @@ export default function App() {
 
                   {/* Option 2 */}
                   <div
-                    onClick={handleDailyCheckIn}
-                    className="p-3 rounded-xl border border-slate-200 hover:border-[#FF8243] bg-slate-50 hover:bg-amber-50/50 cursor-pointer transition-all group"
+                    className="p-3 rounded-xl border border-slate-200 bg-slate-50 group"
                   >
                     <h4 className="text-xs font-bold text-slate-800 group-hover:text-[#FF8243]">
                       Realize login diariamente durante 30 dias seguidos e ao final ganhe 10 créditos
@@ -4185,6 +4192,9 @@ export default function App() {
                         />
                       </div>
                     </div>
+                    <p className="mt-2 text-[10px] font-semibold leading-snug text-[#14A76C]">
+                      {checkInStatus}
+                    </p>
                   </div>
                 </div>
 
