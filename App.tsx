@@ -278,10 +278,34 @@ export default function App() {
   }, [showSplash]);
 
   // App state
-  const [items, setItems] = useState<DonationItem[]>(INITIAL_ITEMS);
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const savedFavorites = JSON.parse(localStorage.getItem('@jadoei:favorites') || '[]');
+      return Array.isArray(savedFavorites)
+        ? savedFavorites.filter((favoriteId): favoriteId is string => typeof favoriteId === 'string')
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  const [items, setItems] = useState<DonationItem[]>(() => INITIAL_ITEMS.map((item) => ({
+    ...item,
+    isFavorite: favorites.includes(item.id)
+  })));
   const [userCredits, setUserCredits] = useState<number>(0);
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+
+  useEffect(() => {
+    localStorage.setItem('@jadoei:favorites', JSON.stringify(favorites));
+  }, [favorites]);
+
+  useEffect(() => {
+    setItems((currentItems) => currentItems.map((item) => ({
+      ...item,
+      isFavorite: favorites.includes(item.id)
+    })));
+  }, [favorites]);
   const [userCoordinates, setUserCoordinates] = useState<{ lat: number; lon: number } | null>(null);
   const [userLocationLabel, setUserLocationLabel] = useState<string>('Carregando...');
 
@@ -312,7 +336,7 @@ export default function App() {
           receiverId: data.receiverId || null,
           userLocation: data.userLocation || data.location || undefined,
           isLargeItem: data.isLargeItem === true,
-          isFavorite: false,
+          isFavorite: favorites.includes(docSnap.id),
           isRedeemed: ['reserved', 'completed'].includes(data.status || 'available')
         };
       });
@@ -326,7 +350,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [favorites]);
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'home' | 'search' | 'favorites' | 'profile'>('home');
@@ -1286,10 +1310,15 @@ export default function App() {
   // Toggle favorite
   const toggleFavorite = (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
+    const isCurrentlyFavorite = favorites.includes(id);
+    setFavorites((currentFavorites) => isCurrentlyFavorite
+      ? currentFavorites.filter((favoriteId) => favoriteId !== id)
+      : [...currentFavorites, id]
+    );
     setItems((prev) =>
       prev.map((item) => {
         if (item.id === id) {
-          const nextFav = !item.isFavorite;
+          const nextFav = !isCurrentlyFavorite;
           showToast(
             nextFav ? `"${item.title}" adicionado aos favoritos!` : `Item removido dos favoritos.`,
             'info'
@@ -2803,6 +2832,7 @@ export default function App() {
         </main>
 
         {/* BOTTOM NAVIGATION BAR */}
+        {!showSplash && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 w-full bg-white border-t border-slate-100 px-3 py-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
           <div className="mx-auto flex max-w-md items-center justify-around">
             {/* Home */}
@@ -2875,6 +2905,7 @@ export default function App() {
             </button>
           </div>
         </nav>
+        )}
 
         {/* MODAL 1: TELA DE DETALHES DO PRODUTO */}
         <AnimatePresence>
