@@ -2153,7 +2153,7 @@ export default function App() {
                 <img
                   src={dodoMascoteImg}
                   alt="Dodo"
-                  className="w-10 h-10 object-contain drop-shadow-sm shrink-0"
+                  className="w-10 h-10 object-contain drop-shadow-md shrink-0"
                 />
                 <div>
                   <span className="text-[11px] uppercase tracking-wider text-emerald-100 font-medium block">
@@ -2452,7 +2452,7 @@ export default function App() {
 
                             {/* Floating Credits Badge over Image */}
                             <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                              <img src={dodoMascoteImg} alt="" className="w-4 h-4 object-contain" aria-hidden="true" />
+                              <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block mr-1" />
                               <span>{item.credits} Dodos</span>
                             </div>
 
@@ -2556,7 +2556,7 @@ export default function App() {
                           />
                           {/* Floating Credits Badge over Image */}
                           <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                            <img src={dodoMascoteImg} alt="" className="w-4 h-4 object-contain" aria-hidden="true" />
+                            <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block mr-1" />
                             <span>{item.credits} Dodos</span>
                           </div>
                           <button
@@ -5203,7 +5203,7 @@ export default function App() {
                                 </span>
                                 {/* Floating Credits Badge over Image */}
                                 <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                                  <img src={dodoMascoteImg} alt="" className="w-4 h-4 object-contain" aria-hidden="true" />
+                                  <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block mr-1" />
                                   <span>{item.credits} Dodos</span>
                                 </div>
                               </div>
