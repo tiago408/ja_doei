@@ -265,7 +265,21 @@ interface AppNotification {
   read: boolean;
 }
 
+interface AdminReport {
+  id: string;
+  donationId: string;
+  donationTitle: string;
+  reportedUserId: string | null;
+  reporterUserId: string;
+  reporterName: string;
+  reason: string;
+  details: string;
+  createdAt: Date | null;
+  status: string;
+}
+
 export default function App() {
+  const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
   const [showSplash, setShowSplash] = useState<boolean>(true);
 
   useEffect(() => {
@@ -282,6 +296,8 @@ export default function App() {
   const [userCredits, setUserCredits] = useState<number>(0);
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [isReportsAdminOpen, setIsReportsAdminOpen] = useState<boolean>(false);
+  const [adminReports, setAdminReports] = useState<AdminReport[]>([]);
   const [userCoordinates, setUserCoordinates] = useState<{ lat: number; lon: number } | null>(null);
   const [userLocationLabel, setUserLocationLabel] = useState<string>('Carregando...');
 
@@ -449,6 +465,11 @@ export default function App() {
   const [authWhatsapp, setAuthWhatsapp] = useState<string>('');
   const [authPassword, setAuthPassword] = useState<string>('');
   const [isAuthSubmitting, setIsAuthSubmitting] = useState<boolean>(false);
+  const isAdmin = Boolean(
+    user?.email &&
+    adminEmail &&
+    user.email.trim().toLowerCase() === adminEmail
+  );
   const favoriteStorageKey = `@jadoei:favorites_${user?.uid || 'guest'}`;
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const loadedFavoriteKeyRef = useRef<string | null>(null);
@@ -511,6 +532,40 @@ export default function App() {
 
     return () => unsubscribe();
   }, [user?.uid]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setAdminReports([]);
+      return;
+    }
+
+    const reportsQuery = query(
+      collection(db, 'reports'),
+      where('status', '==', 'pending')
+    );
+    const unsubscribe = onSnapshot(reportsQuery, (snapshot) => {
+      setAdminReports(snapshot.docs.map((reportDoc) => {
+        const data = reportDoc.data();
+        return {
+          id: reportDoc.id,
+          donationId: data.donationId || '',
+          donationTitle: data.donationTitle || 'Anúncio sem título',
+          reportedUserId: data.reportedUserId || null,
+          reporterUserId: data.reporterUserId || '',
+          reporterName: data.reporterName || 'Usuário não identificado',
+          reason: data.reason || 'Motivo não informado',
+          details: data.details || '',
+          createdAt: data.createdAt?.toDate?.() ?? null,
+          status: data.status || 'pending'
+        };
+      }));
+    }, (error) => {
+      console.error('Erro ao carregar denúncias pendentes:', error);
+      setAdminReports([]);
+    });
+
+    return () => unsubscribe();
+  }, [isAdmin]);
 
   // Edit Profile State
   const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
@@ -1439,6 +1494,29 @@ export default function App() {
       showToast('Não foi possível enviar a denúncia. Tente novamente.', 'error');
     } finally {
       setIsSendingReport(false);
+    }
+  };
+
+  const handleModerateReport = async (report: AdminReport, action: 'action_taken' | 'dismissed') => {
+    if (!isAdmin) return;
+
+    try {
+      if (action === 'action_taken') {
+        await deleteDoc(doc(db, 'donations', report.donationId));
+        setItems((currentItems) => currentItems.filter((item) => item.id !== report.donationId));
+      }
+
+      await updateDoc(doc(db, 'reports', report.id), { status: action });
+      setIsReportsAdminOpen(false);
+      showToast(
+        action === 'action_taken'
+          ? 'Anúncio apagado e denúncia resolvida.'
+          : 'Anúncio mantido e denúncia marcada como resolvida.',
+        'success'
+      );
+    } catch (error) {
+      console.error('Erro ao moderar denúncia:', error);
+      showToast('Não foi possível concluir a ação de moderação.', 'error');
     }
   };
 
@@ -2593,6 +2671,19 @@ export default function App() {
                     Entrar
                   </button>
                 </div>
+              )}
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setIsReportsAdminOpen(true)}
+                  className="w-full rounded-2xl border-2 border-amber-300 bg-amber-50 p-3.5 text-left shadow-sm transition-colors hover:bg-amber-100"
+                >
+                  <span className="block text-sm font-extrabold text-amber-900">🛡️ Painel de Moderação (Admin)</span>
+                  <span className="mt-1 block text-[10px] font-semibold text-amber-800">
+                    {adminReports.length} denúncia{adminReports.length === 1 ? '' : 's'} pendente{adminReports.length === 1 ? '' : 's'}
+                  </span>
+                </button>
               )}
 
               {/* CLUBE JÁ DOEI PREMIUM BANNER */}
@@ -4632,6 +4723,78 @@ export default function App() {
                     )}
                   </div>
                 </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* MODAL: PAINEL DE MODERAÇÃO */}
+        <AnimatePresence>
+          {isReportsAdminOpen && isAdmin && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+              >
+                <div className="flex items-center justify-between border-b border-slate-200 p-4">
+                  <div>
+                    <h2 className="text-base font-black text-slate-800">Painel de Moderação</h2>
+                    <p className="text-[10px] text-slate-500">Denúncias pendentes para análise</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsReportsAdminOpen(false)}
+                    className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                    title="Fechar painel"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="flex-1 space-y-3 overflow-y-auto p-4">
+                  {adminReports.length === 0 ? (
+                    <div className="py-10 text-center">
+                      <ShieldCheck className="mx-auto mb-2 h-9 w-9 text-emerald-500" />
+                      <p className="text-xs font-semibold text-slate-600">Nenhuma denúncia pendente.</p>
+                    </div>
+                  ) : (
+                    adminReports.map((report) => (
+                      <article key={report.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="text-xs font-extrabold text-slate-900">{report.donationTitle}</h3>
+                            <p className="mt-1 text-[10px] font-bold text-amber-700">Motivo: {report.reason}</p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-[9px] font-bold text-amber-800">Pendente</span>
+                        </div>
+                        <p className="mt-2 text-[11px] leading-relaxed text-slate-600">
+                          <strong>Detalhes:</strong> {report.details || 'Nenhum detalhe informado.'}
+                        </p>
+                        <p className="mt-1 text-[10px] text-slate-500">
+                          Denunciado por: <strong>{report.reporterName}</strong>
+                        </p>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleModerateReport(report, 'action_taken')}
+                            className="flex-1 rounded-xl bg-rose-600 py-2 text-[10px] font-bold text-white hover:bg-rose-700"
+                          >
+                            Apagar Anúncio
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleModerateReport(report, 'dismissed')}
+                            className="flex-1 rounded-xl bg-[#14A76C] py-2 text-[10px] font-bold text-white hover:bg-[#108958]"
+                          >
+                            Manter Anúncio
+                          </button>
+                        </div>
+                      </article>
+                    ))
+                  )}
+                </div>
               </motion.div>
             </div>
           )}
