@@ -115,8 +115,8 @@ const FREIGHT_OPTIONS: FreightOption[] = [
     id: 'lalamove_partner',
     category: 'padrao',
     categoryLabel: 'Contratação externa',
-    name: 'Carreto & Utilitário (Lalamove Partner)',
-    carrierName: 'Lalamove Partner',
+    name: 'Carreto & Utilitário',
+    carrierName: 'Parceiro de transporte',
     price: 0,
     deliveryTime: 'Cotação em tempo real',
     icon: '🚛',
@@ -2944,7 +2944,7 @@ export default function App() {
                             onClick={() => handleCallLalamove(item)}
                             className="w-full px-2 py-2 rounded-md bg-[#14A76C] hover:bg-[#108958] text-white text-[10px] font-bold transition-colors"
                           >
-                            Chamar Carreto Lalamove
+                            Chamar Carreto / Utilitário
                           </button>
                         )}
 
@@ -3223,7 +3223,7 @@ export default function App() {
                       {currentSelectedFreight && (
                         <span className="text-[10px] font-bold text-[#14A76C] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                           {currentSelectedFreight.id === 'lalamove_partner'
-                            ? 'Frete a pagar direto à Lalamove'
+                            ? 'Transporte Utilitário / Carreto'
                             : currentSelectedFreight.price === 0
                             ? 'Grátis'
                             : `R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}`}
@@ -3272,13 +3272,13 @@ export default function App() {
                               <label
                                 key={opt.id}
                                 onClick={() => setSelectedFreightId(opt.id)}
-                                className={`p-2.5 rounded-xl border-2 flex items-center justify-between cursor-pointer transition-all ${
+                                className={`flex min-w-0 flex-row items-center justify-between gap-2 rounded-xl border-2 p-2.5 cursor-pointer transition-all ${
                                   selectedFreightId === opt.id
                                     ? 'border-[#14A76C] bg-emerald-50/60 shadow-2xs'
                                     : 'border-slate-200 bg-white hover:border-slate-300'
                                 }`}
                               >
-                                <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="flex min-w-0 flex-1 flex-row items-center gap-2.5">
                                   <input
                                     type="radio"
                                     name="freightOption"
@@ -3289,7 +3289,7 @@ export default function App() {
                                   <span className="text-base shrink-0">{opt.icon}</span>
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="text-xs font-bold text-slate-800 truncate">
+                                      <span className="block min-w-0 truncate text-xs font-bold text-slate-800">
                                         {opt.name}
                                       </span>
                                       {opt.badge && (
@@ -3305,9 +3305,9 @@ export default function App() {
                                     </span>
                                   </div>
                                 </div>
-                                <span className={`text-xs font-bold bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 shrink-0 ml-1 ${opt.id === 'lalamove_partner' ? 'text-amber-700' : 'text-slate-900'}`}>
+                                <span className={`max-w-[42%] shrink-0 truncate rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-right text-xs font-bold ${opt.id === 'lalamove_partner' ? 'text-amber-700' : 'text-slate-900'}`}>
                                   {opt.id === 'lalamove_partner'
-                                    ? 'Frete a pagar direto à Lalamove'
+                                    ? 'Transporte Utilitário / Carreto'
                                     : `R$ ${opt.price.toFixed(2).replace('.', ',')}`}
                                 </span>
                               </label>
@@ -4428,8 +4428,23 @@ export default function App() {
                             onChange={(event) => setIsLargeItem(event.target.checked)}
                             className="mt-0.5 accent-[#FF8243]"
                           />
-                          <span>Item de Grande Porte / Pesado (Exige furgão ou carreto Lalamove)</span>
+                          <span>Item de Grande Porte / Pesado (Exige furgão ou carreto)</span>
                         </label>
+
+                        {isLargeItem && (
+                          <div className="rounded-2xl border border-amber-300 bg-amber-50/80 p-3 text-[11px] text-amber-950 shadow-2xs">
+                            <div className="mb-2 flex items-center gap-1.5 font-extrabold text-amber-900">
+                              <Truck className="h-4 w-4 text-[#FF8243]" />
+                              <span>Guia Rápido de Grande Porte</span>
+                            </div>
+                            <ul className="space-y-1.5 leading-relaxed">
+                              <li><strong>Medidas e acesso:</strong> informe na descrição se o item cabe no elevador ou se precisará ser baixado por escadas.</li>
+                              <li><strong>Carregadores:</strong> o motorista do utilitário faz o transporte, mas não é obrigado a carregar o móvel sozinho. Deixe o item no térreo/garagem ou avise com antecedência para combinar ajudantes.</li>
+                              <li><strong>Proteção:</strong> use filme plástico ou material de proteção nas quinas e prenda portas e gavetas para que não abram durante o trajeto.</li>
+                              <li><strong>Agendamento:</strong> confirme data e horário da retirada no chat com o recebedor antes de acionar o motorista.</li>
+                            </ul>
+                          </div>
+                        )}
 
                         <div>
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">
@@ -6223,6 +6238,19 @@ export default function App() {
                     <h3 className="text-sm font-extrabold text-slate-800">Como funciona o envio do produto</h3>
                   </div>
 
+                  {selectedItemForDetails?.isLargeItem ? (
+                  <div className="space-y-3 text-left">
+                    <div className="rounded-2xl border border-amber-300 bg-amber-50/80 p-3">
+                      <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-amber-900">🚛 Como doar itens de Grande Porte</p>
+                      <ul className="space-y-1.5 text-[11px] leading-relaxed text-amber-950">
+                        <li><strong>Agendamento:</strong> confirme a data e o horário da retirada via chat com o recebedor antes de acionar o motorista.</li>
+                        <li><strong>Desmonte e proteção:</strong> desmonte o que for possível, passe filme plástico nas quinas e prenda portas e gavetas.</li>
+                        <li><strong>Acesso:</strong> informe as medidas e se o móvel cabe no elevador ou precisará descer por escadas. Deixe-o no térreo ou na garagem quando possível.</li>
+                        <li><strong>Transporte:</strong> o utilitário realiza o transporte; confirme previamente a necessidade de ajudantes para carregar o móvel até o veículo.</li>
+                      </ul>
+                    </div>
+                  </div>
+                  ) : (
                   <div className="space-y-3 text-left">
                       <div className="rounded-2xl bg-white p-3 border border-slate-200">
                         <p className="text-[11px] font-bold uppercase tracking-wide text-[#14A76C] mb-2">1. Etiqueta</p>
@@ -6243,6 +6271,7 @@ export default function App() {
                         </p>
                       </div>
                   </div>
+                  )}
 
                   <div className="mt-4 rounded-2xl border border-[#FF8243]/25 bg-[#FF8243]/10 p-3">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-[#FF8243] mb-2">Recomendação de segurança</p>
