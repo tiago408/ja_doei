@@ -334,6 +334,11 @@ export default function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const swipeStartXRef = useRef<number | null>(null);
   const swipeStartYRef = useRef<number | null>(null);
+  const [productSwipeX, setProductSwipeX] = useState<number>(0);
+  const [quartinhoSwipeX, setQuartinhoSwipeX] = useState<number>(0);
+  const [lightboxSwipe, setLightboxSwipe] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [lightboxSwipeActive, setLightboxSwipeActive] = useState<boolean>(false);
+  const lightboxStartRef = useRef<{ x: number; y: number } | null>(null);
   const quartinhoContentRef = useRef<HTMLDivElement>(null);
   const [quartinhoTab, setQuartinhoTab] = useState<'available' | 'completed' | 'redeemed'>('available');
 
@@ -359,7 +364,17 @@ export default function App() {
     swipeStartYRef.current = swipeStartXRef.current === null ? null : touch.clientY;
   };
 
-  const handleSwipeEnd = (event: React.TouchEvent, closeScreen: () => void) => {
+  const handleSwipeMove = (event: React.TouchEvent, setSwipeX: React.Dispatch<React.SetStateAction<number>>) => {
+    if (swipeStartXRef.current === null || swipeStartYRef.current === null) return;
+    const touch = event.touches[0];
+    const horizontalDistance = touch.clientX - swipeStartXRef.current;
+    const verticalDistance = Math.abs(touch.clientY - swipeStartYRef.current);
+    if (horizontalDistance > 0 && horizontalDistance > verticalDistance) {
+      setSwipeX(Math.min(window.innerWidth, horizontalDistance));
+    }
+  };
+
+  const handleSwipeEnd = (event: React.TouchEvent, setSwipeX: React.Dispatch<React.SetStateAction<number>>, closeScreen: () => void) => {
     if (swipeStartXRef.current === null || swipeStartYRef.current === null) return;
     const endX = event.changedTouches[0]?.clientX ?? swipeStartXRef.current;
     const endY = event.changedTouches[0]?.clientY ?? swipeStartYRef.current;
@@ -368,7 +383,54 @@ export default function App() {
     swipeStartXRef.current = null;
     swipeStartYRef.current = null;
 
-    if (horizontalDistance > 70 && horizontalDistance > verticalDistance) closeScreen();
+    if (horizontalDistance > window.innerWidth * 0.3 && horizontalDistance > verticalDistance) {
+      setSwipeX(window.innerWidth);
+      window.setTimeout(() => {
+        setSwipeX(0);
+        closeScreen();
+      }, 220);
+    } else {
+      setSwipeX(0);
+    }
+  };
+
+  const handleLightboxSwipeStart = (event: React.TouchEvent) => {
+    const touch = event.touches[0];
+    lightboxStartRef.current = { x: touch.clientX, y: touch.clientY };
+    setLightboxSwipe({ x: 0, y: 0 });
+    setLightboxSwipeActive(true);
+  };
+
+  const handleLightboxSwipeMove = (event: React.TouchEvent) => {
+    if (!lightboxSwipeActive || !lightboxStartRef.current) return;
+    const touch = event.touches[0];
+    const horizontalDistance = touch.clientX - lightboxStartRef.current.x;
+    const verticalDistance = touch.clientY - lightboxStartRef.current.y;
+    if (horizontalDistance > 0 || verticalDistance > 0) {
+      setLightboxSwipe({
+        x: horizontalDistance > verticalDistance ? horizontalDistance : 0,
+        y: verticalDistance > horizontalDistance ? verticalDistance : 0
+      });
+    }
+  };
+
+  const handleLightboxSwipeEnd = () => {
+    if (!lightboxSwipeActive) return;
+    const distance = Math.max(lightboxSwipe.x, lightboxSwipe.y);
+    setLightboxSwipeActive(false);
+    lightboxStartRef.current = null;
+    if (lightboxSwipe.x > window.innerWidth * 0.25 || lightboxSwipe.y > window.innerHeight * 0.2) {
+      setLightboxSwipe({
+        x: lightboxSwipe.x > lightboxSwipe.y ? window.innerWidth : 0,
+        y: lightboxSwipe.y >= lightboxSwipe.x ? window.innerHeight : 0
+      });
+      window.setTimeout(() => {
+        setLightboxSwipe({ x: 0, y: 0 });
+        setIsImageZoomed(false);
+      }, 220);
+    } else if (distance > 0) {
+      setLightboxSwipe({ x: 0, y: 0 });
+    }
   };
 
   // Auth State
@@ -2782,15 +2844,20 @@ export default function App() {
         <AnimatePresence>
           {selectedItemForDetails && (
             <div
-              className="fixed inset-0 z-50 bg-white overflow-y-auto"
+              className="fixed inset-0 z-50 overflow-y-auto bg-transparent"
               onTouchStart={handleSwipeStart}
-              onTouchEnd={(event) => handleSwipeEnd(event, () => setSelectedItemForDetails(null))}
+              onTouchMove={(event) => handleSwipeMove(event, setProductSwipeX)}
+              onTouchEnd={(event) => handleSwipeEnd(event, setProductSwipeX, () => setSelectedItemForDetails(null))}
             >
               <motion.div
                 initial={{ opacity: 0, y: 120 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 120 }}
                 className="min-h-full w-full bg-white flex flex-col"
+                style={{
+                  transform: `translateX(${productSwipeX}px)`,
+                  transition: swipeStartXRef.current === null ? 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)' : 'none'
+                }}
               >
                 {/* Scrollable Modal Body */}
                 <div className="overflow-y-auto no-scrollbar flex-1 flex flex-col">
@@ -3225,6 +3292,12 @@ export default function App() {
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4"
               onClick={() => setIsImageZoomed(false)}
+              onTouchStart={handleLightboxSwipeStart}
+              onTouchMove={handleLightboxSwipeMove}
+              onTouchEnd={handleLightboxSwipeEnd}
+              style={{
+                backgroundColor: `rgba(0, 0, 0, ${Math.max(0.08, 0.9 - Math.max(lightboxSwipe.x, lightboxSwipe.y) / Math.max(window.innerWidth, window.innerHeight))})`
+              }}
               role="dialog"
               aria-modal="true"
               aria-label="Imagem ampliada do produto"
@@ -3243,6 +3316,10 @@ export default function App() {
                 alt={selectedItemForDetails.title}
                 className="max-h-[85vh] max-w-full object-contain rounded-lg"
                 onClick={(event) => event.stopPropagation()}
+                style={{
+                  transform: `translate(${lightboxSwipe.x}px, ${lightboxSwipe.y}px)`,
+                  transition: lightboxSwipeActive ? 'none' : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)'
+                }}
               />
             </motion.div>
           )}
@@ -4542,15 +4619,20 @@ export default function App() {
         <AnimatePresence>
           {baguncaDonor && (
             <div
-              className="fixed inset-0 z-50 bg-white overflow-y-auto"
+              className="fixed inset-0 z-50 overflow-y-auto bg-transparent"
               onTouchStart={handleSwipeStart}
-              onTouchEnd={(event) => handleSwipeEnd(event, () => setBaguncaDonor(null))}
+              onTouchMove={(event) => handleSwipeMove(event, setQuartinhoSwipeX)}
+              onTouchEnd={(event) => handleSwipeEnd(event, setQuartinhoSwipeX, () => setBaguncaDonor(null))}
             >
               <motion.div
                 initial={{ opacity: 0, y: 120 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 120 }}
                 className="min-h-full w-full bg-[#F5F0E1] flex flex-col border-0"
+                style={{
+                  transform: `translateX(${quartinhoSwipeX}px)`,
+                  transition: swipeStartXRef.current === null ? 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)' : 'none'
+                }}
               >
                 {/* Store Header Banner */}
                 <div className="bg-gradient-to-r from-[#14A76C] to-emerald-700 text-white p-4 relative shrink-0">
