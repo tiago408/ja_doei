@@ -330,6 +330,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'search' | 'favorites' | 'profile'>('home');
   const mainScrollRef = useRef<HTMLElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const quartinhoContentRef = useRef<HTMLDivElement>(null);
+  const [quartinhoTab, setQuartinhoTab] = useState<'available' | 'completed' | 'redeemed'>('available');
 
   const scrollMainToTop = () => {
     mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1194,10 +1196,6 @@ export default function App() {
     return items.filter((item) => item.isFavorite);
   }, [items]);
 
-  const redeemedItems = useMemo(() => {
-    return items.filter((item) => item.isRedeemed);
-  }, [items]);
-
   const profileHistoryItems = useMemo(() => {
     if (!user) return [];
     return items.filter(
@@ -1206,6 +1204,23 @@ export default function App() {
         ['reserved', 'in_transit', 'completed'].includes(item.status || 'available')
     );
   }, [items, user]);
+
+  const profileCompletedDonations = useMemo(
+    () => (user ? items.filter((item) => item.userId === user.uid && item.status === 'completed') : []),
+    [items, user]
+  );
+
+  const profileRedeemedItems = useMemo(
+    () => (user ? items.filter((item) => item.receiverId === user.uid) : []),
+    [items, user]
+  );
+
+  const handleProfileMetricClick = (tab: 'available' | 'completed' | 'redeemed') => {
+    setQuartinhoTab(tab);
+    setActiveTab('profile');
+    handleOpenBagunca('Você', user?.photoURL || undefined, getProfileLocation());
+    requestAnimationFrame(() => quartinhoContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' }));
+  };
 
   const currentSelectedFreight = useMemo(() => {
     return FREIGHT_OPTIONS.find((f) => f.id === selectedFreightId) || FREIGHT_OPTIONS[0];
@@ -2425,27 +2440,39 @@ export default function App() {
 
               {/* Stats Grid */}
               <div className="grid grid-cols-3 gap-2">
-                <div className="bg-white p-3 rounded-xl border border-slate-200 text-center">
+                <button
+                  type="button"
+                  onClick={() => handleProfileMetricClick('available')}
+                  className="bg-white p-3 rounded-xl border border-slate-200 text-center hover:border-[#14A76C] hover:bg-emerald-50/40 transition-colors"
+                >
                   <PackageCheck className="w-4 h-4 text-[#14A76C] mx-auto mb-1" />
                   <span className="block text-xs font-extrabold text-slate-800">
                     {profileDonations.length}
                   </span>
                   <span className="text-[10px] text-slate-500 font-medium">Doações</span>
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-slate-200 text-center">
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleProfileMetricClick('completed')}
+                  className="bg-white p-3 rounded-xl border border-slate-200 text-center hover:border-[#14A76C] hover:bg-emerald-50/40 transition-colors"
+                >
                   <Gift className="w-4 h-4 text-[#FF8243] mx-auto mb-1" />
                   <span className="block text-xs font-extrabold text-slate-800">
-                    {redeemedItems.length}
+                    {profileCompletedDonations.length}
                   </span>
-                  <span className="text-[10px] text-slate-500 font-medium">Resgates</span>
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-slate-200 text-center">
+                  <span className="text-[10px] text-slate-500 font-medium">Entregues</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleProfileMetricClick('redeemed')}
+                  className="bg-white p-3 rounded-xl border border-slate-200 text-center hover:border-[#14A76C] hover:bg-emerald-50/40 transition-colors"
+                >
                   <Award className="w-4 h-4 text-emerald-600 mx-auto mb-1" />
                   <span className="block text-xs font-extrabold text-slate-800">
-                    18 kg
+                    {profileRedeemedItems.length}
                   </span>
-                  <span className="text-[10px] text-slate-500 font-medium">Reutilizado</span>
-                </div>
+                  <span className="text-[10px] text-slate-500 font-medium">Resgatados</span>
+                </button>
               </div>
 
               {/* Published donations */}
@@ -4357,46 +4384,79 @@ export default function App() {
                 </div>
 
                 {/* Store Feed Grid */}
-                <div className="p-4 flex-1 overflow-y-auto no-scrollbar space-y-3">
+                <div ref={quartinhoContentRef} className="p-4 flex-1 overflow-y-auto no-scrollbar space-y-3">
+                  <div className="grid grid-cols-3 gap-1 rounded-xl bg-white p-1 border border-slate-200 shadow-2xs">
+                    {([
+                      ['available', 'Disponíveis'],
+                      ['completed', 'Concluídas'],
+                      ['redeemed', 'Meus Resgates']
+                    ] as const).map(([tab, label]) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => {
+                          setQuartinhoTab(tab);
+                          quartinhoContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className={`rounded-lg px-1 py-2 text-[10px] font-bold transition-colors ${
+                          quartinhoTab === tab
+                            ? 'bg-[#14A76C] text-white shadow-sm'
+                            : 'text-slate-500 hover:bg-slate-100'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <span>Desapegos no Quartinho</span>
+                      <span>
+                        {quartinhoTab === 'available'
+                          ? 'Itens disponíveis'
+                          : quartinhoTab === 'completed'
+                          ? 'Doações concluídas'
+                          : 'Meus resgates'}
+                      </span>
                       <span className="bg-[#14A76C] text-white text-[10px] px-2 py-0.2 rounded-full font-bold">
-                        {
-                          items.filter(
-                            (i) =>
-                              i.donorName === baguncaDonor.name ||
-                              (baguncaDonor.name === 'Mariana Silva' && i.donorName === 'Você')
-                          ).length
-                        }
+                        {(() => {
+                          const ownItems = items.filter((item) =>
+                            item.userId === user?.uid ||
+                            (baguncaDonor.name === 'Você' && item.donorName === 'Você')
+                          );
+                          const tabItems = quartinhoTab === 'available'
+                            ? ownItems.filter((item) => !item.status || item.status === 'available')
+                            : quartinhoTab === 'completed'
+                            ? ownItems.filter((item) => item.status === 'completed')
+                            : items.filter((item) => item.receiverId === user?.uid);
+                          return tabItems.length;
+                        })()}
                       </span>
                     </h3>
                   </div>
 
                   {(() => {
-                    const donorItems = items.filter(
-                      (i) =>
-                        i.donorName === baguncaDonor.name ||
-                        (baguncaDonor.name === 'Mariana Silva' && i.donorName === 'Você')
+                    const ownItems = items.filter((item) =>
+                      item.userId === user?.uid ||
+                      (baguncaDonor.name === 'Você' && item.donorName === 'Você')
                     );
+                    const donorItems = quartinhoTab === 'available'
+                      ? ownItems.filter((item) => !item.status || item.status === 'available')
+                      : quartinhoTab === 'completed'
+                      ? ownItems.filter((item) => item.status === 'completed')
+                      : items.filter((item) => item.receiverId === user?.uid);
 
                     if (donorItems.length === 0) {
                       return (
                         <div className="bg-white/80 rounded-2xl p-6 text-center border border-dashed border-slate-300 my-4">
                           <PackageCheck className="w-8 h-8 text-slate-400 mx-auto mb-2" />
                           <p className="text-xs font-medium text-slate-600 mb-2">
-                            Este doador ainda não possui outros desapegos cadastrados no Quartinho.
+                            {quartinhoTab === 'available'
+                              ? 'Nenhum item disponível no momento.'
+                              : quartinhoTab === 'completed'
+                              ? 'Nenhuma doação concluída ainda.'
+                              : 'Nenhum item resgatado ainda.'}
                           </p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setBaguncaDonor(null);
-                              if (requireAuth()) { resetForm(); setIsDonateModalOpen(true); }
-                            }}
-                            className="bg-[#14A76C] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm"
-                          >
-                            Doar um item agora
-                          </button>
                         </div>
                       );
                     }
@@ -4436,6 +4496,13 @@ export default function App() {
                                   <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                                   <span className="truncate">{getDisplayLocation(item)}</span>
                                 </div>
+                                <span className="mt-1 inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
+                                  {item.status === 'completed'
+                                    ? 'Entregue'
+                                    : item.receiverId === user?.uid
+                                    ? 'Resgatado'
+                                    : 'Disponível'}
+                                </span>
                               </div>
                             </div>
                             <button
