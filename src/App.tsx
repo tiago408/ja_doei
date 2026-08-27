@@ -72,6 +72,7 @@ import { db, storage, auth } from './firebase';
 import { evaluateItemWithGemini } from './aiPricingService';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
+import dodoMascoteImg from './assets/dodo-mascote.png';
 
 // Item Interface
 interface DonationItem {
@@ -2149,14 +2150,16 @@ export default function App() {
             {/* Translucent Card: Credits Balance */}
             <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3.5 border border-white/20 flex items-center justify-between shadow-inner">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#FF8243] flex items-center justify-center text-white shadow-sm shrink-0">
-                  <span className="text-xl" aria-hidden="true">🦤</span>
-                </div>
+                <img
+                  src={dodoMascoteImg}
+                  alt="Dodo"
+                  className="w-10 h-10 object-contain drop-shadow-sm shrink-0"
+                />
                 <div>
                   <span className="text-[11px] uppercase tracking-wider text-emerald-100 font-medium block">
                     Seus Dodos
                   </span>
-                  <div className="text-xl font-black tracking-tight text-white flex items-center gap-1.5">
+                  <div className="text-2xl font-black tracking-tight text-white flex items-center gap-1.5">
                     <span>{safeUserCredits}</span>
                     <span className="text-xs font-semibold text-emerald-200">
                       Dodos
@@ -2448,8 +2451,9 @@ export default function App() {
                             )}
 
                             {/* Floating Credits Badge over Image */}
-                            <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-[11px] font-extrabold px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs z-10">
-                              <span>🦤 {item.credits} Dodos</span>
+                            <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
+                              <img src={dodoMascoteImg} alt="" className="w-4 h-4 object-contain" aria-hidden="true" />
+                              <span>{item.credits} Dodos</span>
                             </div>
 
                             {/* Heart favorite button */}
@@ -2551,8 +2555,9 @@ export default function App() {
                             className="w-full h-full object-cover"
                           />
                           {/* Floating Credits Badge over Image */}
-                          <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-[11px] font-extrabold px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs z-10">
-                            <span>🦤 {item.credits} Dodos</span>
+                          <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
+                            <img src={dodoMascoteImg} alt="" className="w-4 h-4 object-contain" aria-hidden="true" />
+                            <span>{item.credits} Dodos</span>
                           </div>
                           <button
                             onClick={(e) => toggleFavorite(item.id, e)}
@@ -5197,8 +5202,9 @@ export default function App() {
                                   {item.category}
                                 </span>
                                 {/* Floating Credits Badge over Image */}
-                                <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-[11px] font-extrabold px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs z-10">
-                                  <span>🦤 {item.credits} Dodos</span>
+                                <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
+                                  <img src={dodoMascoteImg} alt="" className="w-4 h-4 object-contain" aria-hidden="true" />
+                                  <span>{item.credits} Dodos</span>
                                 </div>
                               </div>
                               <div className="mt-1.5">
