@@ -3011,14 +3011,13 @@ export default function App() {
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          if (!requireAuth()) return;
                           setReportReason('');
                           setReportDetails('');
                           setIsReportModalOpen(true);
                         }}
                         className="p-2 rounded-full bg-white/90 text-slate-700 hover:text-amber-600 hover:bg-white shadow-md active:scale-90 transition-all"
-                        title="Denunciar anúncio"
-                        aria-label="Denunciar anúncio"
+                        title="Denunciar Anúncio"
+                        aria-label="Denunciar Anúncio"
                       >
                         <Flag className="w-4 h-4" />
                       </button>
