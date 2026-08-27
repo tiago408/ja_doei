@@ -449,6 +449,29 @@ export default function App() {
   const [authWhatsapp, setAuthWhatsapp] = useState<string>('');
   const [authPassword, setAuthPassword] = useState<string>('');
   const [isAuthSubmitting, setIsAuthSubmitting] = useState<boolean>(false);
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [isFavoritesLoaded, setIsFavoritesLoaded] = useState<boolean>(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('@jadoei:favorites_v1');
+    if (saved) {
+      try {
+        const parsedFavoriteIds: unknown = JSON.parse(saved);
+        if (Array.isArray(parsedFavoriteIds)) {
+          setFavoriteIds(parsedFavoriteIds.filter((favoriteId): favoriteId is string => typeof favoriteId === 'string'));
+        }
+      } catch (error) {
+        console.error('Erro ao carregar favoritos salvos:', error);
+      }
+    }
+    setIsFavoritesLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (isFavoritesLoaded) {
+      localStorage.setItem('@jadoei:favorites_v1', JSON.stringify(favoriteIds));
+    }
+  }, [favoriteIds, isFavoritesLoaded]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -1286,10 +1309,15 @@ export default function App() {
   // Toggle favorite
   const toggleFavorite = (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
+    const isCurrentlyFavorite = favoriteIds.includes(id);
+    setFavoriteIds((currentFavoriteIds) => isCurrentlyFavorite
+      ? currentFavoriteIds.filter((favoriteId) => favoriteId !== id)
+      : [...currentFavoriteIds, id]
+    );
     setItems((prev) =>
       prev.map((item) => {
         if (item.id === id) {
-          const nextFav = !item.isFavorite;
+          const nextFav = !isCurrentlyFavorite;
           showToast(
             nextFav ? `"${item.title}" adicionado aos favoritos!` : `Item removido dos favoritos.`,
             'info'
@@ -1328,8 +1356,8 @@ export default function App() {
   }, [items, selectedCategory, searchQuery]);
 
   const favoriteItems = useMemo(() => {
-    return items.filter((item) => item.isFavorite);
-  }, [items]);
+    return items.filter((item) => favoriteIds.includes(item.id));
+  }, [items, favoriteIds]);
 
   const profileHistoryItems = useMemo(() => {
     if (!user) return [];
@@ -2314,7 +2342,7 @@ export default function App() {
                             >
                               <Heart
                                 className={`w-3.5 h-3.5 ${
-                                  item.isFavorite
+                                  favoriteIds.includes(item.id)
                                     ? 'fill-rose-500 text-rose-500'
                                     : ''
                                 }`}
@@ -2931,7 +2959,7 @@ export default function App() {
                       >
                         <Heart
                           className={`w-4 h-4 ${
-                            selectedItemForDetails.isFavorite
+                            favoriteIds.includes(selectedItemForDetails.id)
                               ? 'fill-rose-500 text-rose-500'
                               : ''
                           }`}
