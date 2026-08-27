@@ -775,8 +775,8 @@ export default function App() {
     setIsLoadingPricing(false);
     setAiSuggested(false);
     setPricingJustification('');
-    setCreditsMin(80);
-    setCreditsMax(120);
+    setCreditsMin(90);
+    setCreditsMax(110);
     setPricingError('');
     setIsCategoryManuallySelected(false);
     setRequiresModeration(false);
@@ -836,8 +836,7 @@ export default function App() {
       if (DONATION_CATEGORIES.includes(pricing.category as (typeof DONATION_CATEGORIES)[number])) {
         setNewCategory(pricing.category);
       }
-      setCreditsMin(pricing.credits);
-      setCreditsMax(pricing.credits);
+      applyCreditRange(pricing.credits);
       setRequiresModeration(false);
       setPricingJustification(pricing.justification);
     } catch (error) {
@@ -934,9 +933,20 @@ export default function App() {
     return item.userLocation || getProfileLocation();
   };
 
+  const applyCreditRange = (suggestedValue: number) => {
+    const min = Math.max(1, Math.round(suggestedValue * 0.9));
+    const max = Math.max(min, Math.round(suggestedValue * 1.1));
+    setCreditsMin(min);
+    setCreditsMax(max);
+    setNewCredits(Math.min(max, Math.max(min, suggestedValue)));
+  };
+
   const handleCreditsStep = (delta: number) => {
     if (creditsMin <= 0 || creditsMax <= 0) return;
-    setNewCredits((prev) => Math.min(creditsMax, Math.max(creditsMin, prev + delta)));
+    setNewCredits((prev) => {
+      const next = Math.min(creditsMax, Math.max(creditsMin, prev + delta));
+      return next;
+    });
   };
 
   const handleCreditsInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1016,8 +1026,7 @@ export default function App() {
         setPricingJustification(result.justification);
         setNewCredits(result.credits);
         setSuggestedCredits(result.credits);
-        setCreditsMin(result.credits);
-        setCreditsMax(result.credits);
+        applyCreditRange(result.credits);
         setAiSuggested(true);
       }
     } catch (error) {
@@ -3678,7 +3687,7 @@ export default function App() {
                           </p>
                         </div>
 
-                        {/* Credits Card with +-20% lock */}
+                        {/* Credits Card with ±10% lock */}
                         <div className="w-full max-w-full box-border p-3 rounded-2xl border border-[#14A76C]/20 bg-emerald-50/40">
                           <div className="flex items-center justify-between gap-2 mb-2">
                             <span className="block text-[11px] font-bold text-slate-700">
@@ -3687,19 +3696,51 @@ export default function App() {
                             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-800 px-2 py-0.5 border border-emerald-200">
                               <CheckCircle2 className="w-3 h-3" />
                               {!pricingError && suggestedCredits > 0
-                                ? `Base da IA: ${suggestedCredits}`
+                                ? `IA sugeriu: ${suggestedCredits}`
                                 : 'Aguardando título...'}
                             </span>
                           </div>
-                          <div className="flex items-center gap-2">
+
+                          <div className="mb-2 rounded-xl border border-emerald-200 bg-white/70 px-2 py-1.5">
+                            <div className="flex items-center justify-between text-[10px] font-bold text-slate-600">
+                              <span>Faixa permitida</span>
+                              <span>{creditsMin} - {creditsMax} créditos</span>
+                            </div>
+                            <div className="mt-1 flex items-center justify-between text-[9px] font-medium text-slate-500">
+                              <span>Original da IA</span>
+                              <span>±10%</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 mb-2">
                             <button
                               type="button"
-                              onClick={() => handleCreditsStep(-5)}
+                              onClick={() => handleCreditsStep(-1)}
                               disabled={creditsMin <= 0 || creditsMax <= 0 || newCredits <= creditsMin}
                               className="w-9 h-9 shrink-0 rounded-full bg-white border border-slate-200 text-slate-600 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 active:scale-95 transition-all"
                             >
                               −
                             </button>
+                            <input
+                              type="range"
+                              min={creditsMin}
+                              max={creditsMax}
+                              step={1}
+                              value={newCredits}
+                              onChange={(event) => setNewCredits(Math.min(creditsMax, Math.max(creditsMin, Number(event.target.value))))}
+                              className="flex-1 accent-[#14A76C]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleCreditsStep(1)}
+                              disabled={creditsMax <= 0 || newCredits >= creditsMax}
+                              className="w-9 h-9 shrink-0 rounded-full bg-white border border-slate-200 text-slate-600 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 active:scale-95 transition-all"
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-2">
                             <input
                               type="number"
                               value={newCredits}
@@ -3708,20 +3749,13 @@ export default function App() {
                               onChange={handleCreditsInputChange}
                               className="flex-1 text-center px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                             />
-                            <button
-                              type="button"
-                              onClick={() => handleCreditsStep(5)}
-                              disabled={creditsMax <= 0 || newCredits >= creditsMax}
-                              className="w-9 h-9 shrink-0 rounded-full bg-white border border-slate-200 text-slate-600 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 active:scale-95 transition-all"
-                            >
-                              +
-                            </button>
                           </div>
+
                           <p className="text-[10px] text-slate-500 mt-1.5 text-center">
                             {isPricingLoading || isLoadingPricing
                               ? 'Avaliando item com IA...'
                               : creditsMin > 0 && creditsMax > 0
-                              ? `Faixa permitida: ${creditsMin} a ${creditsMax} créditos (±20%)`
+                              ? `Limite permitido: ${creditsMin} a ${creditsMax} créditos (±10%)`
                               : 'Aguardando título...'}
                           </p>
                           {pricingJustification && !isPricingAnalyzing && (
