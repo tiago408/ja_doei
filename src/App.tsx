@@ -699,6 +699,7 @@ export default function App() {
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
   const [selectedItemForDetails, setSelectedItemForDetails] = useState<DonationItem | null>(null);
   const [selectedItemForRedeem, setSelectedItemForRedeem] = useState<DonationItem | null>(null);
+  const [isImageZoomed, setIsImageZoomed] = useState<boolean>(false);
   const [streakDays, setStreakDays] = useState<number>(() => {
     const savedStreak = Number(localStorage.getItem('ja-doei-streak-days'));
     return Number.isFinite(savedStreak) ? Math.min(30, Math.max(0, savedStreak)) : 0;
@@ -2670,12 +2671,27 @@ export default function App() {
                 {/* Scrollable Modal Body */}
                 <div className="overflow-y-auto no-scrollbar flex-1 flex flex-col">
                   {/* Large Product Photo with Overlay Actions */}
-                <div className="relative h-80 sm:h-96 w-full bg-slate-100 overflow-hidden shrink-0">
+                <div
+                  className="relative h-80 sm:h-96 w-full bg-slate-100 overflow-hidden shrink-0 cursor-zoom-in"
+                  onClick={() => setIsImageZoomed(true)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setIsImageZoomed(true);
+                    }
+                  }}
+                  aria-label="Ampliar imagem do produto"
+                >
                   <img
                     src={selectedItemForDetails.imageUrl}
                     alt={selectedItemForDetails.title}
                     className="w-full h-full object-contain"
                   />
+                  <div className="absolute right-3 bottom-14 rounded-full bg-black/45 p-2 text-white pointer-events-none">
+                    <Search className="w-4 h-4" aria-hidden="true" />
+                  </div>
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-slate-950/30 pointer-events-none"></div>
 
                   {/* Top Bar inside Details */}
@@ -2955,6 +2971,38 @@ export default function App() {
                 </div>
               </motion.div>
             </div>
+          )}
+        </AnimatePresence>
+
+        {/* PRODUCT IMAGE LIGHTBOX */}
+        <AnimatePresence>
+          {isImageZoomed && selectedItemForDetails && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4"
+              onClick={() => setIsImageZoomed(false)}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Imagem ampliada do produto"
+            >
+              <button
+                type="button"
+                onClick={() => setIsImageZoomed(false)}
+                className="absolute top-4 right-4 z-10 rounded-full bg-white/15 p-2.5 text-white hover:bg-white/25 transition-colors"
+                title="Fechar imagem ampliada"
+                aria-label="Fechar imagem ampliada"
+              >
+                <X className="w-6 h-6" />
+              </button>
+              <img
+                src={selectedItemForDetails.imageUrl}
+                alt={selectedItemForDetails.title}
+                className="max-h-[85vh] max-w-full object-contain rounded-lg"
+                onClick={(event) => event.stopPropagation()}
+              />
+            </motion.div>
           )}
         </AnimatePresence>
 
