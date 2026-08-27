@@ -890,6 +890,7 @@ export default function App() {
   const [selectedItemForDetails, setSelectedItemForDetails] = useState<DonationItem | null>(null);
   const [selectedItemForRedeem, setSelectedItemForRedeem] = useState<DonationItem | null>(null);
   const [isImageZoomed, setIsImageZoomed] = useState<boolean>(false);
+  const [isDodoInfoModalOpen, setIsDodoInfoModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [reportReason, setReportReason] = useState<string>('');
   const [reportDetails, setReportDetails] = useState<string>('');
@@ -2165,6 +2166,13 @@ export default function App() {
                       Dodos
                     </span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsDodoInfoModalOpen(true)}
+                    className="text-xs text-white/80 underline flex items-center gap-1 hover:text-white"
+                  >
+                    O que é um Dodo? ⓘ
+                  </button>
                 </div>
               </div>
 
@@ -2636,6 +2644,13 @@ export default function App() {
                       <span className="bg-[#FF8243]/10 text-[#FF8243] text-xs font-bold px-2.5 py-0.5 rounded-lg border border-[#FF8243]/20">
                         🦤 {safeUserCredits} Dodos
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsDodoInfoModalOpen(true)}
+                        className="text-[10px] font-semibold text-[#14A76C] underline hover:text-[#108958]"
+                      >
+                        O que é um Dodo? ⓘ
+                      </button>
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1 shrink-0">
@@ -4741,6 +4756,57 @@ export default function App() {
                     )}
                   </div>
                 </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* MODAL: INFORMAÇÕES SOBRE O DODO */}
+        <AnimatePresence>
+          {isDodoInfoModalOpen && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.94, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.94, y: 16 }}
+                className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+              >
+                <div className="bg-[#14A76C] px-5 pb-4 pt-5 text-center">
+                  <img
+                    src={dodoMascoteImg}
+                    alt="Dodo"
+                    className="mx-auto h-28 w-28 object-contain drop-shadow-md"
+                  />
+                  <h2 className="mt-2 text-base font-black text-white">🦤 Conheça a história do Dodo</h2>
+                </div>
+
+                <div className="space-y-3 p-5">
+                  <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+                    <h3 className="text-xs font-extrabold text-emerald-900">O Guardião</h3>
+                    <p className="mt-1 text-[11px] leading-relaxed text-emerald-950">
+                      O Dodo renasce no Já Doei como o símbolo da regeneração e do cuidado com o planeta.
+                    </p>
+                  </section>
+                  <section className="rounded-2xl border border-orange-200 bg-orange-50 p-3">
+                    <h3 className="text-xs font-extrabold text-orange-900">O Ato de Doar</h3>
+                    <p className="mt-1 text-[11px] leading-relaxed text-orange-950">
+                      O nome faz alusão direta ao ato de DOAR. Cada Dodo representa o impacto positivo do seu desapego.
+                    </p>
+                  </section>
+                  <section className="rounded-2xl border border-sky-200 bg-sky-50 p-3">
+                    <h3 className="text-xs font-extrabold text-sky-900">Economia Colaborativa</h3>
+                    <p className="mt-1 text-[11px] leading-relaxed text-sky-950">
+                      Dodos não são dinheiro! São créditos de generosidade para você resgatar novos itens na comunidade de forma 100% gratuita.
+                    </p>
+                  </section>
+                  <button
+                    type="button"
+                    onClick={() => setIsDodoInfoModalOpen(false)}
+                    className="w-full rounded-xl bg-[#14A76C] py-3 text-xs font-bold text-white shadow-md transition-colors hover:bg-[#108958]"
+                  >
+                    Entendi, vamos doar! 🚀
+                  </button>
+                </div>
               </motion.div>
             </div>
           )}
