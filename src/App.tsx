@@ -281,6 +281,8 @@ export default function App() {
   const [userCredits, setUserCredits] = useState<number>(0);
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [userCoordinates, setUserCoordinates] = useState<{ lat: number; lon: number } | null>(null);
+  const [userLocationLabel, setUserLocationLabel] = useState<string>('Carregando...');
 
   // Loads donations from Firestore in real time and merges them with the local mock feed
   useEffect(() => {
@@ -424,6 +426,47 @@ export default function App() {
     });
 
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setUserLocationLabel('Localização indisponível');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        setUserCoordinates({ lat: coords.latitude, lon: coords.longitude });
+
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}&zoom=10&addressdetails=1`,
+            { headers: { Accept: 'application/json' } }
+          );
+
+          if (!response.ok) {
+            throw new Error(`Geocodificação retornou HTTP ${response.status}`);
+          }
+
+          const data = (await response.json()) as { address?: Record<string, string> };
+          const address = data.address ?? {};
+          const city = address.city || address.town || address.village || address.municipality || '';
+          const state = address.state || address.state_code || '';
+
+          setUserLocationLabel(city && state ? `${city}, ${state}` : city || 'Localização atual');
+        } catch (error) {
+          console.error('Erro ao buscar cidade/estado via geolocalização:', error);
+          const fallbackLocation = userCoordinates
+            ? `Lat ${userCoordinates.lat.toFixed(2)}, Lon ${userCoordinates.lon.toFixed(2)}`
+            : 'Localização atual';
+          setUserLocationLabel(fallbackLocation);
+        }
+      },
+      () => {
+        setUserLocationLabel('Localização indisponível');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+    );
   }, []);
 
   useEffect(() => {
@@ -1611,7 +1654,7 @@ export default function App() {
         </AnimatePresence>
 
         {/* Scrollable Main Area */}
-        <main className="flex-1 overflow-y-auto no-scrollbar flex flex-col pb-28">
+        <main className="flex-1 overflow-y-auto no-scrollbar flex flex-col pb-24">
           
           {/* HEADER (Fixed Top Design in Forest Green #14A76C) */}
           <header className="bg-[#14A76C] rounded-b-2xl shadow-md p-4 pt-safe text-white shrink-0">
@@ -1628,9 +1671,9 @@ export default function App() {
 
               {/* Location & Notifications */}
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 font-bold text-xs text-white bg-white/10 px-2.5 py-1.5 rounded-full border border-white/15">
+                <div className="flex items-center gap-1 font-bold text-xs text-white bg-white/10 px-2.5 py-1.5 rounded-full border border-white/15 max-w-[200px] truncate">
                   <MapPin className="w-3.5 h-3.5 text-[#FF8243]" />
-                  <span>São Paulo, SP</span>
+                  <span className="truncate">{userLocationLabel}</span>
                 </div>
 
                 <button
@@ -2454,21 +2497,9 @@ export default function App() {
           )}
         </main>
 
-        {/* FLOATING ACTION BUTTON (FAB) - Quick Donate */}
-        {(activeTab === 'home' || activeTab === 'search') && (
-          <button
-            type="button"
-            onClick={() => { if (requireAuth()) { resetForm(); setIsDonateModalOpen(true); } }}
-            className="fixed bottom-20 right-4 z-40 bg-[#14A76C] hover:bg-[#108958] text-white shadow-xl rounded-full p-4 flex items-center gap-1.5 active:scale-95 transition-all"
-            title="Doar item"
-          >
-            <Plus className="w-5 h-5" />
-            <span className="text-xs font-bold pr-0.5">Doar</span>
-          </button>
-        )}
-
         {/* BOTTOM NAVIGATION BAR */}
-        <nav className="sticky bottom-0 left-0 right-0 z-30 w-full bg-white border-t border-slate-100 px-3 py-1.5 flex items-center justify-around">
+        <nav className="fixed bottom-0 left-0 right-0 z-50 w-full bg-white border-t border-slate-100 px-3 py-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
+          <div className="mx-auto flex max-w-md items-center justify-around">
             {/* Home */}
             <button
               onClick={() => setActiveTab('home')}
@@ -2537,6 +2568,7 @@ export default function App() {
               <User className="w-5 h-5" />
               <span className="text-[10px]">Perfil</span>
             </button>
+          </div>
         </nav>
 
         {/* MODAL 1: TELA DE DETALHES DO PRODUTO */}
@@ -4078,55 +4110,24 @@ export default function App() {
                       setIsEarnModalOpen(false);
                       if (requireAuth()) { resetForm(); setIsDonateModalOpen(true); }
                     }}
-                    className="p-3 rounded-xl border border-slate-200 hover:border-[#14A76C] bg-slate-50 hover:bg-emerald-50/50 cursor-pointer transition-all flex items-center justify-between group"
+                    className="p-3 rounded-xl border border-slate-200 hover:border-[#14A76C] bg-slate-50 hover:bg-emerald-50/50 cursor-pointer transition-all group"
                   >
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-800 group-hover:text-[#14A76C]">
-                        Doar um item
-                      </h4>
-                      <p className="text-[10px] text-slate-500">
-                        Cadastre desapegos para a comunidade
-                      </p>
-                    </div>
-                    <span className="bg-[#14A76C] text-white text-xs font-bold px-2.5 py-1 rounded-lg">
-                      +50 Cts
-                    </span>
+                    <h4 className="text-xs font-bold text-slate-800 group-hover:text-[#14A76C]">
+                      Ganhe 20% dos créditos finalizados na primeira doação
+                    </h4>
                   </div>
 
                   {/* Option 2 */}
                   <div
-                    onClick={() => handleClaimBonus(15, 'Check-in Diário')}
-                    className="p-3 rounded-xl border border-slate-200 hover:border-[#FF8243] bg-slate-50 hover:bg-amber-50/50 cursor-pointer transition-all flex items-center justify-between group"
+                    onClick={() => {
+                      setIsEarnModalOpen(false);
+                      handleClaimBonus(10, 'Login diário por 30 dias');
+                    }}
+                    className="p-3 rounded-xl border border-slate-200 hover:border-[#FF8243] bg-slate-50 hover:bg-amber-50/50 cursor-pointer transition-all group"
                   >
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-800 group-hover:text-[#FF8243]">
-                        Check-in Diário
-                      </h4>
-                      <p className="text-[10px] text-slate-500">
-                        Acesse a plataforma diariamente
-                      </p>
-                    </div>
-                    <span className="bg-[#FF8243] text-white text-xs font-bold px-2.5 py-1 rounded-lg">
-                      +15 Cts
-                    </span>
-                  </div>
-
-                  {/* Option 3 */}
-                  <div
-                    onClick={() => handleClaimBonus(30, 'Indicação de Amigo')}
-                    className="p-3 rounded-xl border border-slate-200 hover:border-sky-500 bg-slate-50 hover:bg-sky-50/50 cursor-pointer transition-all flex items-center justify-between group"
-                  >
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-800 group-hover:text-sky-600">
-                        Convidar Amigos
-                      </h4>
-                      <p className="text-[10px] text-slate-500">
-                        Compartilhe seu código de convite
-                      </p>
-                    </div>
-                    <span className="bg-sky-600 text-white text-xs font-bold px-2.5 py-1 rounded-lg">
-                      +30 Cts
-                    </span>
+                    <h4 className="text-xs font-bold text-slate-800 group-hover:text-[#FF8243]">
+                      Realize login diariamente durante 30 dias e ao final ganhe 10 créditos
+                    </h4>
                   </div>
                 </div>
 
