@@ -2155,7 +2155,7 @@ export default function App() {
                 <img
                   src={DODO_MASCOT_URL}
                   alt="Dodo"
-                  className="w-10 h-10 object-contain drop-shadow-md shrink-0"
+                  className="w-8 h-8 object-contain"
                 />
                 <div>
                   <span className="text-[11px] uppercase tracking-wider text-emerald-100 font-medium block">
@@ -2604,7 +2604,7 @@ export default function App() {
             <div className="p-4 space-y-4">
               {/* Profile Card */}
               {user ? (
-                <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center gap-3">
+                <div className="flex items-center justify-between p-4 bg-white rounded-2xl shadow-xs border border-slate-200/80">
                   <button
                     type="button"
                     onClick={handleOpenEditProfile}
@@ -2627,7 +2627,7 @@ export default function App() {
                       <Pencil className="w-2.5 h-2.5" />
                     </span>
                   </button>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 ml-3">
                     <div className="flex items-center gap-1.5">
                       <h2 className="text-sm font-bold text-slate-800 truncate">
                         {user.name}
@@ -2643,7 +2643,8 @@ export default function App() {
                     <p className="text-[11px] text-slate-500 truncate">{user.email} • São Paulo, SP</p>
                     <div className="mt-2 flex items-center gap-2">
                       <span className="bg-[#FF8243]/10 text-[#FF8243] text-xs font-bold px-2.5 py-0.5 rounded-lg border border-[#FF8243]/20">
-                        🦤 {safeUserCredits} Dodos
+                        <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 inline mr-1" />
+                        {safeUserCredits} Dodos
                       </span>
                       <button
                         type="button"
@@ -2654,15 +2655,7 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex flex-col items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={handleOpenEditProfile}
-                      className="p-2 rounded-full text-slate-400 hover:text-[#14A76C] hover:bg-emerald-50 transition-all"
-                      title="Editar Perfil"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
+                  <div className="flex items-center shrink-0 ml-2">
                     <button
                       type="button"
                       onClick={handleLogout}
@@ -4776,7 +4769,7 @@ export default function App() {
                   <img
                     src={DODO_MASCOT_URL}
                     alt="Dodo"
-                    className="w-24 h-24 mx-auto mb-3 object-contain drop-shadow-md"
+                    className="w-20 h-20 mx-auto mb-2 object-contain filter drop-shadow-md"
                   />
                   <h2 className="text-base font-black text-white">🦤 O Manifesto do Dodo</h2>
                 </div>
