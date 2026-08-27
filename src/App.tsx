@@ -39,7 +39,8 @@ import {
   LocateFixed,
   Inbox,
   Pencil,
-  Trash2
+  Trash2,
+  Flag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -833,6 +834,10 @@ export default function App() {
   const [selectedItemForDetails, setSelectedItemForDetails] = useState<DonationItem | null>(null);
   const [selectedItemForRedeem, setSelectedItemForRedeem] = useState<DonationItem | null>(null);
   const [isImageZoomed, setIsImageZoomed] = useState<boolean>(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
+  const [reportReason, setReportReason] = useState<string>('');
+  const [reportDetails, setReportDetails] = useState<string>('');
+  const [isSendingReport, setIsSendingReport] = useState<boolean>(false);
   const [isDonationEditOpen, setIsDonationEditOpen] = useState<boolean>(false);
   const [editDescription, setEditDescription] = useState<string>('');
   const [editCredits, setEditCredits] = useState<number>(0);
@@ -1398,6 +1403,43 @@ export default function App() {
     setSelectedItemForDetails(item);
     setSelectedFreightId(item.isLargeItem ? 'lalamove_partner' : 'ja_doei_express');
     setIsCepCalculated(true);
+  };
+
+  const handleSendReport = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user) {
+      setIsReportModalOpen(false);
+      setIsAuthOpen(true);
+      return;
+    }
+    if (!selectedItemForDetails || !reportReason) {
+      showToast('Selecione um motivo para enviar a denúncia.', 'error');
+      return;
+    }
+
+    setIsSendingReport(true);
+    try {
+      await addDoc(collection(db, 'reports'), {
+        donationId: selectedItemForDetails.id,
+        donationTitle: selectedItemForDetails.title,
+        reportedUserId: selectedItemForDetails.userId || null,
+        reporterUserId: user.uid,
+        reporterName: user.name,
+        reason: reportReason,
+        details: reportDetails.trim(),
+        createdAt: serverTimestamp(),
+        status: 'pending'
+      });
+      setIsReportModalOpen(false);
+      setReportReason('');
+      setReportDetails('');
+      showToast('Denúncia enviada com sucesso. Nossa equipe analisará o anúncio!', 'success');
+    } catch (error) {
+      console.error('Erro ao enviar denúncia:', error);
+      showToast('Não foi possível enviar a denúncia. Tente novamente.', 'error');
+    } finally {
+      setIsSendingReport(false);
+    }
   };
 
   const handleOpenDonationEdit = () => {
@@ -2966,6 +3008,21 @@ export default function App() {
                       </button>
 
                       <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setReportReason('');
+                          setReportDetails('');
+                          setIsReportModalOpen(true);
+                        }}
+                        className="p-2 rounded-full bg-white/90 text-slate-700 hover:text-amber-600 hover:bg-white shadow-md active:scale-90 transition-all"
+                        title="Denunciar Anúncio"
+                        aria-label="Denunciar Anúncio"
+                      >
+                        <Flag className="w-4 h-4" />
+                      </button>
+
+                      <button
                         onClick={() => setSelectedItemForDetails(null)}
                         className="p-2 rounded-full bg-white/90 text-slate-700 hover:text-slate-900 hover:bg-white shadow-md active:scale-90 transition-all"
                         title="Fechar"
@@ -3382,6 +3439,102 @@ export default function App() {
                 }}
               />
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* MODAL: DENUNCIAR ANÚNCIO */}
+        <AnimatePresence>
+          {isReportModalOpen && selectedItemForDetails && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+              <motion.form
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                onSubmit={handleSendReport}
+                className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl"
+              >
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-black text-slate-800">Denunciar anúncio</h2>
+                    <p className="mt-1 text-[10px] leading-snug text-slate-500">
+                      Ajude nossa equipe a manter a comunidade segura.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsReportModalOpen(false)}
+                    className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                    title="Fechar denúncia"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <p className="mb-3 rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-700">
+                  {selectedItemForDetails.title}
+                </p>
+
+                <fieldset>
+                  <legend className="mb-2 text-xs font-bold text-slate-700">Qual é o motivo?</legend>
+                  <div className="space-y-2">
+                    {[
+                      'Foto fake ou retirada da internet',
+                      'Item proibido pelas regras da comunidade',
+                      'Anúncio suspeito ou golpe',
+                      'Descrição ofensiva ou inadequada',
+                      'Outro motivo'
+                    ].map((reason) => (
+                      <label
+                        key={reason}
+                        className={`flex cursor-pointer items-center gap-2 rounded-xl border p-3 text-[11px] font-semibold transition-colors ${
+                          reportReason === reason
+                            ? 'border-[#14A76C] bg-emerald-50 text-emerald-800'
+                            : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="reportReason"
+                          value={reason}
+                          checked={reportReason === reason}
+                          onChange={(event) => setReportReason(event.target.value)}
+                          className="accent-[#14A76C]"
+                        />
+                        <span>{reason}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <label className="mt-4 block text-xs font-bold text-slate-700">
+                  Detalhes adicionais (opcional)
+                  <textarea
+                    value={reportDetails}
+                    onChange={(event) => setReportDetails(event.target.value)}
+                    rows={4}
+                    placeholder="Conte mais detalhes sobre o problema"
+                    className="mt-1.5 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                  />
+                </label>
+
+                <div className="mt-5 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsReportModalOpen(false)}
+                    className="flex-1 rounded-xl bg-slate-100 py-3 text-xs font-bold text-slate-600 hover:bg-slate-200"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!reportReason || isSendingReport}
+                    className="flex-1 rounded-xl bg-[#14A76C] py-3 text-xs font-bold text-white hover:bg-[#108958] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSendingReport ? 'Enviando...' : 'Enviar denúncia'}
+                  </button>
+                </div>
+              </motion.form>
+            </div>
           )}
         </AnimatePresence>
 
