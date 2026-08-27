@@ -713,6 +713,11 @@ export default function App() {
 
   const handleNotificationClick = async (notification: AppNotification) => {
     if (!notification.read) {
+      setNotifications((currentNotifications) => currentNotifications.map((currentNotification) => (
+        currentNotification.id === notification.id
+          ? { ...currentNotification, read: true }
+          : currentNotification
+      )));
       try {
         await updateDoc(doc(db, 'notifications', notification.id), { read: true });
       } catch (error) {
@@ -722,6 +727,26 @@ export default function App() {
 
     setIsNotificationsModalOpen(false);
     setActiveTab('profile');
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    const unreadNotifications = notifications.filter((notification) => !notification.read);
+    if (!unreadNotifications.length) return;
+
+    setNotifications((currentNotifications) => currentNotifications.map((notification) => ({
+      ...notification,
+      read: true
+    })));
+
+    try {
+      await Promise.all(
+        unreadNotifications.map((notification) =>
+          updateDoc(doc(db, 'notifications', notification.id), { read: true })
+        )
+      );
+    } catch (error) {
+      console.error('Erro ao marcar todas as notificações como lidas:', error);
+    }
   };
 
   // Opens the Edit Profile modal pre-filled with the current name and photo
@@ -1342,6 +1367,7 @@ export default function App() {
 
   // Open Product Details
   const handleOpenDetails = (item: DonationItem) => {
+    setIsImageZoomed(false);
     setSelectedItemForDetails(item);
     setSelectedFreightId(item.isLargeItem ? 'lalamove_partner' : 'ja_doei_express');
     setIsCepCalculated(true);
@@ -2777,6 +2803,7 @@ export default function App() {
         </main>
 
         {/* BOTTOM NAVIGATION BAR */}
+        {!showSplash && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 w-full bg-white border-t border-slate-100 px-3 py-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
           <div className="mx-auto flex max-w-md items-center justify-around">
             {/* Home */}
@@ -2849,6 +2876,7 @@ export default function App() {
             </button>
           </div>
         </nav>
+        )}
 
         {/* MODAL 1: TELA DE DETALHES DO PRODUTO */}
         <AnimatePresence>
@@ -2872,23 +2900,12 @@ export default function App() {
                 {/* Scrollable Modal Body */}
                 <div className="overflow-y-auto no-scrollbar flex-1 flex flex-col">
                   {/* Large Product Photo with Overlay Actions */}
-                <div
-                  className="relative h-80 sm:h-96 w-full bg-slate-100 overflow-hidden shrink-0 cursor-zoom-in"
-                  onClick={() => setIsImageZoomed(true)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      setIsImageZoomed(true);
-                    }
-                  }}
-                  aria-label="Ampliar imagem do produto"
-                >
+                <div className="relative h-80 sm:h-96 w-full bg-slate-100 overflow-hidden shrink-0">
                   <img
                     src={selectedItemForDetails.imageUrl}
                     alt={selectedItemForDetails.title}
-                    className="w-full h-full object-contain"
+                    className="w-full h-full object-contain cursor-zoom-in"
+                    onClick={() => setIsImageZoomed(true)}
                   />
                   <div className="absolute right-3 bottom-14 rounded-full bg-black/45 p-2 text-white pointer-events-none">
                     <Search className="w-4 h-4" aria-hidden="true" />
@@ -4448,7 +4465,7 @@ export default function App() {
                 exit={{ opacity: 0, scale: 0.9 }}
                 className="w-full sm:max-w-md max-h-[80vh] bg-white rounded-2xl p-5 shadow-2xl flex flex-col gap-3 border border-slate-200 overflow-hidden"
               >
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2 shrink-0">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 shrink-0">
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-full bg-[#14A76C]/10 flex items-center justify-center text-[#14A76C] shrink-0">
                       <Bell className="w-4 h-4" />
@@ -4457,13 +4474,23 @@ export default function App() {
                       Notificações
                     </h3>
                   </div>
-                  <button
-                    onClick={() => setIsNotificationsModalOpen(false)}
-                    className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
-                    title="Fechar"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => void handleMarkAllNotificationsRead()}
+                      disabled={!hasUnreadNotifications}
+                      className="rounded-lg px-2 py-1.5 text-[10px] font-bold text-[#14A76C] hover:bg-emerald-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                    >
+                      Marcar todas como lidas
+                    </button>
+                    <button
+                      onClick={() => setIsNotificationsModalOpen(false)}
+                      className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+                      title="Fechar"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {notifications.length === 0 ? (
@@ -4507,16 +4534,22 @@ export default function App() {
                               void handleNotificationClick(notification);
                             }
                           }}
-                          className={`p-3 rounded-xl border border-slate-200 flex items-start gap-2.5 ${notification.read ? 'bg-slate-50' : 'bg-emerald-50/40'}`}
+                          className={`relative border-l-4 p-3 rounded-xl flex items-start gap-2.5 ${notification.read ? 'border border-slate-200 border-l-4 border-l-transparent bg-gray-50' : 'border border-emerald-300 border-l-4 border-l-emerald-600 bg-emerald-100/70'}`}
                         >
+                          {!notification.read && (
+                            <span
+                              className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full bg-emerald-600 ring-2 ring-emerald-200"
+                              aria-label="Não lida"
+                            />
+                          )}
                           <div className={`w-8 h-8 rounded-full ${iconBg} ${iconColor} flex items-center justify-center shrink-0`}>
                             <NotificationIcon className="w-4 h-4" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h4 className="text-xs font-bold text-slate-800">
+                            <h4 className={`text-xs ${notification.read ? 'font-medium text-gray-600' : 'font-bold text-gray-900'}`}>
                               {notification.title}
                             </h4>
-                            <p className="text-[11px] text-slate-500 leading-snug">
+                            <p className={`text-[11px] leading-snug ${notification.read ? 'text-gray-600' : 'text-gray-800'}`}>
                               {notification.message}
                             </p>
                             <span className="text-[10px] text-slate-400 mt-0.5 block">
