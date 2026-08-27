@@ -713,6 +713,11 @@ export default function App() {
 
   const handleNotificationClick = async (notification: AppNotification) => {
     if (!notification.read) {
+      setNotifications((currentNotifications) => currentNotifications.map((currentNotification) => (
+        currentNotification.id === notification.id
+          ? { ...currentNotification, read: true }
+          : currentNotification
+      )));
       try {
         await updateDoc(doc(db, 'notifications', notification.id), { read: true });
       } catch (error) {
@@ -722,6 +727,26 @@ export default function App() {
 
     setIsNotificationsModalOpen(false);
     setActiveTab('profile');
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    const unreadNotifications = notifications.filter((notification) => !notification.read);
+    if (!unreadNotifications.length) return;
+
+    setNotifications((currentNotifications) => currentNotifications.map((notification) => ({
+      ...notification,
+      read: true
+    })));
+
+    try {
+      await Promise.all(
+        unreadNotifications.map((notification) =>
+          updateDoc(doc(db, 'notifications', notification.id), { read: true })
+        )
+      );
+    } catch (error) {
+      console.error('Erro ao marcar todas as notificações como lidas:', error);
+    }
   };
 
   // Opens the Edit Profile modal pre-filled with the current name and photo
@@ -4448,7 +4473,7 @@ export default function App() {
                 exit={{ opacity: 0, scale: 0.9 }}
                 className="w-full sm:max-w-md max-h-[80vh] bg-white rounded-2xl p-5 shadow-2xl flex flex-col gap-3 border border-slate-200 overflow-hidden"
               >
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2 shrink-0">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 shrink-0">
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-full bg-[#14A76C]/10 flex items-center justify-center text-[#14A76C] shrink-0">
                       <Bell className="w-4 h-4" />
@@ -4457,13 +4482,23 @@ export default function App() {
                       Notificações
                     </h3>
                   </div>
-                  <button
-                    onClick={() => setIsNotificationsModalOpen(false)}
-                    className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
-                    title="Fechar"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => void handleMarkAllNotificationsRead()}
+                      disabled={!hasUnreadNotifications}
+                      className="rounded-lg px-2 py-1.5 text-[10px] font-bold text-[#14A76C] hover:bg-emerald-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                    >
+                      Marcar todas como lidas
+                    </button>
+                    <button
+                      onClick={() => setIsNotificationsModalOpen(false)}
+                      className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+                      title="Fechar"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {notifications.length === 0 ? (
@@ -4507,16 +4542,22 @@ export default function App() {
                               void handleNotificationClick(notification);
                             }
                           }}
-                          className={`p-3 rounded-xl border border-slate-200 flex items-start gap-2.5 ${notification.read ? 'bg-slate-50' : 'bg-emerald-50/40'}`}
+                          className={`relative p-3 rounded-xl border border-slate-200 flex items-start gap-2.5 ${notification.read ? 'bg-white' : 'bg-emerald-50/60'}`}
                         >
+                          {!notification.read && (
+                            <span
+                              className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full bg-emerald-500"
+                              aria-label="Não lida"
+                            />
+                          )}
                           <div className={`w-8 h-8 rounded-full ${iconBg} ${iconColor} flex items-center justify-center shrink-0`}>
                             <NotificationIcon className="w-4 h-4" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h4 className="text-xs font-bold text-slate-800">
+                            <h4 className={`text-xs ${notification.read ? 'font-medium text-gray-600' : 'font-semibold text-gray-900'}`}>
                               {notification.title}
                             </h4>
-                            <p className="text-[11px] text-slate-500 leading-snug">
+                            <p className={`text-[11px] leading-snug ${notification.read ? 'text-gray-600' : 'text-slate-600'}`}>
                               {notification.message}
                             </p>
                             <span className="text-[10px] text-slate-400 mt-0.5 block">
