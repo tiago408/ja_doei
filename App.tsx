@@ -278,34 +278,10 @@ export default function App() {
   }, [showSplash]);
 
   // App state
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    try {
-      const savedFavorites = JSON.parse(localStorage.getItem('@jadoei:favorites') || '[]');
-      return Array.isArray(savedFavorites)
-        ? savedFavorites.filter((favoriteId): favoriteId is string => typeof favoriteId === 'string')
-        : [];
-    } catch {
-      return [];
-    }
-  });
-  const [items, setItems] = useState<DonationItem[]>(() => INITIAL_ITEMS.map((item) => ({
-    ...item,
-    isFavorite: favorites.includes(item.id)
-  })));
+  const [items, setItems] = useState<DonationItem[]>(INITIAL_ITEMS);
   const [userCredits, setUserCredits] = useState<number>(0);
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-
-  useEffect(() => {
-    localStorage.setItem('@jadoei:favorites', JSON.stringify(favorites));
-  }, [favorites]);
-
-  useEffect(() => {
-    setItems((currentItems) => currentItems.map((item) => ({
-      ...item,
-      isFavorite: favorites.includes(item.id)
-    })));
-  }, [favorites]);
   const [userCoordinates, setUserCoordinates] = useState<{ lat: number; lon: number } | null>(null);
   const [userLocationLabel, setUserLocationLabel] = useState<string>('Carregando...');
 
@@ -336,7 +312,7 @@ export default function App() {
           receiverId: data.receiverId || null,
           userLocation: data.userLocation || data.location || undefined,
           isLargeItem: data.isLargeItem === true,
-          isFavorite: favorites.includes(docSnap.id),
+          isFavorite: false,
           isRedeemed: ['reserved', 'completed'].includes(data.status || 'available')
         };
       });
@@ -350,7 +326,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, [favorites]);
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'home' | 'search' | 'favorites' | 'profile'>('home');
@@ -473,6 +449,29 @@ export default function App() {
   const [authWhatsapp, setAuthWhatsapp] = useState<string>('');
   const [authPassword, setAuthPassword] = useState<string>('');
   const [isAuthSubmitting, setIsAuthSubmitting] = useState<boolean>(false);
+  const favoriteStorageKey = `@jadoei:favorites_${user?.uid || 'guest'}`;
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const loadedFavoriteKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let savedFavoriteIds: unknown;
+    try {
+      savedFavoriteIds = JSON.parse(localStorage.getItem(favoriteStorageKey) || '[]');
+    } catch {
+      savedFavoriteIds = [];
+    }
+
+    const validFavoriteIds = Array.isArray(savedFavoriteIds)
+      ? savedFavoriteIds.filter((favoriteId): favoriteId is string => typeof favoriteId === 'string')
+      : [];
+    setFavoriteIds(validFavoriteIds);
+    loadedFavoriteKeyRef.current = favoriteStorageKey;
+  }, [favoriteStorageKey]);
+
+  useEffect(() => {
+    if (loadedFavoriteKeyRef.current !== favoriteStorageKey) return;
+    localStorage.setItem(favoriteStorageKey, JSON.stringify(favoriteIds));
+  }, [favoriteIds, favoriteStorageKey]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -1310,10 +1309,10 @@ export default function App() {
   // Toggle favorite
   const toggleFavorite = (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    const isCurrentlyFavorite = favorites.includes(id);
-    setFavorites((currentFavorites) => isCurrentlyFavorite
-      ? currentFavorites.filter((favoriteId) => favoriteId !== id)
-      : [...currentFavorites, id]
+    const isCurrentlyFavorite = favoriteIds.includes(id);
+    setFavoriteIds((currentFavoriteIds) => isCurrentlyFavorite
+      ? currentFavoriteIds.filter((favoriteId) => favoriteId !== id)
+      : [...currentFavoriteIds, id]
     );
     setItems((prev) =>
       prev.map((item) => {
@@ -1357,8 +1356,8 @@ export default function App() {
   }, [items, selectedCategory, searchQuery]);
 
   const favoriteItems = useMemo(() => {
-    return items.filter((item) => item.isFavorite);
-  }, [items]);
+    return items.filter((item) => favoriteIds.includes(item.id));
+  }, [items, favoriteIds]);
 
   const profileHistoryItems = useMemo(() => {
     if (!user) return [];
@@ -2343,7 +2342,7 @@ export default function App() {
                             >
                               <Heart
                                 className={`w-3.5 h-3.5 ${
-                                  item.isFavorite
+                                  favoriteIds.includes(item.id)
                                     ? 'fill-rose-500 text-rose-500'
                                     : ''
                                 }`}
@@ -2960,7 +2959,7 @@ export default function App() {
                       >
                         <Heart
                           className={`w-4 h-4 ${
-                            selectedItemForDetails.isFavorite
+                            favoriteIds.includes(selectedItemForDetails.id)
                               ? 'fill-rose-500 text-rose-500'
                               : ''
                           }`}
