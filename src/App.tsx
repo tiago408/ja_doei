@@ -330,6 +330,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'search' | 'favorites' | 'profile'>('home');
   const mainScrollRef = useRef<HTMLElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const swipeStartXRef = useRef<number | null>(null);
+  const swipeStartYRef = useRef<number | null>(null);
   const quartinhoContentRef = useRef<HTMLDivElement>(null);
   const [quartinhoTab, setQuartinhoTab] = useState<'available' | 'completed' | 'redeemed'>('available');
 
@@ -347,6 +349,24 @@ export default function App() {
     setActiveTab('search');
     scrollMainToTop();
     requestAnimationFrame(() => searchInputRef.current?.focus());
+  };
+
+  const handleSwipeStart = (event: React.TouchEvent) => {
+    const touch = event.touches[0];
+    swipeStartXRef.current = touch.clientX <= 40 ? touch.clientX : null;
+    swipeStartYRef.current = swipeStartXRef.current === null ? null : touch.clientY;
+  };
+
+  const handleSwipeEnd = (event: React.TouchEvent, closeScreen: () => void) => {
+    if (swipeStartXRef.current === null || swipeStartYRef.current === null) return;
+    const endX = event.changedTouches[0]?.clientX ?? swipeStartXRef.current;
+    const endY = event.changedTouches[0]?.clientY ?? swipeStartYRef.current;
+    const horizontalDistance = endX - swipeStartXRef.current;
+    const verticalDistance = Math.abs(endY - swipeStartYRef.current);
+    swipeStartXRef.current = null;
+    swipeStartYRef.current = null;
+
+    if (horizontalDistance > 70 && horizontalDistance > verticalDistance) closeScreen();
   };
 
   // Auth State
@@ -2443,28 +2463,6 @@ export default function App() {
                 <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
               </button>
 
-              {/* REVER SPLASH SCREEN BUTTON */}
-              <button
-                type="button"
-                onClick={() => setShowSplash(true)}
-                className="w-full p-3.5 bg-white hover:bg-slate-50 rounded-2xl border border-slate-200/90 shadow-xs transition-all flex items-center justify-between group active:scale-98"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shadow-xs">
-                    <Sparkles className="w-5 h-5 text-[#FF8243]" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="text-xs font-bold text-slate-800 group-hover:text-[#14A76C] transition-colors">
-                      Rever Tela de Abertura (Splash)
-                    </h3>
-                    <p className="text-[10px] text-slate-500 font-medium">
-                      Testar a animação e apresentação do app novamente
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
-              </button>
-
               {/* Stats Grid */}
               <div className="grid grid-cols-3 gap-2">
                 <button
@@ -2715,7 +2713,11 @@ export default function App() {
         {/* MODAL 1: TELA DE DETALHES DO PRODUTO */}
         <AnimatePresence>
           {selectedItemForDetails && (
-            <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+            <div
+              className="fixed inset-0 z-50 bg-white overflow-y-auto"
+              onTouchStart={handleSwipeStart}
+              onTouchEnd={(event) => handleSwipeEnd(event, () => setSelectedItemForDetails(null))}
+            >
               <motion.div
                 initial={{ opacity: 0, y: 120 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -4353,7 +4355,11 @@ export default function App() {
         {/* MODAL 6: QUARTINHO DA BAGUNÇA (LOJINHA PESSOAL DO DOADOR) */}
         <AnimatePresence>
           {baguncaDonor && (
-            <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+            <div
+              className="fixed inset-0 z-50 bg-white overflow-y-auto"
+              onTouchStart={handleSwipeStart}
+              onTouchEnd={(event) => handleSwipeEnd(event, () => setBaguncaDonor(null))}
+            >
               <motion.div
                 initial={{ opacity: 0, y: 120 }}
                 animate={{ opacity: 1, y: 0 }}
