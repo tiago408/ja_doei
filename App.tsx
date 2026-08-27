@@ -73,6 +73,8 @@ import { evaluateItemWithGemini } from './aiPricingService';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
 
+const DODO_MASCOT_URL = 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f9a4.png';
+
 // Item Interface
 interface DonationItem {
   id: string;
@@ -115,8 +117,8 @@ const FREIGHT_OPTIONS: FreightOption[] = [
     id: 'lalamove_partner',
     category: 'padrao',
     categoryLabel: 'Contratação externa',
-    name: 'Carreto & Utilitário (Lalamove Partner)',
-    carrierName: 'Lalamove Partner',
+    name: 'Carreto & Utilitário',
+    carrierName: 'Parceiro de transporte',
     price: 0,
     deliveryTime: 'Cotação em tempo real',
     icon: '🚛',
@@ -889,6 +891,7 @@ export default function App() {
   const [selectedItemForDetails, setSelectedItemForDetails] = useState<DonationItem | null>(null);
   const [selectedItemForRedeem, setSelectedItemForRedeem] = useState<DonationItem | null>(null);
   const [isImageZoomed, setIsImageZoomed] = useState<boolean>(false);
+  const [isDodoInfoModalOpen, setIsDodoInfoModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [reportReason, setReportReason] = useState<string>('');
   const [reportDetails, setReportDetails] = useState<string>('');
@@ -983,7 +986,7 @@ export default function App() {
   const [chatIaMessages, setChatIaMessages] = useState<Array<{ sender: 'user' | 'bot'; text: string; time: string }>>([
     {
       sender: 'bot',
-      text: 'Olá! Sou a Assistente Virtual do Já Doei. 🤖 Como posso te ajudar hoje? Você pode me perguntar sobre frete, créditos, complemento em R$, doação ou assinatura premium!',
+      text: 'Olá! Sou a Assistente Virtual do Já Doei. 🤖 Como posso te ajudar hoje? Você pode me perguntar sobre frete, Dodos, complemento em R$, doação ou assinatura premium!',
       time: '14:48'
     }
   ]);
@@ -1000,18 +1003,18 @@ export default function App() {
 
     setTimeout(() => {
       const qLower = query.toLowerCase();
-      let replyText = 'Entendi sua dúvida! O Já Doei conecta doadores e recebedores via sistema de créditos e logística 100% gerenciada por parceiros (Uber, Lalamove e Loggi). Se precisar de mais informações, consulte nossas abas de ajuda no menu!';
+      let replyText = 'Entendi sua dúvida! O Já Doei conecta doadores e recebedores via sistema de Dodos e logística 100% gerenciada por parceiros (Uber, Lalamove e Loggi). Se precisar de mais informações, consulte nossas abas de ajuda no menu!';
 
       if (qLower.includes('frete') || qLower.includes('entrega') || qLower.includes('envio') || qLower.includes('transport')) {
         replyText = '🚚 O frete é pago exclusivamente pelo recebedor no checkout e operado por entregadores parceiros (Uber Flash, Lalamove Moto/Utilitário e Correios). A coleta é feita diretamente na porta do doador sem nenhum custo para quem doa!';
-      } else if (qLower.includes('crédito') || qLower.includes('credito') || qLower.includes('saldo') || qLower.includes('expir')) {
-        replyText = '🪙 Cada doação aprovada te concede créditos acumulativos! Seus créditos NUNCA expiram. Ao faltar créditos para resgatar algo, você pode usar o Complemento em R$ (até 30% em dinheiro ou 40% para Assinantes Premium).';
+      } else if (qLower.includes('crédito') || qLower.includes('credito') || qLower.includes('dodo') || qLower.includes('saldo') || qLower.includes('expir')) {
+        replyText = '🦤 Cada doação aprovada te concede Dodos acumulativos! Seus Dodos NUNCA expiram. Ao faltar Dodos para resgatar algo, você pode usar o Complemento em R$ (até 30% em dinheiro ou 40% para Assinantes Premium).';
       } else if (qLower.includes('premium') || qLower.includes('clube') || qLower.includes('assin')) {
         replyText = '💎 O Clube Já Doei Premium custa R$ 19,90/mês e te dá 40% de limite no complemento em dinheiro, 1 destaque grátis de desapego por mês, logística prioritária e selo VIP!';
       } else if (qLower.includes('doar') || qLower.includes('embalar') || qLower.includes('coleta') || qLower.includes('proibido')) {
         replyText = '📦 Para doar, clique no botão central "+ Doar". Embale o item em caixa de papelão ou sacola reforçada. É proibido doar medicamentos, armas, produtos inflamáveis ou itens ilícitos.';
       } else if (qLower.includes('seguro') || qLower.includes('troca') || qLower.includes('garantia') || qLower.includes('danific')) {
-        replyText = '🛡️ O Seguro de Troca custa apenas R$ 1,99 e garante reembolso total dos seus créditos e do valor do frete caso o item chegue danificado ou diferente do anunciado.';
+        replyText = '🛡️ O Seguro de Troca custa apenas R$ 1,99 e garante reembolso total dos seus Dodos e do valor do frete caso o item chegue danificado ou diferente do anunciado.';
       }
 
       const botTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1659,7 +1662,7 @@ export default function App() {
         ...prev,
         {
           sender: 'donor',
-          text: `Com certeza! Podemos combinar a entrega via ${currentSelectedFreight.name}. Fique à vontade para concluir o resgate com seus créditos!`,
+          text: `Com certeza! Podemos combinar a entrega via ${currentSelectedFreight.name}. Fique à vontade para concluir o resgate com seus Dodos!`,
           time: 'Agora'
         }
       ]);
@@ -1684,7 +1687,7 @@ export default function App() {
 
     if (donateStep === 1) {
       if (!newImageUrl) {
-        showToast('Tire uma foto para a IA calcular os créditos.', 'error');
+        showToast('Tire uma foto para a IA calcular os Dodos.', 'error');
         return;
       }
       setDonateStep(2);
@@ -1808,7 +1811,7 @@ export default function App() {
 
     showToast(
       savedToFirestore
-        ? `🎉 Doação cadastrada com sucesso! ${newIsFeatured ? '🔥 Item destacado no topo!' : ''} Os créditos serão liberados após a confirmação da entrega.`
+        ? `🎉 Doação cadastrada com sucesso! ${newIsFeatured ? '🔥 Item destacado no topo!' : ''} Os Dodos serão liberados após a confirmação da entrega.`
         : `🎉 Doação salva localmente! Ela será sincronizada assim que a conexão for restabelecida.`,
       'success'
     );
@@ -1830,8 +1833,8 @@ export default function App() {
       });
       await addDoc(collection(db, 'notifications'), {
         userId: item.userId,
-        title: 'Créditos liberados',
-        message: `Créditos de ${item.title} foram liberados após a confirmação de ${user.name}.`,
+        title: 'Dodos liberados',
+        message: `Dodos de ${item.title} foram liberados após a confirmação de ${user.name}.`,
         createdAt: serverTimestamp(),
         read: false
       });
@@ -1841,7 +1844,7 @@ export default function App() {
           : currentItem
       )));
       setSuccessRedeemData(null);
-      showToast(`Entrega confirmada. +${item.credits} créditos foram liberados ao doador.`, 'success');
+      showToast(`Entrega confirmada. +${item.credits} Dodos foram liberados ao doador.`, 'success');
     } catch (error) {
       console.error('Erro ao concluir doação:', error);
       showToast('Não foi possível confirmar a entrega. Tente novamente.', 'error');
@@ -1881,7 +1884,7 @@ export default function App() {
           : currentItem
       ));
 
-      showToast('Entrega confirmada. Os créditos do doador foram liberados.', 'success');
+      showToast('Entrega confirmada. Os Dodos do doador foram liberados.', 'success');
     } catch (error) {
       console.error('Erro ao confirmar recebimento do item:', error);
       showToast('Não foi possível confirmar o recebimento. Tente novamente.', 'error');
@@ -1915,7 +1918,7 @@ export default function App() {
 
       if (nextCredits < limitePermitido) {
         showToast(
-          'Saldo insuficiente. Você precisa de mais créditos! Que tal publicar um desapego agora para ganhar créditos?',
+          'Saldo insuficiente. Você precisa de mais Dodos! Que tal publicar um desapego agora para ganhar Dodos?',
           'error'
         );
         return;
@@ -1990,7 +1993,7 @@ export default function App() {
       setUserCredits((prev) => prev + amount);
     }
     if (showFeedback) {
-      showToast(`✨ Parabéns! +${amount} Créditos adicionados (${reason}).`, 'success');
+      showToast(`✨ Parabéns! +${amount} Dodos adicionados (${reason}).`, 'success');
     }
   };
 
@@ -2035,7 +2038,7 @@ export default function App() {
     await handleClaimBonus(10, 'sequência de 30 dias', false);
     setStreakDays(0);
     setLastCheckInDate(null);
-    setCheckInStatus('Créditos resgatados. Comece uma nova sequência amanhã.');
+    setCheckInStatus('Dodos resgatados. Comece uma nova sequência amanhã.');
     localStorage.setItem('ja-doei-streak-days', '0');
     localStorage.removeItem('ja-doei-last-check-in-date');
   };
@@ -2149,19 +2152,28 @@ export default function App() {
             {/* Translucent Card: Credits Balance */}
             <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3.5 border border-white/20 flex items-center justify-between shadow-inner">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#FF8243] flex items-center justify-center text-white shadow-sm shrink-0">
-                  <Coins className="w-5 h-5 animate-pulse" />
-                </div>
+                <img
+                  src={DODO_MASCOT_URL}
+                  alt="Dodo"
+                  className="w-8 h-8 object-contain"
+                />
                 <div>
                   <span className="text-[11px] uppercase tracking-wider text-emerald-100 font-medium block">
-                    Seus créditos
+                    Seus Dodos
                   </span>
-                  <div className="text-lg font-black tracking-tight text-white flex items-center gap-1.5">
+                  <div className="text-2xl font-black tracking-tight text-white flex items-center gap-1.5">
                     <span>{safeUserCredits}</span>
                     <span className="text-xs font-semibold text-emerald-200">
-                      Créditos
+                      Dodos
                     </span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsDodoInfoModalOpen(true)}
+                    className="text-[11px] text-white/90 underline mt-1 block hover:text-white"
+                  >
+                    O que é um Dodo? ⓘ
+                  </button>
                 </div>
               </div>
 
@@ -2448,9 +2460,9 @@ export default function App() {
                             )}
 
                             {/* Floating Credits Badge over Image */}
-                            <div className="absolute bottom-1.5 left-1.5 bg-[#FF7A38] text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full flex items-center shadow-xs z-10">
-                              <Coins className="w-3.5 h-3.5 text-white inline mr-1 shrink-0" />
-                              <span>{item.credits} Créditos</span>
+                            <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
+                              <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
+                              <span>{item.credits} Dodos</span>
                             </div>
 
                             {/* Heart favorite button */}
@@ -2552,9 +2564,9 @@ export default function App() {
                             className="w-full h-full object-cover"
                           />
                           {/* Floating Credits Badge over Image */}
-                          <div className="absolute bottom-1.5 left-1.5 bg-[#FF7A38] text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full flex items-center shadow-xs z-10">
-                            <Coins className="w-3.5 h-3.5 text-white inline mr-1 shrink-0" />
-                            <span>{item.credits} Créditos</span>
+                          <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
+                            <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
+                            <span>{item.credits} Dodos</span>
                           </div>
                           <button
                             onClick={(e) => toggleFavorite(item.id, e)}
@@ -2592,7 +2604,7 @@ export default function App() {
             <div className="p-4 space-y-4">
               {/* Profile Card */}
               {user ? (
-                <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center gap-3">
+                <div className="flex items-center justify-between p-4 bg-white rounded-2xl shadow-xs border border-slate-200/80">
                   <button
                     type="button"
                     onClick={handleOpenEditProfile}
@@ -2615,7 +2627,7 @@ export default function App() {
                       <Pencil className="w-2.5 h-2.5" />
                     </span>
                   </button>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 ml-3">
                     <div className="flex items-center gap-1.5">
                       <h2 className="text-sm font-bold text-slate-800 truncate">
                         {user.name}
@@ -2631,19 +2643,19 @@ export default function App() {
                     <p className="text-[11px] text-slate-500 truncate">{user.email} • São Paulo, SP</p>
                     <div className="mt-2 flex items-center gap-2">
                       <span className="bg-[#FF8243]/10 text-[#FF8243] text-xs font-bold px-2.5 py-0.5 rounded-lg border border-[#FF8243]/20">
-                        {safeUserCredits} Créditos
+                        <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 inline mr-1" />
+                        {safeUserCredits} Dodos
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsDodoInfoModalOpen(true)}
+                        className="text-[10px] font-semibold text-[#14A76C] underline hover:text-[#108958]"
+                      >
+                        O que é um Dodo? ⓘ
+                      </button>
                     </div>
                   </div>
-                  <div className="flex flex-col items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={handleOpenEditProfile}
-                      className="p-2 rounded-full text-slate-400 hover:text-[#14A76C] hover:bg-emerald-50 transition-all"
-                      title="Editar Perfil"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
+                  <div className="flex items-center shrink-0 ml-2">
                     <button
                       type="button"
                       onClick={handleLogout}
@@ -2704,7 +2716,7 @@ export default function App() {
                   <p className="text-[11px] text-amber-50 leading-tight">
                     {isPremium 
                       ? 'Aproveite fretes prioritários, 40% de limite de complemento e selo exclusivo.' 
-                      : 'Desbloqueie até 40% em dinheiro ao faltar créditos, suporte prioritário e selo VIP.'}
+                      : 'Desbloqueie até 40% em dinheiro ao faltar Dodos, suporte prioritário e selo VIP.'}
                   </p>
                 </div>
                 <button
@@ -2761,7 +2773,7 @@ export default function App() {
                       </span>
                     </h3>
                     <p className="text-[10px] text-slate-600 font-medium">
-                      Dúvidas sobre frete, créditos, complemento em R$, doação e regras.
+                      Dúvidas sobre frete, Dodos, complemento em R$, doação e regras.
                     </p>
                   </div>
                 </div>
@@ -2858,7 +2870,7 @@ export default function App() {
                               {item.title}
                             </span>
                             <span className="block text-[10px] text-slate-500 truncate">
-                              {item.category} · {item.credits} créditos
+                              {item.category} · 🦤 {item.credits} Dodos
                             </span>
                           </span>
                           <button
@@ -2944,7 +2956,7 @@ export default function App() {
                             onClick={() => handleCallLalamove(item)}
                             className="w-full px-2 py-2 rounded-md bg-[#14A76C] hover:bg-[#108958] text-white text-[10px] font-bold transition-colors"
                           >
-                            Chamar Carreto Lalamove
+                            Chamar Carreto / Utilitário
                           </button>
                         )}
 
@@ -3129,8 +3141,8 @@ export default function App() {
                       {selectedItemForDetails.category}
                     </span>
                     <span className="bg-[#FF7A38] text-white text-xs font-semibold px-3 py-1 rounded-full shadow-md flex items-center">
-                      <Coins className="w-4 h-4 text-white inline mr-1.5 shrink-0" />
-                      <span>{selectedItemForDetails.credits} Créditos</span>
+                      <span className="mr-1.5 text-sm" aria-hidden="true">🦤</span>
+                      <span>{selectedItemForDetails.credits} Dodos</span>
                     </span>
                   </div>
                 </div>
@@ -3223,7 +3235,7 @@ export default function App() {
                       {currentSelectedFreight && (
                         <span className="text-[10px] font-bold text-[#14A76C] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                           {currentSelectedFreight.id === 'lalamove_partner'
-                            ? 'Frete a pagar direto à Lalamove'
+                            ? 'Transporte Utilitário / Carreto'
                             : currentSelectedFreight.price === 0
                             ? 'Grátis'
                             : `R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}`}
@@ -3272,13 +3284,13 @@ export default function App() {
                               <label
                                 key={opt.id}
                                 onClick={() => setSelectedFreightId(opt.id)}
-                                className={`p-2.5 rounded-xl border-2 flex items-center justify-between cursor-pointer transition-all ${
+                                className={`flex min-w-0 flex-row items-center justify-between gap-2 rounded-xl border-2 p-2.5 cursor-pointer transition-all ${
                                   selectedFreightId === opt.id
                                     ? 'border-[#14A76C] bg-emerald-50/60 shadow-2xs'
                                     : 'border-slate-200 bg-white hover:border-slate-300'
                                 }`}
                               >
-                                <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="flex min-w-0 flex-1 flex-row items-center gap-2.5">
                                   <input
                                     type="radio"
                                     name="freightOption"
@@ -3289,7 +3301,7 @@ export default function App() {
                                   <span className="text-base shrink-0">{opt.icon}</span>
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="text-xs font-bold text-slate-800 truncate">
+                                      <span className="block min-w-0 truncate text-xs font-bold text-slate-800">
                                         {opt.name}
                                       </span>
                                       {opt.badge && (
@@ -3305,9 +3317,9 @@ export default function App() {
                                     </span>
                                   </div>
                                 </div>
-                                <span className={`text-xs font-bold bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 shrink-0 ml-1 ${opt.id === 'lalamove_partner' ? 'text-amber-700' : 'text-slate-900'}`}>
+                                <span className={`max-w-[42%] shrink-0 truncate rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-right text-xs font-bold ${opt.id === 'lalamove_partner' ? 'text-amber-700' : 'text-slate-900'}`}>
                                   {opt.id === 'lalamove_partner'
-                                    ? 'Frete a pagar direto à Lalamove'
+                                    ? 'Transporte Utilitário / Carreto'
                                     : `R$ ${opt.price.toFixed(2).replace('.', ',')}`}
                                 </span>
                               </label>
@@ -3422,11 +3434,11 @@ export default function App() {
 
                 <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3">
                   <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                    <span>Créditos</span>
-                    <span>{editCredits} créditos</span>
+                    <span>Dodos</span>
+                    <span>🦤 {editCredits} Dodos</span>
                   </div>
                   <p className="mt-1 text-[10px] text-slate-500">
-                    Valor base da IA: {editBaseCredits}. Permitido: {Math.max(1, Math.round(editBaseCredits * 0.9))} a {Math.max(1, Math.round(editBaseCredits * 1.1))} créditos (±10%).
+                    Valor base da IA: {editBaseCredits} Dodos. Permitido: {Math.max(1, Math.round(editBaseCredits * 0.9))} a {Math.max(1, Math.round(editBaseCredits * 1.1))} Dodos (±10%).
                   </p>
                   <div className="mt-2 flex items-center gap-3">
                     <button
@@ -3434,7 +3446,7 @@ export default function App() {
                       onClick={() => setEditCredits((current) => Math.max(Math.max(1, Math.round(editBaseCredits * 0.9)), current - 1))}
                       disabled={editCredits <= Math.max(1, Math.round(editBaseCredits * 0.9))}
                       className="h-9 w-9 shrink-0 rounded-full border border-slate-200 bg-white text-lg font-bold text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
-                      title="Reduzir créditos"
+                      title="Reduzir Dodos"
                     >
                       -
                     </button>
@@ -3451,7 +3463,7 @@ export default function App() {
                       onClick={() => setEditCredits((current) => Math.min(Math.max(1, Math.round(editBaseCredits * 1.1)), current + 1))}
                       disabled={editCredits >= Math.max(1, Math.round(editBaseCredits * 1.1))}
                       className="h-9 w-9 shrink-0 rounded-full border border-slate-200 bg-white text-lg font-bold text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
-                      title="Aumentar créditos"
+                      title="Aumentar Dodos"
                     >
                       +
                     </button>
@@ -3727,7 +3739,7 @@ export default function App() {
                             </p>
                             <span className="inline-flex items-center bg-[#FF7A38] text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full shadow-2xs mt-1">
                               <Coins className="w-3.5 h-3.5 text-white inline mr-1 shrink-0" />
-                              <span>Custo: {selectedItemForRedeem.credits} Créditos</span>
+                              <span>🦤 Custo: {selectedItemForRedeem.credits} Dodos</span>
                             </span>
                           </div>
                         </div>
@@ -3985,18 +3997,18 @@ export default function App() {
                         {/* Resumo Discriminado Box */}
                         <div className="text-xs text-slate-700 space-y-2.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
                           <div className="flex justify-between items-center text-slate-600 font-medium">
-                            <span className="text-left text-slate-600 pr-2">Créditos do Item:</span>
-                            <span className="text-right shrink-0 font-black text-slate-800">{itemCost} Créditos</span>
+                            <span className="text-left text-slate-600 pr-2">Dodos do Item:</span>
+                            <span className="text-right shrink-0 font-black text-slate-800">🦤 {itemCost} Dodos</span>
                           </div>
 
                           <div className="flex justify-between items-center text-emerald-700 font-semibold">
-                            <span className="text-left pr-2">Créditos Utilizados:</span>
-                            <span className="text-right shrink-0 font-bold">-{creditsUsed} Cts</span>
+                            <span className="text-left pr-2">Dodos Utilizados:</span>
+                            <span className="text-right shrink-0 font-bold">🦤 -{creditsUsed} Dodos</span>
                           </div>
 
                           {cashComplement > 0 && (
                             <div className="flex justify-between items-center text-[#FF8243] font-bold">
-                              <span className="text-left pr-2">Complemento R$ ({missingCredits} Cts):</span>
+                              <span className="text-left pr-2">Complemento R$ ({missingCredits} Dodos):</span>
                               <span className="text-right shrink-0">R$ {cashComplement.toFixed(2).replace('.', ',')}</span>
                             </div>
                           )}
@@ -4029,11 +4041,11 @@ export default function App() {
                         {!canRedeemWithComplement ? (
                           <div className="p-3 bg-rose-50 rounded-2xl border border-rose-200 text-center space-y-2">
                             <p className="text-xs text-rose-700 font-semibold">
-                              Saldo insuficiente. Você precisa de mais créditos! Que tal publicar um desapego agora para ganhar créditos?
+                              Saldo insuficiente. Você precisa de mais Dodos! Que tal publicar um desapego agora para ganhar Dodos?
                             </p>
                             <p className="text-[10px] text-slate-600">
                               {isPremium
-                                ? 'Acumule mais créditos doando itens ou fazendo check-in!'
+                                ? 'Acumule mais Dodos doando itens ou fazendo check-in!'
                                 : 'Assine o Clube Premium para liberar até 40% de complemento em R$!'}
                             </p>
                             <div className="flex items-center gap-2 pt-1">
@@ -4054,7 +4066,7 @@ export default function App() {
                                 }}
                                 className="flex-1 py-2 bg-[#14A76C] text-white text-xs font-bold rounded-xl shadow-xs"
                               >
-                                Ganhar Créditos
+                                Ganhar Dodos
                               </button>
                             </div>
                           </div>
@@ -4208,7 +4220,7 @@ export default function App() {
                       </h2>
                       {isFirstDonation && (
                         <span className="text-[10px] text-emerald-600 font-semibold block">
-                          Ganhe +20% de créditos bônus na sua primeira doação concluída! ✨
+                          Ganhe +20% de Dodos bônus na sua primeira doação concluída! 🦤✨
                         </span>
                       )}
                     </div>
@@ -4248,7 +4260,7 @@ export default function App() {
                     {donateStep === 1 && (
                       <div className="w-full max-w-full box-border space-y-3">
                         <p className="text-xs font-semibold text-slate-700 text-center px-2">
-                          Passo 1: Tire uma foto e descubra quantos créditos vale seu item ✨
+                          Passo 1: Tire uma foto e descubra quantos Dodos vale seu item 🦤✨
                         </p>
 
                         <input
@@ -4291,7 +4303,7 @@ export default function App() {
                             {aiSuggested && (
                               <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 shadow-lg">
                                 <Sparkles className="w-3 h-3" />
-                                Créditos sugeridos pela IA ✨
+                                Dodos sugeridos pela IA 🦤✨
                               </span>
                             )}
                           </div>
@@ -4428,7 +4440,7 @@ export default function App() {
                             onChange={(event) => setIsLargeItem(event.target.checked)}
                             className="mt-0.5 accent-[#FF8243]"
                           />
-                          <span>Item de Grande Porte / Pesado (Exige furgão ou carreto Lalamove)</span>
+                          <span>Item de Grande Porte / Pesado (Exige furgão ou carreto)</span>
                         </label>
 
                         {isLargeItem && (
@@ -4439,7 +4451,7 @@ export default function App() {
                             </div>
                             <ul className="space-y-1.5 leading-relaxed">
                               <li><strong>Medidas e acesso:</strong> informe na descrição se o item cabe no elevador ou se precisará ser baixado por escadas.</li>
-                              <li><strong>Carregadores:</strong> o motorista da Lalamove faz o transporte, mas não é obrigado a carregar o móvel sozinho. Deixe o item no térreo/garagem ou avise com antecedência para combinar ajudantes.</li>
+                              <li><strong>Carregadores:</strong> o motorista do utilitário faz o transporte, mas não é obrigado a carregar o móvel sozinho. Deixe o item no térreo/garagem ou avise com antecedência para combinar ajudantes.</li>
                               <li><strong>Proteção:</strong> use filme plástico ou material de proteção nas quinas e prenda portas e gavetas para que não abram durante o trajeto.</li>
                               <li><strong>Agendamento:</strong> confirme data e horário da retirada no chat com o recebedor antes de acionar o motorista.</li>
                             </ul>
@@ -4497,7 +4509,7 @@ export default function App() {
                         <div className="w-full max-w-full box-border p-3 rounded-2xl border border-[#14A76C]/20 bg-emerald-50/40">
                           <div className="flex items-center justify-between gap-2 mb-2">
                             <span className="block text-[11px] font-bold text-slate-700">
-                              Valor em Créditos
+                              Valor em Dodos
                             </span>
                             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-800 px-2 py-0.5 border border-emerald-200">
                               <CheckCircle2 className="w-3 h-3" />
@@ -4510,7 +4522,7 @@ export default function App() {
                           <div className="mb-2 rounded-xl border border-emerald-200 bg-white/70 px-2 py-1.5">
                             <div className="flex items-center justify-between text-[10px] font-bold text-slate-600">
                               <span>Faixa permitida</span>
-                              <span>{creditsMin} - {creditsMax} créditos</span>
+                              <span>🦤 {creditsMin} - {creditsMax} Dodos</span>
                             </div>
                             <div className="mt-1 flex items-center justify-between text-[9px] font-medium text-slate-500">
                               <span>Original da IA</span>
@@ -4561,7 +4573,7 @@ export default function App() {
                             {isPricingLoading || isLoadingPricing
                               ? 'Avaliando item com IA...'
                               : creditsMin > 0 && creditsMax > 0
-                              ? `Limite permitido: ${creditsMin} a ${creditsMax} créditos (±10%)`
+                              ? `Limite permitido: ${creditsMin} a ${creditsMax} Dodos (±10%)`
                               : 'Aguardando título...'}
                           </p>
                           {pricingJustification && !isPricingAnalyzing && (
@@ -4644,20 +4656,20 @@ export default function App() {
                         {/* Credits breakdown card */}
                         <div className="w-full max-w-full box-border p-3 rounded-2xl border border-[#14A76C]/20 bg-emerald-50/40 space-y-1.5">
                           <div className="flex items-center justify-between text-[11px] text-slate-600">
-                            <span>Créditos do Item</span>
-                            <span className="font-semibold text-slate-800">{newCredits ?? 'Aguardando'} créditos</span>
+                            <span>Dodos do Item</span>
+                            <span className="font-semibold text-slate-800">🦤 {newCredits ?? 'Aguardando'} Dodos</span>
                           </div>
                           {isFirstDonation && (
                             <div className="flex items-center justify-between text-[11px] text-slate-600">
                               <span>Bônus da 1ª Doação (20%)</span>
-                              <span className="font-semibold text-[#14A76C]">+{firstDonationBonus} créditos</span>
+                              <span className="font-semibold text-[#14A76C]">+{firstDonationBonus} Dodos</span>
                             </div>
                           )}
                           <div className="flex items-center justify-between pt-1.5 border-t border-[#14A76C]/20 text-xs font-bold text-slate-800">
                             <span>Total a receber</span>
                             <span className="flex items-center gap-1 text-[#14A76C]">
                               <Coins className="w-3.5 h-3.5" />
-                              {newCredits !== null ? newCredits + firstDonationBonus : 'Aguardando'} créditos
+                              🦤 {newCredits !== null ? newCredits + firstDonationBonus : 'Aguardando'} Dodos
                             </span>
                           </div>
                         </div>
@@ -4691,7 +4703,7 @@ export default function App() {
                         </div>
 
                         <p className="text-[10px] text-slate-400 text-center px-2">
-                          Os créditos e o bônus serão liberados na sua conta assim que a entrega do produto for confirmada pelo recebedor.
+                          Os Dodos e o bônus serão liberados na sua conta assim que a entrega do produto for confirmada pelo recebedor.
                         </p>
                       </div>
                     )}
@@ -4738,6 +4750,57 @@ export default function App() {
                     )}
                   </div>
                 </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* MODAL: INFORMAÇÕES SOBRE O DODO */}
+        <AnimatePresence>
+          {isDodoInfoModalOpen && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.94, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.94, y: 16 }}
+                className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+              >
+                <div className="bg-[#14A76C] px-5 pb-4 pt-5 text-center">
+                  <img
+                    src={DODO_MASCOT_URL}
+                    alt="Dodo"
+                    className="w-20 h-20 mx-auto mb-2 object-contain filter drop-shadow-md"
+                  />
+                  <h2 className="text-base font-black text-white">🦤 O Manifesto do Dodo</h2>
+                </div>
+
+                <div className="space-y-3 p-5">
+                  <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+                    <h3 className="text-xs font-extrabold text-emerald-900">Símbolo da Regeneração</h3>
+                    <p className="mt-1 text-[11px] leading-relaxed text-emerald-950">
+                      O Dodo renasce no Já Doei como o guardião da economia circular e do cuidado com o planeta.
+                    </p>
+                  </section>
+                  <section className="rounded-2xl border border-orange-200 bg-orange-50 p-3">
+                    <h3 className="text-xs font-extrabold text-orange-900">Inspirado em Doar</h3>
+                    <p className="mt-1 text-[11px] leading-relaxed text-orange-950">
+                      O nome faz alusão direta ao ato de DOAR. Cada Dodo acumulado representa o impacto positivo do seu desapego na comunidade.
+                    </p>
+                  </section>
+                  <section className="rounded-2xl border border-sky-200 bg-sky-50 p-3">
+                    <h3 className="text-xs font-extrabold text-sky-900">Não é Dinheiro</h3>
+                    <p className="mt-1 text-[11px] leading-relaxed text-sky-950">
+                      Dodos não são moedas bancárias, mas sim créditos de generosidade para resgatar novos itens 100% grátis.
+                    </p>
+                  </section>
+                  <button
+                    type="button"
+                    onClick={() => setIsDodoInfoModalOpen(false)}
+                    className="w-full rounded-xl bg-[#14A76C] py-3 text-xs font-bold text-white shadow-md transition-colors hover:bg-[#108958]"
+                  >
+                    Entendi, vamos circular! 🚀
+                  </button>
+                </div>
               </motion.div>
             </div>
           )}
@@ -4866,7 +4929,7 @@ export default function App() {
                   <div className="space-y-2 overflow-y-auto no-scrollbar">
                     {notifications.map((notification) => {
                       const isDeliveryNotification = notification.title.toLowerCase().includes('envio');
-                      const isCreditNotification = notification.title.toLowerCase().includes('crédito');
+                      const isCreditNotification = notification.title.toLowerCase().includes('crédito') || notification.title.toLowerCase().includes('dodo');
                       const NotificationIcon = isDeliveryNotification
                         ? Truck
                         : isCreditNotification
@@ -4953,7 +5016,7 @@ export default function App() {
                       <Sparkles className="w-4 h-4" />
                     </div>
                     <h3 className="text-sm font-bold text-slate-800">
-                      Como ganhar mais créditos
+                      Como ganhar mais Dodos
                     </h3>
                   </div>
                   <button
@@ -4975,7 +5038,7 @@ export default function App() {
                     className="p-3 rounded-xl border border-slate-200 hover:border-[#14A76C] bg-slate-50 hover:bg-emerald-50/50 cursor-pointer transition-all group"
                   >
                     <h4 className="text-xs font-bold text-slate-800 group-hover:text-[#14A76C]">
-                      Ganhe 20% dos créditos finalizados na primeira doação
+                      Ganhe 20% dos Dodos finalizados na primeira doação
                     </h4>
                   </div>
 
@@ -4984,7 +5047,7 @@ export default function App() {
                     className="p-3 rounded-xl border border-slate-200 bg-slate-50 group"
                   >
                     <h4 className="text-xs font-bold text-slate-800 group-hover:text-[#FF8243]">
-                      Realize login diariamente durante 30 dias seguidos e ao final ganhe 10 créditos
+                      Realize login diariamente durante 30 dias seguidos e ao final ganhe 10 Dodos
                     </h4>
                     <div className="mt-2">
                       <div className="mb-1 flex items-center justify-between text-[10px] font-bold text-slate-600">
@@ -5010,7 +5073,7 @@ export default function App() {
                   disabled={streakDays < 30}
                   className="w-full rounded-xl bg-[#FF8243] py-2.5 text-xs font-bold text-white transition-all hover:bg-[#ff712b] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
                 >
-                  {streakDays === 30 ? 'Resgatar 10 Créditos' : `Resgatar 10 Créditos (${streakDays}/30 dias)`}
+                  {streakDays === 30 ? 'Resgatar 10 Dodos' : `Resgatar 10 Dodos (${streakDays}/30 dias)`}
                 </button>
 
                 <button
@@ -5199,9 +5262,9 @@ export default function App() {
                                   {item.category}
                                 </span>
                                 {/* Floating Credits Badge over Image */}
-                                <div className="absolute bottom-1.5 left-1.5 bg-[#FF7A38] text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full flex items-center shadow-xs z-10">
-                                  <Coins className="w-3.5 h-3.5 text-white inline mr-1 shrink-0" />
-                                  <span>{item.credits} Créditos</span>
+                                <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
+                                  <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
+                                  <span>{item.credits} Dodos</span>
                                 </div>
                               </div>
                               <div className="mt-1.5">
@@ -5308,7 +5371,7 @@ export default function App() {
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-[#14A76C] shrink-0 mt-0.5" />
                         <span>
-                          <strong className="text-slate-900">Complemento de até 40% em R$:</strong> Ao faltar créditos para um resgate, parcele até 40% em dinheiro (usuários comuns têm até 30%).
+                          <strong className="text-slate-900">Complemento de até 40% em R$:</strong> Ao faltar Dodos para um resgate, parcele até 40% em dinheiro (usuários comuns têm até 30%).
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
@@ -5493,7 +5556,7 @@ export default function App() {
                           </div>
                           <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-2xs">
                             <span className="w-5 h-5 bg-[#FF8243] text-white font-bold text-[10px] rounded-full flex items-center justify-center mx-auto mb-1">2</span>
-                            <span className="text-[10px] font-bold text-slate-800 block">Ganhar Créditos</span>
+                            <span className="text-[10px] font-bold text-slate-800 block">Ganhar Dodos</span>
                             <span className="text-[9px] text-slate-500">Saldo acumulativo</span>
                           </div>
                           <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-2xs">
@@ -5547,20 +5610,20 @@ export default function App() {
                       <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
                         <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
                           <Coins className="w-4 h-4 text-[#FF8243]" />
-                          <span>Como funcionam os Créditos Já Doei?</span>
+                          <span>Como funcionam os Dodos Já Doei?</span>
                         </h4>
                         <p className="text-[11px] text-slate-600 leading-relaxed">
-                          Cada doação aprovada te premia com créditos proporcionais ao valor estimado do item. Você acumula saldo e pode trocá-lo por qualquer outro produto disponível na plataforma.
+                          Cada doação aprovada te premia com Dodos proporcionais ao valor estimado do item. Você acumula saldo e pode trocá-lo por qualquer outro produto disponível na plataforma.
                         </p>
                       </div>
 
                       <div className="p-3 bg-emerald-50/60 rounded-2xl border border-emerald-200/70 space-y-1">
                         <h4 className="text-xs font-extrabold text-[#14A76C] flex items-center gap-1.5">
                           <Clock className="w-4 h-4 text-[#14A76C]" />
-                          <span>Quando meus créditos expiram?</span>
+                          <span>Quando meus Dodos expiram?</span>
                         </h4>
                         <p className="text-[11px] text-slate-700 font-medium leading-relaxed">
-                          <strong>NUNCA!</strong> Seus créditos não possuem data de expiração e permanecem seguros no seu saldo para usar quando desejar.
+                          <strong>NUNCA!</strong> Seus Dodos não possuem data de expiração e permanecem seguros no seu saldo para usar quando desejar.
                         </p>
                       </div>
 
@@ -5595,8 +5658,8 @@ export default function App() {
                           <span>Complemento em R$ (30% vs 40%)</span>
                         </h4>
                         <p className="text-[11px] text-slate-700 leading-relaxed">
-                          Se faltar créditos para resgatar um item, você pode pagar a diferença em dinheiro:
-                          <br />• <strong>Usuários Comuns:</strong> Complemento em R$ de até 30% do valor dos créditos.
+                          Se faltar Dodos para resgatar um item, você pode pagar a diferença em dinheiro:
+                          <br />• <strong>Usuários Comuns:</strong> Complemento em R$ de até 30% do valor dos Dodos.
                           <br />• <strong>👑 Clube Premium:</strong> Complemento em R$ ampliado para até 40%!
                         </p>
                       </div>
@@ -5607,7 +5670,7 @@ export default function App() {
                           <span>Como funciona o Seguro de Troca (R$ 1,99)?</span>
                         </h4>
                         <p className="text-[11px] text-slate-700 leading-relaxed">
-                          Ao adicionar o Seguro de Troca por R$ 1,99 no checkout, você garante reembolso total dos seus créditos e do valor do frete caso o produto chegue danificado ou diferente do anunciado.
+                          Ao adicionar o Seguro de Troca por R$ 1,99 no checkout, você garante reembolso total dos seus Dodos e do valor do frete caso o produto chegue danificado ou diferente do anunciado.
                         </p>
                       </div>
                     </div>
@@ -5670,7 +5733,7 @@ export default function App() {
                       </div>
                     </div>
                     <p className="text-[11px] text-slate-300 leading-snug">
-                      Tire suas dúvidas em tempo real sobre fretes, créditos, assinatura do Clube Premium ou doações.
+                      Tire suas dúvidas em tempo real sobre fretes, Dodos, assinatura do Clube Premium ou doações.
                     </p>
                     <button
                       type="button"
@@ -5760,10 +5823,10 @@ export default function App() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleSendIaMessage("Quando meus créditos expiram?")}
+                    onClick={() => handleSendIaMessage("Quando meus Dodos expiram?")}
                     className="px-2.5 py-1 bg-white hover:bg-emerald-50 text-slate-700 hover:text-[#14A76C] text-[10px] font-bold rounded-lg border border-slate-200/90 whitespace-nowrap active:scale-95 transition-all"
                   >
-                    🪙 Quando meus créditos expiram?
+                    🦤 Quando meus Dodos expiram?
                   </button>
                   <button
                     type="button"
@@ -5895,7 +5958,7 @@ export default function App() {
                         </span>
                         <div className="text-[10px] font-semibold text-white bg-[#FF7A38] px-2.5 py-0.5 rounded-full inline-flex items-center shadow-2xs">
                           <Coins className="w-3.5 h-3.5 text-white inline mr-1 shrink-0" />
-                          <span>{successRedeemData.creditsUsed} Créditos</span>
+                          <span>🦤 {successRedeemData.creditsUsed} Dodos</span>
                           {successRedeemData.totalCashPaid > 0 && (
                             <span className="ml-1 text-amber-100">+ R$ {successRedeemData.totalCashPaid.toFixed(2).replace('.', ',')}</span>
                           )}
@@ -6238,6 +6301,19 @@ export default function App() {
                     <h3 className="text-sm font-extrabold text-slate-800">Como funciona o envio do produto</h3>
                   </div>
 
+                  {selectedItemForDetails?.isLargeItem ? (
+                  <div className="space-y-3 text-left">
+                    <div className="rounded-2xl border border-amber-300 bg-amber-50/80 p-3">
+                      <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-amber-900">🚛 Como doar itens de Grande Porte</p>
+                      <ul className="space-y-1.5 text-[11px] leading-relaxed text-amber-950">
+                        <li><strong>Agendamento:</strong> confirme a data e o horário da retirada via chat com o recebedor antes de acionar o motorista.</li>
+                        <li><strong>Desmonte e proteção:</strong> desmonte o que for possível, passe filme plástico nas quinas e prenda portas e gavetas.</li>
+                        <li><strong>Acesso:</strong> informe as medidas e se o móvel cabe no elevador ou precisará descer por escadas. Deixe-o no térreo ou na garagem quando possível.</li>
+                        <li><strong>Transporte:</strong> o utilitário realiza o transporte; confirme previamente a necessidade de ajudantes para carregar o móvel até o veículo.</li>
+                      </ul>
+                    </div>
+                  </div>
+                  ) : (
                   <div className="space-y-3 text-left">
                       <div className="rounded-2xl bg-white p-3 border border-slate-200">
                         <p className="text-[11px] font-bold uppercase tracking-wide text-[#14A76C] mb-2">1. Etiqueta</p>
@@ -6258,19 +6334,7 @@ export default function App() {
                         </p>
                       </div>
                   </div>
-
-                  <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50/80 p-3 text-left">
-                    <div className="mb-2 flex items-center gap-1.5 text-[11px] font-extrabold text-amber-900">
-                      <Truck className="h-4 w-4 text-[#FF8243]" />
-                      <span>🚛 Como doar itens de Grande Porte</span>
-                    </div>
-                    <ul className="space-y-1.5 text-[11px] leading-relaxed text-amber-950">
-                      <li><strong>Medidas e acesso:</strong> informe na descrição se o item cabe no elevador ou se precisará ser baixado por escadas.</li>
-                      <li><strong>Ajudantes:</strong> o motorista do utilitário Lalamove faz apenas o transporte e não é obrigado a carregar o móvel sozinho até o veículo. Deixe o item no térreo/garagem ou avise com antecedência.</li>
-                      <li><strong>Proteção do móvel:</strong> passe filme plástico ou material de proteção nas quinas e prenda portas para não abrirem durante o trajeto.</li>
-                      <li><strong>Agendamento:</strong> confirme a data e o horário da retirada via chat com o recebedor antes de acionar o motorista.</li>
-                    </ul>
-                  </div>
+                  )}
 
                   <div className="mt-4 rounded-2xl border border-[#FF8243]/25 bg-[#FF8243]/10 p-3">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-[#FF8243] mb-2">Recomendação de segurança</p>
