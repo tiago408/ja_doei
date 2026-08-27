@@ -1195,12 +1195,12 @@ export default function App() {
     setNewCredits(Math.min(creditsMax, Math.max(creditsMin, raw)));
   };
 
-  // First-donation bonus: +15% of the item's credits, granted only before the user's first donation
+  // First-donation bonus: +20% of the item's credits, granted only before the user's first donation
   const isFirstDonation = useMemo(
-    () => !items.some((i) => (user ? i.userId === user.uid : false) || i.donorName === 'Você'),
+    () => user ? !items.some((item) => item.userId === user.uid) : true,
     [items, user]
   );
-  const firstDonationBonus = isFirstDonation ? Math.round(newCredits * 0.15) : 0;
+  const firstDonationBonus = isFirstDonation ? Math.round(newCredits * 0.20) : 0;
 
   const resizeImageForAnalysis = (file: File): Promise<string> => new Promise((resolve, reject) => {
     const image = new Image();
@@ -3962,9 +3962,11 @@ export default function App() {
                       <h2 className="text-sm font-bold text-slate-800">
                         Cadastrar nova doação
                       </h2>
-                      <span className="text-[10px] text-emerald-600 font-semibold block">
-                        Ganhe +15% de créditos bônus na sua primeira doação concluída! ✨
-                      </span>
+                      {isFirstDonation && (
+                        <span className="text-[10px] text-emerald-600 font-semibold block">
+                          Ganhe +20% de créditos bônus na sua primeira doação concluída! ✨
+                        </span>
+                      )}
                     </div>
                   </div>
                   <button
@@ -4388,7 +4390,7 @@ export default function App() {
                           </div>
                           {isFirstDonation && (
                             <div className="flex items-center justify-between text-[11px] text-slate-600">
-                              <span>Bônus da 1ª Doação (15%)</span>
+                              <span>Bônus da 1ª Doação (20%)</span>
                               <span className="font-semibold text-[#14A76C]">+{firstDonationBonus} créditos</span>
                             </div>
                           )}
