@@ -11,6 +11,37 @@ export interface EvaluationResult {
   justification: string;
 }
 
+// Função auxiliar para comprimir a imagem antes de enviar à API (evita demora/timeout)
+async function compressBase64Image(base64Str: string, maxWidth = 1024, quality = 0.7): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str.startsWith('data:') ? base64Str : `data:image/jpeg;base64,${base64Str}`;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressed.replace(/^data:image\/\w+;base64,/, ''));
+      } else {
+        resolve(base64Str.replace(/^data:image\/\w+;base64,/, ''));
+      }
+    };
+    img.onerror = () => resolve(base64Str.replace(/^data:image\/\w+;base64,/, ''));
+  });
+}
+
 export async function evaluateItemWithGemini(
   imageBase64?: string,
   titleText?: string,
@@ -50,10 +81,11 @@ export async function evaluateItemWithGemini(
     const contents: Array<string | Part> = [prompt];
 
     if (imageBase64) {
-      const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      // Redimensiona/comprime a imagem antes de anexar ao envio
+      const optimizedBase64 = await compressBase64Image(imageBase64);
       const imagePart: Part = {
         inlineData: {
-          data: cleanBase64,
+          data: optimizedBase64,
           mimeType: 'image/jpeg'
         }
       } as Part;
