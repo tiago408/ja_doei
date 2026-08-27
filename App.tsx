@@ -4532,11 +4532,11 @@ export default function App() {
                               void handleNotificationClick(notification);
                             }
                           }}
-                          className={`relative p-3 rounded-xl border border-slate-200 flex items-start gap-2.5 ${notification.read ? 'bg-white' : 'bg-emerald-50/60'}`}
+                          className={`relative border-l-4 p-3 rounded-xl flex items-start gap-2.5 ${notification.read ? 'border border-slate-200 border-l-4 border-l-transparent bg-gray-50' : 'border border-emerald-300 border-l-4 border-l-emerald-600 bg-emerald-100/70'}`}
                         >
                           {!notification.read && (
                             <span
-                              className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full bg-emerald-500"
+                              className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full bg-emerald-600 ring-2 ring-emerald-200"
                               aria-label="Não lida"
                             />
                           )}
@@ -4544,10 +4544,10 @@ export default function App() {
                             <NotificationIcon className="w-4 h-4" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h4 className={`text-xs ${notification.read ? 'font-medium text-gray-600' : 'font-semibold text-gray-900'}`}>
+                            <h4 className={`text-xs ${notification.read ? 'font-medium text-gray-600' : 'font-bold text-gray-900'}`}>
                               {notification.title}
                             </h4>
-                            <p className={`text-[11px] leading-snug ${notification.read ? 'text-gray-600' : 'text-slate-600'}`}>
+                            <p className={`text-[11px] leading-snug ${notification.read ? 'text-gray-600' : 'text-gray-800'}`}>
                               {notification.message}
                             </p>
                             <span className="text-[10px] text-slate-400 mt-0.5 block">
