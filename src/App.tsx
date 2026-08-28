@@ -1045,11 +1045,14 @@ export default function App() {
   const [donateStep, setDonateStep] = useState<number>(1);
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
   const [newExtraPhotos, setNewExtraPhotos] = useState<string[]>([]);
+  const [isCapturingExtraPhoto, setIsCapturingExtraPhoto] = useState<boolean>(false);
+  const [extraPhotoCameraError, setExtraPhotoCameraError] = useState<string>('');
   const [isSubmittingDonation, setIsSubmittingDonation] = useState<boolean>(false);
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'publishing'>('idle');
   const pricingRequestId = useRef(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const extraPhotoVideoRef = useRef<HTMLVideoElement>(null);
 
   const resetForm = () => {
     setNewTitle('');
@@ -1086,6 +1089,48 @@ export default function App() {
       setDonateStep(1);
     }
   }, [isDonateModalOpen]);
+
+  useEffect(() => {
+    if (!isCapturingExtraPhoto) return;
+
+    let stream: MediaStream | null = null;
+    let isCancelled = false;
+
+    const startCamera = async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Camera indisponível neste navegador.');
+        }
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false
+        });
+
+        if (isCancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        const video = extraPhotoVideoRef.current;
+        if (video) {
+          video.srcObject = stream;
+          await video.play();
+        }
+      } catch (error) {
+        console.error('Erro ao acessar a câmera para foto complementar:', error);
+        setExtraPhotoCameraError('Não foi possível acessar a câmera. Verifique a permissão e tente novamente.');
+      }
+    };
+
+    void startCamera();
+
+    return () => {
+      isCancelled = true;
+      stream?.getTracks().forEach((track) => track.stop());
+      if (extraPhotoVideoRef.current) extraPhotoVideoRef.current.srcObject = null;
+    };
+  }, [isCapturingExtraPhoto]);
 
   const handleCalculatePricing = async (
     conditionOverride = newCondition,
@@ -1344,22 +1389,27 @@ export default function App() {
 
   const MAX_EXTRA_PHOTOS = 4;
 
-  // Reads up to the remaining slots of extra (complementary) photos
-  const handleExtraPhotosFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (!files.length) return;
+  const handleOpenExtraPhotoCamera = () => {
+    if (newExtraPhotos.length >= MAX_EXTRA_PHOTOS) return;
+    setExtraPhotoCameraError('');
+    setIsCapturingExtraPhoto(true);
+  };
 
-    const remainingSlots = MAX_EXTRA_PHOTOS - newExtraPhotos.length;
-    files.slice(0, remainingSlots).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setNewExtraPhotos((prev) => [...prev, reader.result as string].slice(0, MAX_EXTRA_PHOTOS));
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-    e.target.value = '';
+  const handleCaptureExtraPhoto = () => {
+    const video = extraPhotoVideoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      setExtraPhotoCameraError('A câmera ainda está sendo preparada. Tente novamente em alguns instantes.');
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = canvas.toDataURL('image/jpeg', 0.9);
+
+    setNewExtraPhotos((previousPhotos) => [...previousPhotos, imageData].slice(0, MAX_EXTRA_PHOTOS));
+    setIsCapturingExtraPhoto(false);
   };
 
   const handleRemoveExtraPhoto = (index: number) => {
@@ -4348,16 +4398,8 @@ export default function App() {
                         {/* Complementary photos gallery */}
                         <div className="w-full max-w-full box-border">
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Fotos Complementares (Opcional - até 4 fotos)
+                            Fotos Complementares via Câmera (Opcional - até 4 fotos)
                           </label>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            className="hidden"
-                            id="extra-photos-upload"
-                            onChange={handleExtraPhotosFileChange}
-                          />
                           <div className="flex flex-wrap gap-2">
                             {newExtraPhotos.map((photo, index) => (
                               <div key={index} className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 shrink-0">
@@ -4373,12 +4415,14 @@ export default function App() {
                               </div>
                             ))}
                             {newExtraPhotos.length < MAX_EXTRA_PHOTOS && (
-                              <label
-                                htmlFor="extra-photos-upload"
+                              <button
+                                type="button"
+                                onClick={handleOpenExtraPhotoCamera}
                                 className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:border-[#14A76C]/50 flex items-center justify-center cursor-pointer transition-all shrink-0"
+                                title="Capturar foto complementar"
                               >
                                 <Plus className="w-5 h-5" />
-                              </label>
+                              </button>
                             )}
                           </div>
                         </div>
@@ -4743,6 +4787,66 @@ export default function App() {
                     )}
                   </div>
                 </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* MODAL: CAPTURAR FOTO COMPLEMENTAR */}
+        <AnimatePresence>
+          {isCapturingExtraPhoto && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/75 p-4 backdrop-blur-xs">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 16 }}
+                className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+              >
+                <div className="flex items-center justify-between border-b border-slate-200 p-4">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-800">Capturar foto complementar</h2>
+                    <p className="text-[11px] text-slate-500">Use a câmera traseira para registrar o item.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsCapturingExtraPhoto(false)}
+                    className="rounded-full p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                    title="Fechar câmera"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="bg-slate-950 p-3">
+                  <video
+                    ref={extraPhotoVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="aspect-[3/4] w-full rounded-xl object-cover"
+                  />
+                </div>
+                <div className="space-y-2 p-4">
+                  {extraPhotoCameraError && (
+                    <p className="rounded-lg bg-rose-50 p-2 text-[11px] font-medium text-rose-700">
+                      {extraPhotoCameraError}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleCaptureExtraPhoto}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#14A76C] py-3 text-xs font-bold text-white shadow-md transition-all hover:bg-[#108958] active:scale-98"
+                  >
+                    <Camera className="w-4 h-4" />
+                    Capturar Foto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsCapturingExtraPhoto(false)}
+                    className="w-full rounded-xl py-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    Cancelar
+                  </button>
+                </div>
               </motion.div>
             </div>
           )}
