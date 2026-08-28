@@ -2150,12 +2150,12 @@ export default function App() {
             {/* Translucent Card: Credits Balance */}
             <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3.5 border border-white/20 flex items-center justify-between shadow-inner">
               <div className="flex items-center gap-3">
-                <span className="text-2xl mr-2">🦤</span>
+                <span className="text-3xl leading-none">🦤</span>
                 <div>
                   <span className="text-[11px] uppercase tracking-wider text-emerald-100 font-medium block">
                     Seus Dodos
                   </span>
-                  <div className="text-2xl font-black tracking-tight text-white flex items-center gap-1.5">
+                  <div className="text-2xl font-black tracking-tight text-white flex items-baseline gap-1">
                     <span>{safeUserCredits}</span>
                     <span className="text-xs font-semibold text-emerald-200">
                       Dodos
@@ -2164,7 +2164,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setIsDodoInfoModalOpen(true)}
-                    className="text-[11px] text-white/90 underline mt-1 block hover:text-white"
+                    className="text-[11px] text-white/90 underline mt-0.5 block hover:text-white"
                   >
                     O que é um Dodo? ⓘ
                   </button>
@@ -2635,21 +2635,20 @@ export default function App() {
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-500 truncate">{user.email} • São Paulo, SP</p>
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="bg-[#FF8243]/10 text-[#FF8243] text-xs font-bold px-2.5 py-0.5 rounded-lg border border-[#FF8243]/20">
-                        <span className="text-sm">🦤</span>
-                        {safeUserCredits} Dodos
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className="bg-[#FF8243]/10 text-[#FF8243] text-xs font-bold px-2.5 py-1 rounded-lg border border-[#FF8243]/20 flex items-center gap-1">
+                        🦤 {safeUserCredits} Dodos
                       </span>
                       <button
                         type="button"
                         onClick={() => setIsDodoInfoModalOpen(true)}
-                        className="text-[10px] font-semibold text-[#14A76C] underline hover:text-[#108958]"
+                        className="text-xs font-bold text-[#14A76C] underline hover:text-[#108958]"
                       >
                         O que é um Dodo? ⓘ
                       </button>
                     </div>
                   </div>
-                  <div className="flex items-center shrink-0 ml-2">
+                  <div className="flex items-center shrink-0 ml-3 p-1">
                     <button
                       type="button"
                       onClick={handleLogout}
