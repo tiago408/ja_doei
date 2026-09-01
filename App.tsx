@@ -622,7 +622,7 @@ export default function App() {
         };
         setUser(nextUser);
         if (nextUser.city || nextUser.location) {
-          setNewLocation(nextUser.city?.trim() || nextUser.location?.trim() || 'São Paulo, SP');
+          setNewLocation(nextUser.city?.trim() || nextUser.location?.trim() || '');
         }
       } else {
         setUser(null);
