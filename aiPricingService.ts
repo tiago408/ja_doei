@@ -11,8 +11,7 @@ export interface EvaluationResult {
   justification: string;
   isInvalid?: boolean;
   reason?: string;
-  [key: string]: any;
-}
+  [key: string]: unknown;
 
 export async function evaluateItemWithGemini(
   imageBase64?: string,
