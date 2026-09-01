@@ -599,9 +599,6 @@ export default function App() {
           location: profile.location
         };
         setUser(nextUser);
-        if (nextUser.city || nextUser.location) {
-          setNewLocation(nextUser.city?.trim() || nextUser.location?.trim() || userLocationLabel);
-        }
       } else {
         setUser(null);
       }
@@ -1016,7 +1013,7 @@ export default function App() {
   const [newCredits, setNewCredits] = useState<number>(100);
   const [suggestedCredits, setSuggestedCredits] = useState<number>(100);
   const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
-  const [newLocation, setNewLocation] = useState(() => user?.city ? `${user.city}, SP` : userLocationLabel);
+  const [newLocation, setNewLocation] = useState('');
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -1050,7 +1047,7 @@ export default function App() {
     setNewCategory('Música & Instrumentos');
     setNewCredits(100);
     setSuggestedCredits(100);
-    setNewLocation(user?.city ? `${user.city}, SP` : userLocationLabel);
+    setNewLocation('');
     setNewCondition('Usado - Excelente');
     setNewImageUrl('');
     setNewDescription('');
@@ -1107,9 +1104,9 @@ export default function App() {
   useEffect(() => {
     if (isDonateModalOpen) {
       setDonateStep(1);
-      setNewLocation(user?.city ? `${user.city}, SP` : userLocationLabel);
+      setNewLocation('');
     }
-  }, [isDonateModalOpen, user?.city, userLocationLabel]);
+  }, [isDonateModalOpen]);
 
   useEffect(() => {
     if (!isCapturingExtraPhoto) return;
@@ -4524,7 +4521,8 @@ export default function App() {
                               type="text"
                               value={newLocation}
                               onChange={(e) => setNewLocation(e.target.value)}
-                              placeholder="Ex: Centro, Cotia - SP"
+                              placeholder="Digite a localização (ex: Bairro, Cidade - UF)"
+                              required
                               className="w-full px-3 py-2 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                             />
                             <button
