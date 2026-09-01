@@ -1057,6 +1057,7 @@ export default function App() {
   const [isSubmittingDonation, setIsSubmittingDonation] = useState<boolean>(false);
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'publishing'>('idle');
+  const [isItemInvalid, setIsItemInvalid] = useState<boolean>(false);
   const pricingRequestId = useRef(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -1090,6 +1091,7 @@ export default function App() {
     setIsSubmittingDonation(false);
     setNewImageFile(null);
     setUploadPhase('idle');
+    setIsItemInvalid(false);
   };
 
   useEffect(() => {
@@ -1318,6 +1320,7 @@ export default function App() {
     setIsAnalyzingImage(true);
     setIsLoadingPricing(true);
     setIsPricingLoading(true);
+    setIsItemInvalid(false);
 
     try {
       const base64Image = await resizeImageForAnalysis(file);
@@ -1327,6 +1330,24 @@ export default function App() {
       const category = newCategory;
       const condition = newCondition;
       const result = await evaluateItemWithGemini(base64Image, title, category, condition);
+
+      const blockedTerms = ['selfie', 'pessoa', 'rosto', 'animal', 'inválid', 'invalid'];
+      const isBlockedByTitle = blockedTerms.some((term) => (result?.title || '').toLowerCase().includes(term));
+
+      if (result?.isInvalid || isBlockedByTitle) {
+        setIsItemInvalid(true);
+        setNewCredits(0);
+        setSuggestedCredits(0);
+        setCreditsMin(0);
+        setCreditsMax(0);
+        setPricingJustification('');
+        setAiSuggested(false);
+        showToast(
+          result?.invalidReason || 'Esta foto não é permitida (pessoas, animais ou itens proibidos). Tire a foto de um objeto válido.',
+          'error'
+        );
+        return;
+      }
 
       if (result) {
         if (!newTitle.trim()) setNewTitle(result.title);
@@ -1700,6 +1721,10 @@ export default function App() {
         showToast('Tire uma foto para a IA calcular os Dodos.', 'error');
         return;
       }
+      if (isItemInvalid) {
+        showToast('Esta foto não é permitida. Tire uma nova foto de um objeto válido para continuar.', 'error');
+        return;
+      }
       setDonateStep(2);
       return;
     }
@@ -1715,6 +1740,11 @@ export default function App() {
 
     if (!newTitle.trim()) {
       showToast('Por favor, informe o título do item.', 'error');
+      return;
+    }
+
+    if (isItemInvalid) {
+      showToast('Esta foto não é permitida. Tire uma nova foto de um objeto válido para continuar.', 'error');
       return;
     }
 
@@ -4317,6 +4347,7 @@ export default function App() {
                                 setNewImageFile(null);
                                 setIsAnalyzingImage(false);
                                 setAiSuggested(false);
+                                setIsItemInvalid(false);
                               }}
                               className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-900/60 text-white hover:bg-slate-900/80 transition-all"
                               title="Remover foto"
@@ -4349,6 +4380,13 @@ export default function App() {
                           <div className="flex items-center gap-2 rounded-xl border border-[#14A76C]/20 bg-emerald-50 p-2 text-[11px] font-semibold text-[#14A76C]">
                             <Sparkles className="w-4 h-4 animate-pulse" />
                             <span>Analisando imagem via IA...</span>
+                          </div>
+                        )}
+
+                        {isItemInvalid && (
+                          <div className="flex items-start gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-[11px] font-semibold text-rose-700">
+                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                            <span>Esta foto não é permitida (pessoas, animais ou itens proibidos). Remova a foto e tire uma nova de um objeto válido para continuar.</span>
                           </div>
                         )}
                       </div>
@@ -4804,7 +4842,8 @@ export default function App() {
                     {donateStep < 3 ? (
                       <button
                         type="submit"
-                        className="flex-1 px-5 py-2.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                        disabled={donateStep === 1 && isItemInvalid}
+                        className="flex-1 px-5 py-2.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <span>Continuar</span>
                         <ChevronRight className="w-4 h-4" />
