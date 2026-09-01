@@ -651,12 +651,6 @@ export default function App() {
     );
   }, []);
 
-  useEffect(() => {
-    const placeholderLocations = ['São Paulo, SP', 'Cotia, SP', 'Localização atual', 'Localização atual (GPS)', 'Carregando...', ''];
-    if (!placeholderLocations.includes(newLocation.trim())) return;
-    setNewLocation(getInitialLocation());
-  }, [user?.uid, user?.city, user?.location, userLocationLabel]);
-
   // Syncs the credits balance in real time from the users/{uid} Firestore document
   useEffect(() => {
     if (!user?.uid) {
@@ -1017,21 +1011,12 @@ export default function App() {
   const getProfileLocation = () => user?.city?.trim() || user?.location?.trim() || 'Cotia, SP';
 
   // New Item Form State
-  const getInitialLocation = () => {
-    if (userLocationLabel && userLocationLabel !== 'Carregando...') {
-      return userLocationLabel;
-    }
-    if (user?.city) {
-      return `${user.city}, SP`;
-    }
-    return 'Cotia, SP'; // Fallback atualizado para a região do usuário
-  };
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Música & Instrumentos');
   const [newCredits, setNewCredits] = useState<number>(100);
   const [suggestedCredits, setSuggestedCredits] = useState<number>(100);
   const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
-  const [newLocation, setNewLocation] = useState(getInitialLocation);
+  const [newLocation, setNewLocation] = useState(() => user?.city ? `${user.city}, SP` : '');
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -1065,7 +1050,7 @@ export default function App() {
     setNewCategory('Música & Instrumentos');
     setNewCredits(100);
     setSuggestedCredits(100);
-    setNewLocation(getInitialLocation());
+    setNewLocation(user?.city ? `${user.city}, SP` : '');
     setNewCondition('Usado - Excelente');
     setNewImageUrl('');
     setNewDescription('');
@@ -1122,10 +1107,8 @@ export default function App() {
   useEffect(() => {
     if (isDonateModalOpen) {
       setDonateStep(1);
-      setNewLocation(getInitialLocation());
-      fetchCurrentLocation();
     }
-  }, [isDonateModalOpen, userLocationLabel, user]);
+  }, [isDonateModalOpen]);
 
   useEffect(() => {
     if (!isCapturingExtraPhoto) return;
@@ -1789,7 +1772,7 @@ export default function App() {
       category: newCategory,
       credits: donationCredits,
       aiSuggestedCredits: suggestedCredits > 0 ? suggestedCredits : donationCredits,
-      location: newLocation.trim() || 'São Paulo, SP',
+      location: newLocation.trim() || 'Não informado',
       userLocation: getProfileLocation(),
       condition: newCondition,
       image: finalImageUrl,
@@ -4535,7 +4518,7 @@ export default function App() {
                               type="text"
                               value={newLocation}
                               onChange={(e) => setNewLocation(e.target.value)}
-                              placeholder="Ex: Pinheiros, SP"
+                              placeholder="Ex: Centro, Cotia - SP"
                               className="w-full px-3 py-2 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                             />
                             <button
