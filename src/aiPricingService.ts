@@ -9,6 +9,8 @@ export interface EvaluationResult {
   category: string;
   credits: number;
   justification: string;
+  isInvalid?: boolean;
+  invalidReason?: string;
 }
 
 export async function evaluateItemWithGemini(
@@ -32,7 +34,12 @@ export async function evaluateItemWithGemini(
       - Categoria informada: "${categoryText || ''}"
       - Condição: "${conditionText || 'Usado - Excelente'}"
 
-      Instruções:
+      Regra de validação (aplique antes de tudo): se a imagem mostrar uma pessoa/selfie/rosto humano,
+      um animal, ou um item proibido (medicamentos, armas, produtos inflamáveis, itens ilícitos),
+      a foto é INVÁLIDA para doação. Nesse caso, retorne "isInvalid": true, "credits": 0 e explique
+      o motivo em "invalidReason". Não é permitido cadastrar esse tipo de foto.
+
+      Caso contrário (item válido para doação):
       1. Identifique o produto com precisão. Se o título estiver vazio, gere um título comercial adequado.
       2. Escolha a melhor categoria entre: ["Música & Instrumentos", "Casa, Cozinha & Utensílios", "Móveis & Decoração", "Eletrônicos & Tecnologia", "Esporte & Lazer", "Brinquedos & Jogos", "Moda & Acessórios", "Papelaria & Escritório", "Livros & Mídias", "Outros"].
       3. Estime o valor em BRL de mercado para seminovos (1 BRL = 1 Crédito).
@@ -43,7 +50,9 @@ export async function evaluateItemWithGemini(
         "title": "Nome Exato do Item",
         "category": "Nome da Categoria",
         "credits": 65,
-        "justification": "Explicacao curta de 1 frase"
+        "justification": "Explicacao curta de 1 frase",
+        "isInvalid": false,
+        "invalidReason": ""
       }
     `;
 
@@ -64,7 +73,12 @@ export async function evaluateItemWithGemini(
     const text = result.response.text().trim();
     const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
 
-    return JSON.parse(cleanJson) as EvaluationResult;
+    const parsed = JSON.parse(cleanJson) as EvaluationResult;
+    const normalizedIsInvalid = parsed.isInvalid === true || String(parsed.isInvalid).toLowerCase() === 'true';
+    return {
+      ...parsed,
+      isInvalid: normalizedIsInvalid || !parsed.credits || parsed.credits <= 0
+    };
   } catch (error) {
     console.error('Erro na chamada do Gemini:', error);
     return null;
