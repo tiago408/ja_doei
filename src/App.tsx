@@ -1134,7 +1134,8 @@ export default function App() {
         undefined,
         title,
         categoryOverride,
-        conditionOverride
+        conditionOverride,
+        user?.uid
       );
       if (requestId !== pricingRequestId.current) return;
       if (!pricing) throw new Error('O Gemini não retornou uma avaliação válida');
@@ -1329,7 +1330,7 @@ export default function App() {
       const title = newTitle.trim() || 'Item fotografado';
       const category = newCategory;
       const condition = newCondition;
-      const result = await evaluateItemWithGemini(base64Image, title, category, condition);
+      const result = await evaluateItemWithGemini(base64Image, title, category, condition, user?.uid);
 
       const blockedTerms = ['selfie', 'pessoa', 'pessoas', 'rosto', 'humano', 'animal', 'cachorro', 'gato', 'inválid', 'invalid', 'não é possível', 'não pode ser avaliado', 'proibido'];
       const combinedText = `${result?.title || ''} ${result?.justification || ''} ${result?.invalidReason || ''}`.toLowerCase();

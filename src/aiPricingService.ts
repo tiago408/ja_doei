@@ -13,15 +13,66 @@ export interface EvaluationResult {
   invalidReason?: string;
 }
 
+const PRICING_CACHE_PREFIX = 'ja-doei:pricing-cache:';
+const inMemoryPricingCache = new Map<string, EvaluationResult>();
+
+// Hash simples (djb2) apenas para gerar uma chave curta e estável a partir do conteúdo analisado
+function hashContent(content: string): string {
+  let hash = 5381;
+  for (let i = 0; i < content.length; i++) {
+    hash = ((hash << 5) + hash + content.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(36);
+}
+
+function buildCacheKey(userId: string | undefined, imageBase64: string | undefined, titleText: string | undefined, categoryText: string | undefined, conditionText: string | undefined): string {
+  const userPart = userId?.trim() || 'anon';
+  const contentPart = imageBase64
+    ? hashContent(imageBase64)
+    : hashContent(`${titleText || ''}|${categoryText || ''}|${conditionText || ''}`);
+  return `${PRICING_CACHE_PREFIX}${userPart}:${contentPart}`;
+}
+
+function readFromCache(cacheKey: string): EvaluationResult | null {
+  if (inMemoryPricingCache.has(cacheKey)) {
+    return inMemoryPricingCache.get(cacheKey) as EvaluationResult;
+  }
+  try {
+    const stored = sessionStorage.getItem(cacheKey);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as EvaluationResult;
+    inMemoryPricingCache.set(cacheKey, parsed);
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeToCache(cacheKey: string, result: EvaluationResult): void {
+  inMemoryPricingCache.set(cacheKey, result);
+  try {
+    sessionStorage.setItem(cacheKey, JSON.stringify(result));
+  } catch {
+    // sessionStorage indisponível (modo privado, quota excedida etc.) - cache em memória já cobre a sessão atual
+  }
+}
+
 export async function evaluateItemWithGemini(
   imageBase64?: string,
   titleText?: string,
   categoryText?: string,
-  conditionText?: string
+  conditionText?: string,
+  userId?: string
 ): Promise<EvaluationResult | null> {
   if (!apiKey) {
     console.warn('VITE_GEMINI_API_KEY não configurada.');
     return null;
+  }
+
+  const cacheKey = buildCacheKey(userId, imageBase64, titleText, categoryText, conditionText);
+  const cachedResult = readFromCache(cacheKey);
+  if (cachedResult) {
+    return cachedResult;
   }
 
   try {
@@ -75,10 +126,12 @@ export async function evaluateItemWithGemini(
 
     const parsed = JSON.parse(cleanJson) as EvaluationResult;
     const normalizedIsInvalid = parsed.isInvalid === true || String(parsed.isInvalid).toLowerCase() === 'true';
-    return {
+    const normalizedResult: EvaluationResult = {
       ...parsed,
       isInvalid: normalizedIsInvalid || !parsed.credits || parsed.credits <= 0
     };
+    writeToCache(cacheKey, normalizedResult);
+    return normalizedResult;
   } catch (error) {
     console.error('Erro na chamada do Gemini:', error);
     return null;
