@@ -1091,10 +1091,39 @@ export default function App() {
     setIsItemInvalid(false);
   };
 
+  const fetchCurrentLocation = () => {
+    if (!navigator.geolocation) return;
+    setNewLocation('Buscando localização via GPS...');
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await response.json();
+          const city = data.address.city || data.address.town || data.address.municipality || 'Cotia';
+          const suburb = data.address.suburb || data.address.neighbourhood || '';
+          const locationString = suburb ? `${suburb}, ${city}` : `${city}, SP`;
+
+          setNewLocation(locationString);
+        } catch (error) {
+          setNewLocation('Cotia, SP');
+        }
+      },
+      () => {
+        // Fallback caso o usuário negue a permissão de GPS
+        setNewLocation(user?.city ? `${user.city}, SP` : 'Cotia, SP');
+      }
+    );
+  };
+
   useEffect(() => {
     if (isDonateModalOpen) {
       setDonateStep(1);
       setNewLocation(getInitialLocation());
+      fetchCurrentLocation();
     }
   }, [isDonateModalOpen, userLocationLabel, user]);
 
@@ -1220,62 +1249,6 @@ export default function App() {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join('') || 'U';
-
-  const formatReverseGeocodedLocation = (address: Record<string, string>) => {
-    const neighborhood = address.suburb || address.neighbourhood || address.quarter;
-    const city = address.city || address.town || address.village || address.municipality;
-    const state = address.state_code || address.state;
-    if (neighborhood && city && state) return `${neighborhood}, ${city} - ${state}`;
-    if (neighborhood && city) return `${neighborhood}, ${city}`;
-    if (city && state) return `${city}, ${state}`;
-    return getProfileLocation();
-  };
-
-  const handleUseGps = () => {
-    setIsLocatingGps(true);
-    let settled = false;
-    const finishWithFallback = () => {
-      if (settled) return;
-      settled = true;
-      const profileLocation = getProfileLocation();
-      setNewLocation(profileLocation);
-      setIsLocatingGps(false);
-      showToast(`📍 Usando sua localização cadastrada: ${profileLocation}`, 'info');
-    };
-    const timeoutId = window.setTimeout(finishWithFallback, 2000);
-
-    if (!navigator.geolocation) {
-      window.clearTimeout(timeoutId);
-      finishWithFallback();
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
-      if (settled) return;
-      try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}&zoom=18&addressdetails=1`,
-          { headers: { Accept: 'application/json' } }
-        );
-        if (!response.ok) throw new Error(`Geocodificação retornou HTTP ${response.status}`);
-        const data = await response.json() as { address?: Record<string, string> };
-        if (!data.address) throw new Error('Resposta de geocodificação sem endereço');
-        window.clearTimeout(timeoutId);
-        settled = true;
-        const realLocation = formatReverseGeocodedLocation(data.address);
-        setNewLocation(realLocation);
-        setIsLocatingGps(false);
-        showToast(`📍 Localização atualizada via GPS: ${realLocation}`, 'success');
-      } catch (error) {
-        console.error('Erro na geocodificação reversa:', error);
-        finishWithFallback();
-      }
-    }, (error) => {
-      console.warn('GPS indisponível:', error);
-      window.clearTimeout(timeoutId);
-      finishWithFallback();
-    }, { enableHighAccuracy: true, timeout: 1800, maximumAge: 300000 });
-  };
 
   const getDisplayLocation = (item: DonationItem) => {
     const location = item.location?.trim();
@@ -4567,7 +4540,7 @@ export default function App() {
                             />
                             <button
                               type="button"
-                              onClick={handleUseGps}
+                              onClick={fetchCurrentLocation}
                               disabled={isLocatingGps}
                               className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-[#14A76C] hover:bg-emerald-50 disabled:opacity-60 transition-all"
                               title="Usar minha localização atual"
@@ -4575,9 +4548,6 @@ export default function App() {
                               <LocateFixed className={`w-4 h-4 ${isLocatingGps ? 'animate-spin' : ''}`} />
                             </button>
                           </div>
-                          <p className="text-[10px] text-slate-400 mt-1">
-                            No app final, este campo utilizará seu CEP ou GPS para calcular o frete exato.
-                          </p>
                         </div>
 
                         {/* Credits Card with ±10% lock */}
