@@ -966,7 +966,8 @@ export default function App() {
 
   const [chatModalItem, setChatModalItem] = useState<DonationItem | null>(null);
   const [chatInputText, setChatInputText] = useState<string>('');
-  const [chatMessages, setChatMessages] = useState<Array<{ sender: 'user' | 'donor'; text: string; time: string }>>([]);
+  const [chatMessages, setChatMessages] = useState<Array<{ id: string; senderId: string; text: string; timestamp: Date | null }>>([]);
+  const [isSendingChatMessage, setIsSendingChatMessage] = useState<boolean>(false);
 
   // Help Center & Chat IA state
   interface SuccessRedeemData {
@@ -1668,40 +1669,80 @@ export default function App() {
   };
 
   // Start Chat with Donor
+  // Determines the other participant of the chat (donor when the viewer is the receiver, or vice-versa)
+  const getChatOtherUserId = (item: DonationItem, currentUserId: string) => (
+    item.userId === currentUserId ? (item.receiverId || '') : (item.userId || '')
+  );
+
+  // Keeps the chat messages in sync with Firestore while the chat modal is open
+  useEffect(() => {
+    if (!chatModalItem || !user?.uid) {
+      setChatMessages([]);
+      return;
+    }
+
+    const otherUserId = getChatOtherUserId(chatModalItem, user.uid);
+    if (!otherUserId) {
+      setChatMessages([]);
+      return;
+    }
+
+    const chatId = `${chatModalItem.id}__${[user.uid, otherUserId].sort().join('_')}`;
+    const messagesQuery = query(
+      collection(db, 'chats', chatId, 'messages'),
+      orderBy('timestamp', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+      setChatMessages(snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          senderId: data.senderId,
+          text: data.text,
+          timestamp: data.timestamp?.toDate?.() ?? null
+        };
+      }));
+    }, (error) => {
+      console.error('Erro ao sincronizar mensagens do chat:', error);
+    });
+
+    return () => unsubscribe();
+  }, [chatModalItem, user?.uid]);
+
   const handleStartChat = (item: DonationItem) => {
+    if (!requireAuth()) return;
     setChatModalItem(item);
-    setChatMessages([
-      {
-        sender: 'donor',
-        text: `Olá! Sou ${item.donorName || 'o doador'}. O item "${item.title}" ainda está disponível! Como posso te ajudar?`,
-        time: 'Agora'
-      }
-    ]);
   };
 
   // Send Chat Message
-  const handleSendChatMessage = (e: React.FormEvent) => {
+  const handleSendChatMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInputText.trim() || !chatModalItem) return;
+    if (!chatInputText.trim() || !chatModalItem || !user?.uid) return;
 
-    const userText = chatInputText.trim();
-    setChatMessages((prev) => [
-      ...prev,
-      { sender: 'user', text: userText, time: 'Agora' }
-    ]);
+    const otherUserId = getChatOtherUserId(chatModalItem, user.uid);
+    if (!otherUserId) {
+      showToast('Não foi possível identificar o outro participante da conversa.', 'error');
+      return;
+    }
+
+    const chatId = `${chatModalItem.id}__${[user.uid, otherUserId].sort().join('_')}`;
+    const messageText = chatInputText.trim();
     setChatInputText('');
+    setIsSendingChatMessage(true);
 
-    // Simulated Donor Reply after 1 sec
-    setTimeout(() => {
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          sender: 'donor',
-          text: `Com certeza! Podemos combinar a entrega via ${currentSelectedFreight.name}. Fique à vontade para concluir o resgate com seus Dodos!`,
-          time: 'Agora'
-        }
-      ]);
-    }, 1000);
+    try {
+      await addDoc(collection(db, 'chats', chatId, 'messages'), {
+        senderId: user.uid,
+        text: messageText,
+        timestamp: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Erro ao enviar mensagem:', error);
+      showToast('Não foi possível enviar a mensagem. Tente novamente.', 'error');
+    } finally {
+      setIsSendingChatMessage(false);
+    }
   };
 
   // Open Quartinho da Bagunça
@@ -4207,31 +4248,40 @@ export default function App() {
 
                 {/* Chat Messages */}
                 <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-2.5 my-2">
-                  {chatMessages.map((msg, idx) => (
-                    <div
-                      key={idx}
-                      className={`flex ${
-                        msg.sender === 'user' ? 'justify-end' : 'justify-start'
-                      }`}
-                    >
-                      <div
-                        className={`max-w-[80%] p-2.5 rounded-2xl text-xs ${
-                          msg.sender === 'user'
-                            ? 'bg-[#14A76C] text-white rounded-br-2xs'
-                            : 'bg-slate-100 text-slate-800 rounded-bl-2xs border border-slate-200/60'
-                        }`}
-                      >
-                        <p>{msg.text}</p>
-                        <span
-                          className={`text-[9px] block text-right mt-1 ${
-                            msg.sender === 'user' ? 'text-emerald-100' : 'text-slate-400'
-                          }`}
+                  {chatMessages.length === 0 ? (
+                    <p className="text-[11px] text-slate-400 text-center py-6">
+                      Envie uma mensagem para iniciar a conversa. O doador aparecerá aqui assim que responder.
+                    </p>
+                  ) : (
+                    chatMessages.map((msg) => {
+                      const isOwnMessage = msg.senderId === user?.uid;
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
                         >
-                          {msg.time}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                          <div
+                            className={`max-w-[80%] p-2.5 rounded-2xl text-xs ${
+                              isOwnMessage
+                                ? 'bg-[#14A76C] text-white rounded-br-2xs'
+                                : 'bg-slate-100 text-slate-800 rounded-bl-2xs border border-slate-200/60'
+                            }`}
+                          >
+                            <p>{msg.text}</p>
+                            <span
+                              className={`text-[9px] block text-right mt-1 ${
+                                isOwnMessage ? 'text-emerald-100' : 'text-slate-400'
+                              }`}
+                            >
+                              {msg.timestamp
+                                ? msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                : 'Enviando...'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
 
                 {/* Chat Input */}
@@ -4248,7 +4298,8 @@ export default function App() {
                   />
                   <button
                     type="submit"
-                    className="p-2.5 bg-[#14A76C] text-white rounded-xl hover:bg-[#108958] active:scale-95 transition-all"
+                    disabled={isSendingChatMessage}
+                    className="p-2.5 bg-[#14A76C] text-white rounded-xl hover:bg-[#108958] active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <Send className="w-4 h-4" />
                   </button>
