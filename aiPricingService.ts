@@ -3,6 +3,7 @@ import { GoogleGenerativeAI, type Part } from '@google/generative-ai';
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 // Inicializa com a versão estável da API (v1) para evitar erro 404
 const genAI = new GoogleGenerativeAI(apiKey);
+
 export interface EvaluationResult {
   credits: number;
   title: string;
