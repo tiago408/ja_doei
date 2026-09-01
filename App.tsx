@@ -1014,14 +1014,12 @@ export default function App() {
     }, 350);
   };
 
+  const getProfileLocation = () => user?.city?.trim() || user?.location?.trim() || 'Cotia, SP';
+
   // New Item Form State
-  const INVALID_LOCATION_LABELS = ['Carregando...', 'Localização indisponível', 'Localização atual'];
-  const getDefaultDonationLocation = () => {
-    if (userLocationLabel && !INVALID_LOCATION_LABELS.includes(userLocationLabel)) return userLocationLabel;
-    const profileCity = user?.city?.trim() || user?.location?.trim();
-    if (profileCity) return profileCity;
-    return 'São Paulo, SP';
-  };
+  const getDefaultDonationLocation = () => (
+    userLocationLabel && userLocationLabel !== 'Carregando...' ? userLocationLabel : getProfileLocation()
+  );
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Música & Instrumentos');
   const [newCredits, setNewCredits] = useState<number>(100);
@@ -1090,6 +1088,7 @@ export default function App() {
   useEffect(() => {
     if (isDonateModalOpen) {
       setDonateStep(1);
+      setNewLocation(getDefaultDonationLocation());
     }
   }, [isDonateModalOpen]);
 
@@ -1207,8 +1206,6 @@ export default function App() {
       setToastMessage(null);
     }, 3800);
   };
-
-  const getProfileLocation = () => user?.city?.trim() || user?.location?.trim() || 'Cotia, SP';
 
   const getUserInitials = (name: string) => name
     .trim()
@@ -1760,8 +1757,8 @@ export default function App() {
     }
 
     if (donateStep === 1) {
-      if (isItemInvalid || !newImageUrl) {
-        showToast('Tire uma foto válida de um objeto para continuar.', 'error');
+      if (isItemInvalid || newTitle.toLowerCase().includes('inválido') || newCredits === 0 || !newImageUrl) {
+        showToast('Esta foto foi identificada como pessoa/animal e não pode ser publicada. Tire a foto de um objeto.', 'error');
         return;
       }
       setDonateStep(2);
@@ -4400,9 +4397,11 @@ export default function App() {
                         )}
 
                         {isItemInvalid && (
-                          <p className="text-[11px] font-semibold text-red-600 text-center px-2">
-                            Item não permitido. Fotos de pessoas, selfies ou animais são bloqueadas. Por favor, tire a foto de um objeto válido.
-                          </p>
+                          <div className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-center">
+                            <p className="text-[11px] font-semibold text-red-600">
+                              Item não permitido. Fotos de pessoas, selfies ou animais são bloqueadas. Por favor, tire a foto de um objeto válido.
+                            </p>
+                          </div>
                         )}
                       </div>
                     )}
