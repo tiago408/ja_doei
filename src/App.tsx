@@ -1022,7 +1022,7 @@ export default function App() {
   const [newCredits, setNewCredits] = useState<number>(100);
   const [suggestedCredits, setSuggestedCredits] = useState<number>(100);
   const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
-  const [newLocation, setNewLocation] = useState(getProfileLocation);
+  const [newLocation, setNewLocation] = useState(() => getProfileLocation());
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -1113,7 +1113,10 @@ export default function App() {
   useEffect(() => {
     if (isDonateModalOpen) {
       setDonateStep(1);
-      setNewLocation(getProfileLocation());
+      const currentLoc = userLocationLabel && !['Carregando...', 'Localização indisponível'].includes(userLocationLabel)
+        ? userLocationLabel
+        : getProfileLocation();
+      setNewLocation(currentLoc);
       fetchCurrentLocation();
     }
   }, [isDonateModalOpen, userLocationLabel, user]);
@@ -1780,7 +1783,7 @@ export default function App() {
       category: newCategory,
       credits: donationCredits,
       aiSuggestedCredits: suggestedCredits > 0 ? suggestedCredits : donationCredits,
-      location: newLocation.trim() || 'São Paulo, SP',
+      location: newLocation.trim() || getProfileLocation(),
       userLocation: getProfileLocation(),
       condition: newCondition,
       image: finalImageUrl,
