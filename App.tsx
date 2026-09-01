@@ -1051,6 +1051,7 @@ export default function App() {
   const [isSubmittingDonation, setIsSubmittingDonation] = useState<boolean>(false);
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'publishing'>('idle');
+  const [isItemInvalid, setIsItemInvalid] = useState<boolean>(false);
   const pricingRequestId = useRef(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const extraPhotoVideoRef = useRef<HTMLVideoElement>(null);
@@ -1083,6 +1084,7 @@ export default function App() {
     setIsSubmittingDonation(false);
     setNewImageFile(null);
     setUploadPhase('idle');
+    setIsItemInvalid(false);
   };
 
   useEffect(() => {
@@ -1362,9 +1364,11 @@ export default function App() {
       const condition = newCondition;
       const result = await evaluateItemWithGemini(base64Image, title, category, condition);
 
-      if (result?.isInvalid) {
-        setNewImageUrl('');
-        setNewImageFile(null);
+      const blockedTerms = ['selfie', 'pessoa', 'animal'];
+      const isBlockedByTitle = blockedTerms.some((term) => (result?.title || '').toLowerCase().includes(term));
+
+      if (result?.isInvalid || isBlockedByTitle) {
+        setIsItemInvalid(true);
         setNewCredits(0);
         setSuggestedCredits(0);
         setCreditsMin(0);
@@ -1374,6 +1378,8 @@ export default function App() {
         showToast('Fotos de pessoas/selfies e animais não são permitidas para doação.', 'error');
         return;
       }
+
+      setIsItemInvalid(false);
 
       if (result) {
         if (!newTitle.trim()) setNewTitle(result.title);
@@ -1746,6 +1752,11 @@ export default function App() {
   // Submit New Donation
   const handleCreateDonation = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isItemInvalid) {
+      showToast('Não é possível publicar itens contendo pessoas ou animais.', 'error');
+      return;
+    }
 
     if (donateStep === 1) {
       if (!newImageUrl) {
@@ -4351,6 +4362,7 @@ export default function App() {
                                 setNewImageFile(null);
                                 setIsAnalyzingImage(false);
                                 setAiSuggested(false);
+                                setIsItemInvalid(false);
                               }}
                               className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-900/60 text-white hover:bg-slate-900/80 transition-all"
                               title="Remover foto"
@@ -4384,6 +4396,12 @@ export default function App() {
                             <Sparkles className="w-4 h-4 animate-pulse" />
                             <span>Analisando imagem via IA...</span>
                           </div>
+                        )}
+
+                        {isItemInvalid && (
+                          <p className="text-[11px] font-semibold text-red-600 text-center px-2">
+                            Item não permitido. Fotos de pessoas, selfies ou animais são bloqueadas. Por favor, tire a foto de um objeto válido.
+                          </p>
                         )}
                       </div>
                     )}
@@ -4775,7 +4793,8 @@ export default function App() {
                     {donateStep < 3 ? (
                       <button
                         type="submit"
-                        className="flex-1 px-5 py-2.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                        disabled={isItemInvalid}
+                        className="flex-1 px-5 py-2.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <span>Continuar</span>
                         <ChevronRight className="w-4 h-4" />
