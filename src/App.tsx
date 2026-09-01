@@ -1819,12 +1819,28 @@ export default function App() {
     return { isBlocked, sanitized };
   };
 
+  // Filtro adicional simples e rápido para bloquear tentativas óbvias de compartilhar contato externo no chat
+  const isUnsafeMessage = (text: string) => {
+    const clean = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const hasDigits = (clean.match(/\d/g) || []).length >= 8; // Bloqueia 8+ dígitos no total (mesmo picados)
+    const hasPhone = /(?:0?xx\d{2}|\b\d{2}\b)?\s*9?\s*\d{4}[\s-]*\d{4}/.test(clean);
+    const hasAddress = /\b(rua|av|avenida|alameda|praca|estrada|rodovia|bairro|cep)\b/i.test(clean) && /\d+/.test(clean);
+    const hasContact = /\b(zap|whats|whatsapp|insta|instagram|tele|telegram|email|gmail|pix)\b/i.test(clean) || /@|http|\.com|\.br/.test(clean);
+    return hasDigits || hasPhone || hasAddress || hasContact;
+  };
+
   // Send Chat Message
   const handleSendChatMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInputText.trim() || !chatModalItem || !chatPartner || !activeChatId || !user?.uid) return;
 
     const messageText = chatInputText.trim();
+
+    if (isUnsafeMessage(messageText)) {
+      alert("Por segurança, não é permitido enviar telefones, endereços ou contatos externos.");
+      return;
+    }
+
     const { isBlocked } = validateChatMessage(messageText);
     if (isBlocked) {
       showToast(
