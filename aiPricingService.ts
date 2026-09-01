@@ -5,9 +5,9 @@ const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
 
 export interface EvaluationResult {
+  credits: number;
   title: string;
   category: string;
-  credits: number;
   justification: string;
   isInvalid?: boolean;
   reason?: string;
