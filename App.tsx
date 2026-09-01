@@ -600,7 +600,7 @@ export default function App() {
         };
         setUser(nextUser);
         if (nextUser.city || nextUser.location) {
-          setNewLocation(nextUser.city?.trim() || nextUser.location?.trim() || 'São Paulo, SP');
+          setNewLocation(nextUser.city?.trim() || nextUser.location?.trim() || userLocationLabel);
         }
       } else {
         setUser(null);
@@ -1016,7 +1016,7 @@ export default function App() {
   const [newCredits, setNewCredits] = useState<number>(100);
   const [suggestedCredits, setSuggestedCredits] = useState<number>(100);
   const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
-  const [newLocation, setNewLocation] = useState(() => user?.city ? `${user.city}, SP` : '');
+  const [newLocation, setNewLocation] = useState(() => user?.city ? `${user.city}, SP` : userLocationLabel);
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -1050,7 +1050,7 @@ export default function App() {
     setNewCategory('Música & Instrumentos');
     setNewCredits(100);
     setSuggestedCredits(100);
-    setNewLocation(user?.city ? `${user.city}, SP` : '');
+    setNewLocation(user?.city ? `${user.city}, SP` : userLocationLabel);
     setNewCondition('Usado - Excelente');
     setNewImageUrl('');
     setNewDescription('');
@@ -1107,8 +1107,9 @@ export default function App() {
   useEffect(() => {
     if (isDonateModalOpen) {
       setDonateStep(1);
+      setNewLocation(user?.city ? `${user.city}, SP` : userLocationLabel);
     }
-  }, [isDonateModalOpen]);
+  }, [isDonateModalOpen, user?.city, userLocationLabel]);
 
   useEffect(() => {
     if (!isCapturingExtraPhoto) return;
