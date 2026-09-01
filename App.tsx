@@ -621,9 +621,6 @@ export default function App() {
           location: profile.location
         };
         setUser(nextUser);
-        if (nextUser.city || nextUser.location) {
-          setNewLocation(nextUser.city?.trim() || nextUser.location?.trim() || '');
-        }
       } else {
         setUser(null);
       }
@@ -672,18 +669,6 @@ export default function App() {
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
     );
   }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    const profileLocation = getProfileLocation();
-    if (profileLocation && !newLocation.trim()) {
-      setNewLocation(profileLocation);
-      return;
-    }
-    if (profileLocation && ['São Paulo, SP', 'Cotia, SP', 'Localização atual', 'Localização atual (GPS)', ''].includes(newLocation.trim())) {
-      setNewLocation(profileLocation);
-    }
-  }, [user?.uid, user?.city, user?.location]);
 
   // Syncs the credits balance in real time from the users/{uid} Firestore document
   useEffect(() => {
