@@ -1110,6 +1110,7 @@ export default function App() {
   useEffect(() => {
     if (isDonateModalOpen) {
       setDonateStep(1);
+      setNewLocation('');
     }
   }, [isDonateModalOpen]);
 
@@ -1820,6 +1821,9 @@ export default function App() {
     setNewImageFile(null);
     setNewExtraPhotos([]);
     setNewCondition('Usado - Excelente');
+    setNewLocation('');
+    setNewSizeType('roupa');
+    setNewSize('');
     setPricingJustification('');
     setPricingError('');
     setIsPricingAnalyzing(false);
