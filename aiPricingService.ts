@@ -46,7 +46,8 @@ export async function evaluateItemWithGemini(
            "credits": 0,
            "title": "Foto Inválida (Pessoa/Animal)",
            "category": "Outros",
-           "justification": "Fotos de pessoas, selfies ou animais não são permitidas."
+           "justification": "Fotos de pessoas, selfies ou animais não são permitidas.",
+           "reason": "person_or_animal_detected"
          }
 
       Retorne EXCLUSIVAMENTE um JSON VÁLIDO no seguinte formato (sem formatação markdown \`\`\`json):
