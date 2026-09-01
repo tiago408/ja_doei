@@ -4383,13 +4383,16 @@ export default function App() {
                   </button>
                 </div>
 
+                {/* Security Banner (fixed below header) */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 mx-4 my-2 text-[11px] text-amber-800 flex items-start gap-2">
+                  <span>⚠️</span>
+                  <p>
+                    <strong>Aviso de Segurança:</strong> Nunca compartilhe dados pessoais, telefone ou endereço. O Já Doei não realiza cobranças por fora e não se responsabiliza por combinados ou entregas feitas fora do aplicativo.
+                  </p>
+                </div>
+
                 {/* Chat Messages */}
                 <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-2.5 my-2">
-                  <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-[10px] font-semibold text-amber-800">
-                    <ShieldCheck className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                    <span>Dica de Segurança: Combine detalhes e tire dúvidas exclusivamente por aqui.</span>
-                  </div>
-
                   {chatMessages.length === 0 ? (
                     <p className="text-[11px] text-slate-400 text-center py-6">
                       Envie uma mensagem para iniciar a conversa. O doador aparecerá aqui assim que responder.
