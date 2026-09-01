@@ -1322,9 +1322,7 @@ export default function App() {
       const category = newCategory;
       const condition = newCondition;
       const result = await evaluateItemWithGemini(base64Image, title, category, condition);
-      const res = result as (typeof result & { isInvalid?: boolean });
-
-     if ((result as Record<string, any>)?.isInvalid) {
+      if ((result as Record<string, any>)?.isInvalid) {
         setIsItemInvalid(true);
         setNewCredits(0);
         showToast('Esta foto contém pessoas ou animais. Tire a foto de um objeto válido.', 'error');
@@ -1346,7 +1344,6 @@ export default function App() {
         showToast('Fotos de pessoas/selfies e animais não são permitidas para doação.', 'error');
         return;
       }
-
       setIsItemInvalid(false);
 
       if (result) {
