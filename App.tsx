@@ -1322,12 +1322,20 @@ export default function App() {
       const category = newCategory;
       const condition = newCondition;
       const result = await evaluateItemWithGemini(base64Image, title, category, condition);
+      const res = result as (typeof result & { isInvalid?: boolean });
+
+      if (res?.isInvalid) {
+        setIsItemInvalid(true);
+        setNewCredits(0);
+        showToast('Esta foto contém pessoas ou animais. Tire a foto de um objeto válido.', 'error');
+        return;
+      }
 
       const blockedTerms = ['selfie', 'pessoa', 'animal'];
       const isBlockedByTitle = blockedTerms.some((term) => (result?.title || '').toLowerCase().includes(term));
       const isBlockedByZeroCredits = result?.credits === 0 && Boolean(result?.justification);
 
-      if (result?.isInvalid || isBlockedByTitle || isBlockedByZeroCredits) {
+      if (isBlockedByTitle || isBlockedByZeroCredits) {
         setIsItemInvalid(true);
         setNewCredits(0);
         setSuggestedCredits(0);
