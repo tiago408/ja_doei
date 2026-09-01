@@ -1366,8 +1366,9 @@ export default function App() {
 
       const blockedTerms = ['selfie', 'pessoa', 'animal'];
       const isBlockedByTitle = blockedTerms.some((term) => (result?.title || '').toLowerCase().includes(term));
+      const isBlockedByZeroCredits = result?.credits === 0 && Boolean(result?.justification);
 
-      if (result?.isInvalid || isBlockedByTitle) {
+      if (result?.isInvalid || isBlockedByTitle || isBlockedByZeroCredits) {
         setIsItemInvalid(true);
         setNewCredits(0);
         setSuggestedCredits(0);
@@ -1759,8 +1760,8 @@ export default function App() {
     }
 
     if (donateStep === 1) {
-      if (!newImageUrl) {
-        showToast('Tire uma foto para a IA calcular os Dodos.', 'error');
+      if (isItemInvalid || !newImageUrl) {
+        showToast('Tire uma foto válida de um objeto para continuar.', 'error');
         return;
       }
       setDonateStep(2);
@@ -4793,7 +4794,7 @@ export default function App() {
                     {donateStep < 3 ? (
                       <button
                         type="submit"
-                        disabled={isItemInvalid}
+                        disabled={isItemInvalid || isAnalyzingImage || !newImageUrl}
                         className="flex-1 px-5 py-2.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <span>Continuar</span>
