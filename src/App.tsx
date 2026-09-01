@@ -1331,10 +1331,11 @@ export default function App() {
       const condition = newCondition;
       const result = await evaluateItemWithGemini(base64Image, title, category, condition);
 
-      const blockedTerms = ['selfie', 'pessoa', 'rosto', 'animal', 'inválid', 'invalid'];
-      const isBlockedByTitle = blockedTerms.some((term) => (result?.title || '').toLowerCase().includes(term));
+      const blockedTerms = ['selfie', 'pessoa', 'pessoas', 'rosto', 'humano', 'animal', 'cachorro', 'gato', 'inválid', 'invalid', 'não é possível', 'não pode ser avaliado', 'proibido'];
+      const combinedText = `${result?.title || ''} ${result?.justification || ''} ${result?.invalidReason || ''}`.toLowerCase();
+      const isBlockedByText = blockedTerms.some((term) => combinedText.includes(term));
 
-      if (result?.isInvalid || isBlockedByTitle) {
+      if (result?.isInvalid || isBlockedByText) {
         setIsItemInvalid(true);
         setNewCredits(0);
         setSuggestedCredits(0);
