@@ -284,6 +284,8 @@ interface AppNotification {
   message: string;
   createdAt: Date | null;
   read: boolean;
+  type?: string;
+  itemId?: string;
 }
 
 interface AdminReport {
@@ -537,7 +539,9 @@ export default function App() {
             title: data.title || 'Nova notificação',
             message: data.message || data.text || '',
             createdAt,
-            read: data.read === true
+            read: data.read === true,
+            type: data.type || undefined,
+            itemId: data.itemId || undefined
           };
         })
         .sort((first, second) => {
@@ -811,6 +815,15 @@ export default function App() {
     }
 
     setIsNotificationsModalOpen(false);
+
+    if (notification.type === 'chat' && notification.itemId) {
+      const relatedItem = items.find((item) => item.id === notification.itemId);
+      if (relatedItem) {
+        handleStartChat(relatedItem);
+        return;
+      }
+    }
+
     setActiveTab('profile');
   };
 
@@ -966,7 +979,7 @@ export default function App() {
 
   const [chatModalItem, setChatModalItem] = useState<DonationItem | null>(null);
   const [chatInputText, setChatInputText] = useState<string>('');
-  const [chatMessages, setChatMessages] = useState<Array<{ id: string; senderId: string; text: string; timestamp: Date | null }>>([]);
+  const [chatMessages, setChatMessages] = useState<Array<{ id: string; senderId: string; text: string; timestamp: Date | null; read: boolean }>>([]);
   const [isSendingChatMessage, setIsSendingChatMessage] = useState<boolean>(false);
 
   // Help Center & Chat IA state
@@ -1694,15 +1707,26 @@ export default function App() {
     );
 
     const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-      setChatMessages(snapshot.docs.map((docSnap) => {
+      const nextMessages = snapshot.docs.map((docSnap) => {
         const data = docSnap.data();
         return {
           id: docSnap.id,
           senderId: data.senderId,
           text: data.text,
-          timestamp: data.timestamp?.toDate?.() ?? null
+          timestamp: data.timestamp?.toDate?.() ?? null,
+          read: data.read === true
         };
-      }));
+      });
+      setChatMessages(nextMessages);
+
+      // Marks incoming messages as read as soon as they're viewed in this open chat
+      nextMessages.forEach((message) => {
+        if (message.senderId !== user.uid && !message.read) {
+          void updateDoc(doc(db, 'chats', chatId, 'messages', message.id), { read: true }).catch((error) => {
+            console.error('Erro ao marcar mensagem como lida:', error);
+          });
+        }
+      });
     }, (error) => {
       console.error('Erro ao sincronizar mensagens do chat:', error);
     });
@@ -1735,7 +1759,17 @@ export default function App() {
       await addDoc(collection(db, 'chats', chatId, 'messages'), {
         senderId: user.uid,
         text: messageText,
-        timestamp: serverTimestamp()
+        timestamp: serverTimestamp(),
+        read: false
+      });
+      await addDoc(collection(db, 'notifications'), {
+        userId: otherUserId,
+        title: `💬 Nova mensagem de ${user.name}`,
+        message: `Sobre "${chatModalItem.title}": ${messageText}`,
+        type: 'chat',
+        itemId: chatModalItem.id,
+        createdAt: serverTimestamp(),
+        read: false
       });
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
@@ -4276,6 +4310,9 @@ export default function App() {
                               {msg.timestamp
                                 ? msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                                 : 'Enviando...'}
+                              {isOwnMessage && (
+                                <span className="ml-1">{msg.read ? '✓✓ Lida' : '✓ Enviada'}</span>
+                              )}
                             </span>
                           </div>
                         </div>
@@ -5103,17 +5140,24 @@ export default function App() {
                     {notifications.map((notification) => {
                       const isDeliveryNotification = notification.title.toLowerCase().includes('envio');
                       const isCreditNotification = notification.title.toLowerCase().includes('crédito') || notification.title.toLowerCase().includes('dodo');
-                      const NotificationIcon = isDeliveryNotification
+                      const isChatNotification = notification.type === 'chat';
+                      const NotificationIcon = isChatNotification
+                        ? MessageCircle
+                        : isDeliveryNotification
                         ? Truck
                         : isCreditNotification
                         ? Sparkles
                         : PackageCheck;
-                      const iconBg = isDeliveryNotification
+                      const iconBg = isChatNotification
+                        ? 'bg-purple-50'
+                        : isDeliveryNotification
                         ? 'bg-[#FF8243]/10'
                         : isCreditNotification
                         ? 'bg-sky-50'
                         : 'bg-[#14A76C]/10';
-                      const iconColor = isDeliveryNotification
+                      const iconColor = isChatNotification
+                        ? 'text-purple-600'
+                        : isDeliveryNotification
                         ? 'text-[#FF8243]'
                         : isCreditNotification
                         ? 'text-sky-600'
