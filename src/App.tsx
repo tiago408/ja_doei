@@ -946,6 +946,7 @@ export default function App() {
   const [isPremium, setIsPremium] = useState<boolean>(false);
   const [isPremiumModalOpen, setIsPremiumModalOpen] = useState<boolean>(false);
   const [baguncaDonor, setBaguncaDonor] = useState<{
+    userId?: string;
     name: string;
     avatar?: string;
     location?: string;
@@ -1479,7 +1480,8 @@ export default function App() {
     handleOpenBagunca(
       user?.name || 'Usuário Já Doei',
       user?.photoURL || undefined,
-      user?.city || user?.location || getProfileLocation()
+      user?.city || user?.location || getProfileLocation(),
+      user?.uid
     );
     requestAnimationFrame(() => quartinhoContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' }));
   };
@@ -1703,8 +1705,9 @@ export default function App() {
   };
 
   // Open Quartinho da Bagunça
-  const handleOpenBagunca = (donorName: string, donorAvatar?: string, location?: string) => {
+  const handleOpenBagunca = (donorName: string, donorAvatar?: string, location?: string, donorId?: string) => {
     setBaguncaDonor({
+      userId: donorId,
       name: donorName,
       avatar: donorAvatar,
       location: location || 'São Paulo, SP',
@@ -2782,7 +2785,8 @@ export default function App() {
                 onClick={() => handleOpenBagunca(
                   user?.name || 'Usuário Já Doei',
                   user?.photoURL || undefined,
-                  user?.city || user?.location || getProfileLocation()
+                  user?.city || user?.location || getProfileLocation(),
+                  user?.uid
                 )}
                 className="w-full p-3.5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:border-[#FF8243]/50 transition-all flex items-center justify-between group active:scale-98"
               >
@@ -3260,7 +3264,8 @@ export default function App() {
                         handleOpenBagunca(
                           selectedItemForDetails.donorName || 'Mariana Silva',
                           selectedItemForDetails.donorAvatar,
-                          selectedItemForDetails.location
+                          selectedItemForDetails.location,
+                          selectedItemForDetails.userId || undefined
                         )
                       }
                       className="w-full py-2 px-3 bg-[#FF8243]/10 hover:bg-[#FF8243]/20 text-[#FF8243] text-xs font-bold rounded-xl border border-[#FF8243]/30 flex items-center justify-center gap-2 transition-all active:scale-98 shadow-2xs"
@@ -5317,14 +5322,15 @@ export default function App() {
                       <span className="bg-[#14A76C] text-white text-[10px] px-2 py-0.2 rounded-full font-bold">
                         {(() => {
                           const ownItems = items.filter((item) =>
-                            item.userId === user?.uid ||
-                            (baguncaDonor.name === 'Você' && item.donorName === 'Você')
+                            baguncaDonor.userId
+                              ? item.userId === baguncaDonor.userId
+                              : (baguncaDonor.name === 'Você' && item.donorName === 'Você')
                           );
                           const tabItems = quartinhoTab === 'available'
                             ? ownItems.filter((item) => !item.status || item.status === 'available')
                             : quartinhoTab === 'completed'
                             ? ownItems.filter((item) => item.status === 'completed')
-                            : items.filter((item) => item.receiverId === user?.uid);
+                            : items.filter((item) => item.receiverId === (baguncaDonor.userId || user?.uid));
                           return tabItems.length;
                         })()}
                       </span>
@@ -5333,14 +5339,15 @@ export default function App() {
 
                   {(() => {
                     const ownItems = items.filter((item) =>
-                      item.userId === user?.uid ||
-                      (baguncaDonor.name === 'Você' && item.donorName === 'Você')
+                      baguncaDonor.userId
+                        ? item.userId === baguncaDonor.userId
+                        : (baguncaDonor.name === 'Você' && item.donorName === 'Você')
                     );
                     const donorItems = quartinhoTab === 'available'
                       ? ownItems.filter((item) => !item.status || item.status === 'available')
                       : quartinhoTab === 'completed'
                       ? ownItems.filter((item) => item.status === 'completed')
-                      : items.filter((item) => item.receiverId === user?.uid);
+                      : items.filter((item) => item.receiverId === (baguncaDonor.userId || user?.uid));
 
                     if (donorItems.length === 0) {
                       return (
