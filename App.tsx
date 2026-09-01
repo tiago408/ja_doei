@@ -654,7 +654,7 @@ export default function App() {
   useEffect(() => {
     const placeholderLocations = ['São Paulo, SP', 'Cotia, SP', 'Localização atual', 'Localização atual (GPS)', 'Carregando...', ''];
     if (!placeholderLocations.includes(newLocation.trim())) return;
-    setNewLocation(getDefaultDonationLocation());
+    setNewLocation(getInitialLocation());
   }, [user?.uid, user?.city, user?.location, userLocationLabel]);
 
   // Syncs the credits balance in real time from the users/{uid} Firestore document
@@ -1017,15 +1017,21 @@ export default function App() {
   const getProfileLocation = () => user?.city?.trim() || user?.location?.trim() || 'Cotia, SP';
 
   // New Item Form State
-  const getDefaultDonationLocation = () => (
-    userLocationLabel && userLocationLabel !== 'Carregando...' ? userLocationLabel : getProfileLocation()
-  );
+  const getInitialLocation = () => {
+    if (userLocationLabel && userLocationLabel !== 'Carregando...') {
+      return userLocationLabel;
+    }
+    if (user?.city) {
+      return `${user.city}, SP`;
+    }
+    return 'Cotia, SP'; // Fallback atualizado para a região do usuário
+  };
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Música & Instrumentos');
   const [newCredits, setNewCredits] = useState<number>(100);
   const [suggestedCredits, setSuggestedCredits] = useState<number>(100);
   const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
-  const [newLocation, setNewLocation] = useState(getDefaultDonationLocation());
+  const [newLocation, setNewLocation] = useState(getInitialLocation);
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -1059,7 +1065,7 @@ export default function App() {
     setNewCategory('Música & Instrumentos');
     setNewCredits(100);
     setSuggestedCredits(100);
-    setNewLocation(getDefaultDonationLocation());
+    setNewLocation(getInitialLocation());
     setNewCondition('Usado - Excelente');
     setNewImageUrl('');
     setNewDescription('');
@@ -1088,9 +1094,9 @@ export default function App() {
   useEffect(() => {
     if (isDonateModalOpen) {
       setDonateStep(1);
-      setNewLocation(getDefaultDonationLocation());
+      setNewLocation(getInitialLocation());
     }
-  }, [isDonateModalOpen]);
+  }, [isDonateModalOpen, userLocationLabel, user]);
 
   useEffect(() => {
     if (!isCapturingExtraPhoto) return;
