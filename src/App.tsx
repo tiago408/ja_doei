@@ -286,6 +286,11 @@ interface AppNotification {
   read: boolean;
   type?: string;
   itemId?: string;
+  donationId?: string;
+  chatId?: string;
+  senderId?: string;
+  senderName?: string;
+  senderAvatar?: string;
 }
 
 interface AdminReport {
@@ -541,7 +546,12 @@ export default function App() {
             createdAt,
             read: data.read === true,
             type: data.type || undefined,
-            itemId: data.itemId || undefined
+            itemId: data.itemId || undefined,
+            donationId: data.donationId || data.itemId || undefined,
+            chatId: data.chatId || undefined,
+            senderId: data.senderId || undefined,
+            senderName: data.senderName || undefined,
+            senderAvatar: data.senderAvatar || undefined
           };
         })
         .sort((first, second) => {
@@ -816,12 +826,24 @@ export default function App() {
 
     setIsNotificationsModalOpen(false);
 
-    if (notification.type === 'chat' && notification.itemId) {
-      const relatedItem = items.find((item) => item.id === notification.itemId);
-      if (relatedItem) {
-        handleStartChat(relatedItem);
-        return;
-      }
+    if ((notification.type === 'chat' || notification.type === 'chat_message') && notification.chatId && notification.senderId) {
+      const donationId = notification.donationId || notification.itemId;
+      const relatedItem = items.find((item) => item.id === donationId) || {
+        id: donationId || notification.chatId,
+        title: 'Doação',
+        category: '',
+        credits: 0,
+        location: '',
+        imageUrl: '',
+        createdAt: ''
+      };
+      handleStartChat(relatedItem, {
+        partnerId: notification.senderId,
+        partnerName: notification.senderName || 'Usuário',
+        partnerAvatar: notification.senderAvatar,
+        chatId: notification.chatId
+      });
+      return;
     }
 
     setActiveTab('profile');
@@ -978,6 +1000,8 @@ export default function App() {
   }, [baguncaDonor]);
 
   const [chatModalItem, setChatModalItem] = useState<DonationItem | null>(null);
+  const [chatPartner, setChatPartner] = useState<{ id: string; name: string; avatar?: string } | null>(null);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [chatInputText, setChatInputText] = useState<string>('');
   const [chatMessages, setChatMessages] = useState<Array<{ id: string; senderId: string; text: string; timestamp: Date | null; read: boolean }>>([]);
   const [isSendingChatMessage, setIsSendingChatMessage] = useState<boolean>(false);
@@ -1689,18 +1713,12 @@ export default function App() {
 
   // Keeps the chat messages in sync with Firestore while the chat modal is open
   useEffect(() => {
-    if (!chatModalItem || !user?.uid) {
+    if (!activeChatId || !user?.uid) {
       setChatMessages([]);
       return;
     }
 
-    const otherUserId = getChatOtherUserId(chatModalItem, user.uid);
-    if (!otherUserId) {
-      setChatMessages([]);
-      return;
-    }
-
-    const chatId = `${chatModalItem.id}__${[user.uid, otherUserId].sort().join('_')}`;
+    const chatId = activeChatId;
     const messagesQuery = query(
       collection(db, 'chats', chatId, 'messages'),
       orderBy('timestamp', 'asc')
@@ -1732,11 +1750,29 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, [chatModalItem, user?.uid]);
+  }, [activeChatId, user?.uid]);
 
-  const handleStartChat = (item: DonationItem) => {
-    if (!requireAuth()) return;
+  const handleStartChat = (
+    item: DonationItem,
+    partnerOverride?: { partnerId: string; partnerName: string; partnerAvatar?: string; chatId?: string }
+  ) => {
+    if (!requireAuth() || !user?.uid) return;
+
+    const otherUserId = partnerOverride?.partnerId || getChatOtherUserId(item, user.uid);
+    if (!otherUserId) {
+      showToast('Não foi possível identificar o outro participante da conversa.', 'error');
+      return;
+    }
+
+    const chatId = partnerOverride?.chatId || `${item.id}__${[user.uid, otherUserId].sort().join('_')}`;
+
     setChatModalItem(item);
+    setChatPartner({
+      id: otherUserId,
+      name: partnerOverride?.partnerName || item.donorName || 'Doador',
+      avatar: partnerOverride?.partnerAvatar || item.donorAvatar
+    });
+    setActiveChatId(chatId);
   };
 
   // Detects attempts to share external contact info (phone, links, social handles, e-mail, Pix keys) inside the chat
@@ -1786,13 +1822,7 @@ export default function App() {
   // Send Chat Message
   const handleSendChatMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInputText.trim() || !chatModalItem || !user?.uid) return;
-
-    const otherUserId = getChatOtherUserId(chatModalItem, user.uid);
-    if (!otherUserId) {
-      showToast('Não foi possível identificar o outro participante da conversa.', 'error');
-      return;
-    }
+    if (!chatInputText.trim() || !chatModalItem || !chatPartner || !activeChatId || !user?.uid) return;
 
     const messageText = chatInputText.trim();
     const { isBlocked } = validateChatMessage(messageText);
@@ -1804,7 +1834,7 @@ export default function App() {
       return;
     }
 
-    const chatId = `${chatModalItem.id}__${[user.uid, otherUserId].sort().join('_')}`;
+    const chatId = activeChatId;
     setChatInputText('');
     setIsSendingChatMessage(true);
 
@@ -1816,11 +1846,15 @@ export default function App() {
         read: false
       });
       await addDoc(collection(db, 'notifications'), {
-        userId: otherUserId,
+        userId: chatPartner.id,
         title: `💬 Nova mensagem de ${user.name}`,
         message: `Sobre "${chatModalItem.title}": ${messageText}`,
         type: 'chat',
-        itemId: chatModalItem.id,
+        donationId: chatModalItem.id,
+        chatId,
+        senderId: user.uid,
+        senderName: user.name,
+        senderAvatar: user.photoURL || null,
         createdAt: serverTimestamp(),
         read: false
       });
@@ -4301,7 +4335,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setChatModalItem(null)}
+                      onClick={() => { setChatModalItem(null); setChatPartner(null); setActiveChatId(null); }}
                       className="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all shrink-0"
                       title="Voltar"
                     >
@@ -4309,13 +4343,13 @@ export default function App() {
                     </button>
 
                     <img
-                      src={chatModalItem.donorAvatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150'}
-                      alt={chatModalItem.donorName}
+                      src={chatPartner?.avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150'}
+                      alt={chatPartner?.name || 'Doador'}
                       className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0"
                     />
                     <div>
                       <h3 className="text-xs font-bold text-slate-800">
-                        {chatModalItem.donorName || 'Doador'}
+                        {chatPartner?.name || 'Doador'}
                       </h3>
                       <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -4325,7 +4359,7 @@ export default function App() {
                   </div>
 
                   <button
-                    onClick={() => setChatModalItem(null)}
+                    onClick={() => { setChatModalItem(null); setChatPartner(null); setActiveChatId(null); }}
                     className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
                     title="Fechar"
                   >
