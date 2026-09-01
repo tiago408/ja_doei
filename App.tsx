@@ -4762,7 +4762,7 @@ export default function App() {
                 className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
               >
                 <div className="bg-[#14A76C] px-5 pb-4 pt-5 text-center">
-                  <img src={dodoMascoteImg} alt="Dodo Mascote" className="h-28 w-auto object-contain mx-auto" />
+                  <img src={dodoMascoteImg} alt="Dodo Mascote" className="h-24 w-auto object-contain mx-auto mb-2" />
                   <h2 className="text-base font-black text-white">🦤 O Manifesto do Dodo</h2>
                 </div>
 
