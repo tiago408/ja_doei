@@ -251,9 +251,14 @@ const CATEGORIES = ['Todas', ...DONATION_CATEGORIES];
 // Categorias de vestuário/acessórios que exibem o seletor de tamanho no cadastro
 const APPAREL_CATEGORIES: string[] = ['Moda & Acessórios'];
 
-const CLOTHING_SIZE_OPTIONS = [
-  'Tamanho Único', 'RN', '0-3M', '3-6M', '6-12M', '1-2 anos', '2-4 anos',
-  '4-6 anos', '6-8 anos', '8-10 anos', '10-12 anos', 'PP', 'P', 'M', 'G', 'GG', 'XGG / Plus Size'
+const CLOTHING_KIDS_SIZE_OPTIONS = [
+  'Prematuro', 'RN', '0-3 meses', '3-6 meses', '6-12 meses', '12 a 18 meses',
+  '18 a 24 meses', 'Tamanho 2', 'Tamanho 3', 'Tamanho 4', 'Tamanho 6', 'Tamanho 8',
+  'Tamanho 10', 'Tamanho 12'
+];
+
+const CLOTHING_ADULT_SIZE_OPTIONS = [
+  'Tamanho Único', 'PP', 'P', 'M', 'G', 'GG', 'XGG / Plus Size'
 ];
 
 const SHOE_SIZE_OPTIONS = [
@@ -4542,9 +4547,24 @@ export default function App() {
                               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                             >
                               <option value="">Selecione o tamanho</option>
-                              {(newSizeType === 'roupa' ? CLOTHING_SIZE_OPTIONS : SHOE_SIZE_OPTIONS).map((sizeOption) => (
-                                <option key={sizeOption} value={sizeOption}>{sizeOption}</option>
-                              ))}
+                              {newSizeType === 'roupa' ? (
+                                <>
+                                  <optgroup label="Infantil / Bebê">
+                                    {CLOTHING_KIDS_SIZE_OPTIONS.map((sizeOption) => (
+                                      <option key={sizeOption} value={sizeOption}>{sizeOption}</option>
+                                    ))}
+                                  </optgroup>
+                                  <optgroup label="Adulto">
+                                    {CLOTHING_ADULT_SIZE_OPTIONS.map((sizeOption) => (
+                                      <option key={sizeOption} value={sizeOption}>{sizeOption}</option>
+                                    ))}
+                                  </optgroup>
+                                </>
+                              ) : (
+                                SHOE_SIZE_OPTIONS.map((sizeOption) => (
+                                  <option key={sizeOption} value={sizeOption}>{sizeOption}</option>
+                                ))
+                              )}
                             </select>
                           </div>
                         )}
