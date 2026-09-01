@@ -73,8 +73,6 @@ import { evaluateItemWithGemini } from './aiPricingService';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
 
-const DODO_MASCOT_URL = 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f9a4.png';
-
 // Item Interface
 interface DonationItem {
   id: string;
@@ -654,16 +652,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
-    const profileLocation = getProfileLocation();
-    if (profileLocation && !newLocation.trim()) {
-      setNewLocation(profileLocation);
-      return;
-    }
-    if (profileLocation && ['São Paulo, SP', 'Cotia, SP', 'Localização atual', 'Localização atual (GPS)', ''].includes(newLocation.trim())) {
-      setNewLocation(profileLocation);
-    }
-  }, [user?.uid, user?.city, user?.location]);
+    const placeholderLocations = ['São Paulo, SP', 'Cotia, SP', 'Localização atual', 'Localização atual (GPS)', 'Carregando...', ''];
+    if (!placeholderLocations.includes(newLocation.trim())) return;
+    setNewLocation(getDefaultDonationLocation());
+  }, [user?.uid, user?.city, user?.location, userLocationLabel]);
 
   // Syncs the credits balance in real time from the users/{uid} Firestore document
   useEffect(() => {
@@ -1023,12 +1015,19 @@ export default function App() {
   };
 
   // New Item Form State
+  const INVALID_LOCATION_LABELS = ['Carregando...', 'Localização indisponível', 'Localização atual'];
+  const getDefaultDonationLocation = () => {
+    if (userLocationLabel && !INVALID_LOCATION_LABELS.includes(userLocationLabel)) return userLocationLabel;
+    const profileCity = user?.city?.trim() || user?.location?.trim();
+    if (profileCity) return profileCity;
+    return 'São Paulo, SP';
+  };
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Música & Instrumentos');
   const [newCredits, setNewCredits] = useState<number>(100);
   const [suggestedCredits, setSuggestedCredits] = useState<number>(100);
   const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
-  const [newLocation, setNewLocation] = useState('São Paulo, SP');
+  const [newLocation, setNewLocation] = useState(getDefaultDonationLocation());
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -1047,18 +1046,21 @@ export default function App() {
   const [donateStep, setDonateStep] = useState<number>(1);
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
   const [newExtraPhotos, setNewExtraPhotos] = useState<string[]>([]);
+  const [isCapturingExtraPhoto, setIsCapturingExtraPhoto] = useState<boolean>(false);
+  const [extraPhotoCameraError, setExtraPhotoCameraError] = useState<string>('');
   const [isSubmittingDonation, setIsSubmittingDonation] = useState<boolean>(false);
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'publishing'>('idle');
   const pricingRequestId = useRef(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const extraPhotoVideoRef = useRef<HTMLVideoElement>(null);
 
   const resetForm = () => {
     setNewTitle('');
     setNewCategory('Música & Instrumentos');
     setNewCredits(100);
     setSuggestedCredits(100);
-    setNewLocation('São Paulo, SP');
+    setNewLocation(getDefaultDonationLocation());
     setNewCondition('Usado - Excelente');
     setNewImageUrl('');
     setNewDescription('');
@@ -1088,6 +1090,48 @@ export default function App() {
       setDonateStep(1);
     }
   }, [isDonateModalOpen]);
+
+  useEffect(() => {
+    if (!isCapturingExtraPhoto) return;
+
+    let stream: MediaStream | null = null;
+    let isCancelled = false;
+
+    const startCamera = async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Camera indisponível neste navegador.');
+        }
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false
+        });
+
+        if (isCancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        const video = extraPhotoVideoRef.current;
+        if (video) {
+          video.srcObject = stream;
+          await video.play();
+        }
+      } catch (error) {
+        console.error('Erro ao acessar a câmera para foto complementar:', error);
+        setExtraPhotoCameraError('Não foi possível acessar a câmera. Verifique a permissão e tente novamente.');
+      }
+    };
+
+    void startCamera();
+
+    return () => {
+      isCancelled = true;
+      stream?.getTracks().forEach((track) => track.stop());
+      if (extraPhotoVideoRef.current) extraPhotoVideoRef.current.srcObject = null;
+    };
+  }, [isCapturingExtraPhoto]);
 
   const handleCalculatePricing = async (
     conditionOverride = newCondition,
@@ -1318,6 +1362,19 @@ export default function App() {
       const condition = newCondition;
       const result = await evaluateItemWithGemini(base64Image, title, category, condition);
 
+      if (result?.isInvalid) {
+        setNewImageUrl('');
+        setNewImageFile(null);
+        setNewCredits(0);
+        setSuggestedCredits(0);
+        setCreditsMin(0);
+        setCreditsMax(0);
+        setPricingJustification('');
+        setAiSuggested(false);
+        showToast('Fotos de pessoas/selfies e animais não são permitidas para doação.', 'error');
+        return;
+      }
+
       if (result) {
         if (!newTitle.trim()) setNewTitle(result.title);
         if (!isCategoryManuallySelected) {
@@ -1346,22 +1403,27 @@ export default function App() {
 
   const MAX_EXTRA_PHOTOS = 4;
 
-  // Reads up to the remaining slots of extra (complementary) photos
-  const handleExtraPhotosFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (!files.length) return;
+  const handleOpenExtraPhotoCamera = () => {
+    if (newExtraPhotos.length >= MAX_EXTRA_PHOTOS) return;
+    setExtraPhotoCameraError('');
+    setIsCapturingExtraPhoto(true);
+  };
 
-    const remainingSlots = MAX_EXTRA_PHOTOS - newExtraPhotos.length;
-    files.slice(0, remainingSlots).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setNewExtraPhotos((prev) => [...prev, reader.result as string].slice(0, MAX_EXTRA_PHOTOS));
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-    e.target.value = '';
+  const handleCaptureExtraPhoto = () => {
+    const video = extraPhotoVideoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      setExtraPhotoCameraError('A câmera ainda está sendo preparada. Tente novamente em alguns instantes.');
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = canvas.toDataURL('image/jpeg', 0.9);
+
+    setNewExtraPhotos((previousPhotos) => [...previousPhotos, imageData].slice(0, MAX_EXTRA_PHOTOS));
+    setIsCapturingExtraPhoto(false);
   };
 
   const handleRemoveExtraPhoto = (index: number) => {
@@ -2152,16 +2214,12 @@ export default function App() {
             {/* Translucent Card: Credits Balance */}
             <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3.5 border border-white/20 flex items-center justify-between shadow-inner">
               <div className="flex items-center gap-3">
-                <img
-                  src={DODO_MASCOT_URL}
-                  alt="Dodo"
-                  className="w-8 h-8 object-contain"
-                />
+                <span className="text-3xl leading-none">🦤</span>
                 <div>
                   <span className="text-[11px] uppercase tracking-wider text-emerald-100 font-medium block">
                     Seus Dodos
                   </span>
-                  <div className="text-2xl font-black tracking-tight text-white flex items-center gap-1.5">
+                  <div className="text-2xl font-black tracking-tight text-white flex items-baseline gap-1">
                     <span>{safeUserCredits}</span>
                     <span className="text-xs font-semibold text-emerald-200">
                       Dodos
@@ -2170,7 +2228,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setIsDodoInfoModalOpen(true)}
-                    className="text-[11px] text-white/90 underline mt-1 block hover:text-white"
+                    className="text-[11px] text-white/90 underline mt-0.5 block hover:text-white"
                   >
                     O que é um Dodo? ⓘ
                   </button>
@@ -2461,7 +2519,7 @@ export default function App() {
 
                             {/* Floating Credits Badge over Image */}
                             <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                              <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
+                              <span className="text-sm">🦤</span>
                               <span>{item.credits} Dodos</span>
                             </div>
 
@@ -2565,7 +2623,7 @@ export default function App() {
                           />
                           {/* Floating Credits Badge over Image */}
                           <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                            <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
+                            <span className="text-sm">🦤</span>
                             <span>{item.credits} Dodos</span>
                           </div>
                           <button
@@ -2641,21 +2699,20 @@ export default function App() {
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-500 truncate">{user.email} • São Paulo, SP</p>
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="bg-[#FF8243]/10 text-[#FF8243] text-xs font-bold px-2.5 py-0.5 rounded-lg border border-[#FF8243]/20">
-                        <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 inline mr-1" />
-                        {safeUserCredits} Dodos
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className="bg-[#FF8243]/10 text-[#FF8243] text-xs font-bold px-2.5 py-1 rounded-lg border border-[#FF8243]/20 flex items-center gap-1">
+                        🦤 {safeUserCredits} Dodos
                       </span>
                       <button
                         type="button"
                         onClick={() => setIsDodoInfoModalOpen(true)}
-                        className="text-[10px] font-semibold text-[#14A76C] underline hover:text-[#108958]"
+                        className="text-xs font-bold text-[#14A76C] underline hover:text-[#108958]"
                       >
                         O que é um Dodo? ⓘ
                       </button>
                     </div>
                   </div>
-                  <div className="flex items-center shrink-0 ml-2">
+                  <div className="flex items-center shrink-0 ml-3 p-1">
                     <button
                       type="button"
                       onClick={handleLogout}
@@ -4355,16 +4412,8 @@ export default function App() {
                         {/* Complementary photos gallery */}
                         <div className="w-full max-w-full box-border">
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Fotos Complementares (Opcional - até 4 fotos)
+                            Fotos Complementares via Câmera (Opcional - até 4 fotos)
                           </label>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            className="hidden"
-                            id="extra-photos-upload"
-                            onChange={handleExtraPhotosFileChange}
-                          />
                           <div className="flex flex-wrap gap-2">
                             {newExtraPhotos.map((photo, index) => (
                               <div key={index} className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 shrink-0">
@@ -4380,12 +4429,14 @@ export default function App() {
                               </div>
                             ))}
                             {newExtraPhotos.length < MAX_EXTRA_PHOTOS && (
-                              <label
-                                htmlFor="extra-photos-upload"
+                              <button
+                                type="button"
+                                onClick={handleOpenExtraPhotoCamera}
                                 className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:border-[#14A76C]/50 flex items-center justify-center cursor-pointer transition-all shrink-0"
+                                title="Capturar foto complementar"
                               >
                                 <Plus className="w-5 h-5" />
-                              </label>
+                              </button>
                             )}
                           </div>
                         </div>
@@ -4755,6 +4806,66 @@ export default function App() {
           )}
         </AnimatePresence>
 
+        {/* MODAL: CAPTURAR FOTO COMPLEMENTAR */}
+        <AnimatePresence>
+          {isCapturingExtraPhoto && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/75 p-4 backdrop-blur-xs">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 16 }}
+                className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+              >
+                <div className="flex items-center justify-between border-b border-slate-200 p-4">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-800">Capturar foto complementar</h2>
+                    <p className="text-[11px] text-slate-500">Use a câmera traseira para registrar o item.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsCapturingExtraPhoto(false)}
+                    className="rounded-full p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                    title="Fechar câmera"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="bg-slate-950 p-3">
+                  <video
+                    ref={extraPhotoVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="aspect-[3/4] w-full rounded-xl object-cover"
+                  />
+                </div>
+                <div className="space-y-2 p-4">
+                  {extraPhotoCameraError && (
+                    <p className="rounded-lg bg-rose-50 p-2 text-[11px] font-medium text-rose-700">
+                      {extraPhotoCameraError}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleCaptureExtraPhoto}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#14A76C] py-3 text-xs font-bold text-white shadow-md transition-all hover:bg-[#108958] active:scale-98"
+                  >
+                    <Camera className="w-4 h-4" />
+                    Capturar Foto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsCapturingExtraPhoto(false)}
+                    className="w-full rounded-xl py-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
         {/* MODAL: INFORMAÇÕES SOBRE O DODO */}
         <AnimatePresence>
           {isDodoInfoModalOpen && (
@@ -4766,11 +4877,7 @@ export default function App() {
                 className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
               >
                 <div className="bg-[#14A76C] px-5 pb-4 pt-5 text-center">
-                  <img
-                    src={DODO_MASCOT_URL}
-                    alt="Dodo"
-                    className="w-20 h-20 mx-auto mb-2 object-contain filter drop-shadow-md"
-                  />
+                  <div className="text-5xl text-center mb-2">🦤</div>
                   <h2 className="text-base font-black text-white">🦤 O Manifesto do Dodo</h2>
                 </div>
 
@@ -5263,7 +5370,7 @@ export default function App() {
                                 </span>
                                 {/* Floating Credits Badge over Image */}
                                 <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                                  <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
+                                  <span className="text-sm">🦤</span>
                                   <span>{item.credits} Dodos</span>
                                 </div>
                               </div>
