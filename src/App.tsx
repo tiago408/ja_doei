@@ -72,8 +72,8 @@ import { db, storage, auth } from './firebase';
 import { evaluateItemWithGemini } from './aiPricingService';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
+import dodoMascoteImg from './assets/dodo-mascote.png';
 
-const DODO_MASCOT_URL = 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f9a4.png';
 
 // Item Interface
 interface DonationItem {
@@ -2152,11 +2152,7 @@ export default function App() {
             {/* Translucent Card: Credits Balance */}
             <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3.5 border border-white/20 flex items-center justify-between shadow-inner">
               <div className="flex items-center gap-3">
-                <img
-                  src={DODO_MASCOT_URL}
-                  alt="Dodo"
-                  className="w-8 h-8 object-contain"
-                />
+                <img src={dodoMascoteImg} alt="Dodo" className="w-9 h-9 object-contain inline-block shrink-0" />
                 <div>
                   <span className="text-[11px] uppercase tracking-wider text-emerald-100 font-medium block">
                     Seus Dodos
@@ -2461,7 +2457,7 @@ export default function App() {
 
                             {/* Floating Credits Badge over Image */}
                             <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                              <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
+                              <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block shrink-0" />
                               <span>{item.credits} Dodos</span>
                             </div>
 
@@ -2565,7 +2561,7 @@ export default function App() {
                           />
                           {/* Floating Credits Badge over Image */}
                           <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                            <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
+                            <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block shrink-0" />
                             <span>{item.credits} Dodos</span>
                           </div>
                           <button
@@ -2643,7 +2639,7 @@ export default function App() {
                     <p className="text-[11px] text-slate-500 truncate">{user.email} • São Paulo, SP</p>
                     <div className="mt-2 flex items-center gap-2">
                       <span className="bg-[#FF8243]/10 text-[#FF8243] text-xs font-bold px-2.5 py-0.5 rounded-lg border border-[#FF8243]/20">
-                        <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 inline mr-1" />
+                        <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block shrink-0 mr-1" />
                         {safeUserCredits} Dodos
                       </span>
                       <button
@@ -4766,11 +4762,7 @@ export default function App() {
                 className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
               >
                 <div className="bg-[#14A76C] px-5 pb-4 pt-5 text-center">
-                  <img
-                    src={DODO_MASCOT_URL}
-                    alt="Dodo"
-                    className="w-20 h-20 mx-auto mb-2 object-contain filter drop-shadow-md"
-                  />
+                  <img src={dodoMascoteImg} alt="Dodo Mascote" className="h-24 w-auto object-contain mx-auto mb-2" />
                   <h2 className="text-base font-black text-white">🦤 O Manifesto do Dodo</h2>
                 </div>
 
@@ -5263,7 +5255,7 @@ export default function App() {
                                 </span>
                                 {/* Floating Credits Badge over Image */}
                                 <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                                  <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
+                                  <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block shrink-0" />
                                   <span>{item.credits} Dodos</span>
                                 </div>
                               </div>
