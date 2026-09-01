@@ -1763,7 +1763,7 @@ export default function App() {
       category: newCategory,
       credits: donationCredits,
       aiSuggestedCredits: suggestedCredits > 0 ? suggestedCredits : donationCredits,
-      location: newLocation.trim() || 'São Paulo, SP',
+      location: newLocation.trim() || getProfileLocation() || '',
       userLocation: getProfileLocation(),
       condition: newCondition,
       size: APPAREL_CATEGORIES.includes(newCategory) && newSize ? newSize : undefined,
