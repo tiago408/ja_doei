@@ -73,6 +73,8 @@ import { evaluateItemWithGemini } from './aiPricingService';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
 
+const DODO_MASCOT_URL = 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f9a4.png';
+
 // Item Interface
 interface DonationItem {
   id: string;
@@ -652,10 +654,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const placeholderLocations = ['São Paulo, SP', 'Cotia, SP', 'Localização atual', 'Localização atual (GPS)', 'Carregando...', ''];
-    if (!placeholderLocations.includes(newLocation.trim())) return;
-    setNewLocation(getProfileLocation());
-  }, [user?.uid, user?.city, user?.location, userLocationLabel]);
+    if (!user) return;
+    const profileLocation = getProfileLocation();
+    if (profileLocation && !newLocation.trim()) {
+      setNewLocation(profileLocation);
+      return;
+    }
+    if (profileLocation && ['São Paulo, SP', 'Cotia, SP', 'Localização atual', 'Localização atual (GPS)', ''].includes(newLocation.trim())) {
+      setNewLocation(profileLocation);
+    }
+  }, [user?.uid, user?.city, user?.location]);
 
   // Syncs the credits balance in real time from the users/{uid} Firestore document
   useEffect(() => {
@@ -1014,15 +1022,13 @@ export default function App() {
     }, 350);
   };
 
-  const getProfileLocation = () => user?.city?.trim() || user?.location?.trim() || 'Cotia, SP';
-
   // New Item Form State
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Música & Instrumentos');
   const [newCredits, setNewCredits] = useState<number>(100);
   const [suggestedCredits, setSuggestedCredits] = useState<number>(100);
   const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
-  const [newLocation, setNewLocation] = useState(() => getProfileLocation());
+  const [newLocation, setNewLocation] = useState('São Paulo, SP');
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -1041,22 +1047,18 @@ export default function App() {
   const [donateStep, setDonateStep] = useState<number>(1);
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
   const [newExtraPhotos, setNewExtraPhotos] = useState<string[]>([]);
-  const [isCapturingExtraPhoto, setIsCapturingExtraPhoto] = useState<boolean>(false);
-  const [extraPhotoCameraError, setExtraPhotoCameraError] = useState<string>('');
   const [isSubmittingDonation, setIsSubmittingDonation] = useState<boolean>(false);
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'publishing'>('idle');
-  const [isItemInvalid, setIsItemInvalid] = useState<boolean>(false);
   const pricingRequestId = useRef(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const extraPhotoVideoRef = useRef<HTMLVideoElement>(null);
 
   const resetForm = () => {
     setNewTitle('');
     setNewCategory('Música & Instrumentos');
     setNewCredits(100);
     setSuggestedCredits(100);
-    setNewLocation(getProfileLocation());
+    setNewLocation('São Paulo, SP');
     setNewCondition('Usado - Excelente');
     setNewImageUrl('');
     setNewDescription('');
@@ -1079,89 +1081,13 @@ export default function App() {
     setIsSubmittingDonation(false);
     setNewImageFile(null);
     setUploadPhase('idle');
-    setIsItemInvalid(false);
-  };
-
-  const fetchCurrentLocation = () => {
-    if (!navigator.geolocation) return;
-    setNewLocation('Buscando localização via GPS...');
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords;
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
-          );
-          const data = await response.json();
-          const city = data.address.city || data.address.town || data.address.municipality || 'Cotia';
-          const suburb = data.address.suburb || data.address.neighbourhood || '';
-          const locationString = suburb ? `${suburb}, ${city}` : `${city}, SP`;
-
-          setNewLocation(locationString);
-        } catch (error) {
-          setNewLocation('Cotia, SP');
-        }
-      },
-      () => {
-        // Fallback caso o usuário negue a permissão de GPS
-        setNewLocation(user?.city ? `${user.city}, SP` : 'Cotia, SP');
-      }
-    );
   };
 
   useEffect(() => {
     if (isDonateModalOpen) {
       setDonateStep(1);
-      const currentLoc = userLocationLabel && !['Carregando...', 'Localização indisponível'].includes(userLocationLabel)
-        ? userLocationLabel
-        : getProfileLocation();
-      setNewLocation(currentLoc);
-      fetchCurrentLocation();
     }
-  }, [isDonateModalOpen, userLocationLabel, user]);
-
-  useEffect(() => {
-    if (!isCapturingExtraPhoto) return;
-
-    let stream: MediaStream | null = null;
-    let isCancelled = false;
-
-    const startCamera = async () => {
-      try {
-        if (!navigator.mediaDevices?.getUserMedia) {
-          throw new Error('Camera indisponível neste navegador.');
-        }
-
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-          audio: false
-        });
-
-        if (isCancelled) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-
-        const video = extraPhotoVideoRef.current;
-        if (video) {
-          video.srcObject = stream;
-          await video.play();
-        }
-      } catch (error) {
-        console.error('Erro ao acessar a câmera para foto complementar:', error);
-        setExtraPhotoCameraError('Não foi possível acessar a câmera. Verifique a permissão e tente novamente.');
-      }
-    };
-
-    void startCamera();
-
-    return () => {
-      isCancelled = true;
-      stream?.getTracks().forEach((track) => track.stop());
-      if (extraPhotoVideoRef.current) extraPhotoVideoRef.current.srcObject = null;
-    };
-  }, [isCapturingExtraPhoto]);
+  }, [isDonateModalOpen]);
 
   const handleCalculatePricing = async (
     conditionOverride = newCondition,
@@ -1236,6 +1162,8 @@ export default function App() {
     }, 3800);
   };
 
+  const getProfileLocation = () => user?.city?.trim() || user?.location?.trim() || 'Cotia, SP';
+
   const getUserInitials = (name: string) => name
     .trim()
     .split(/\s+/)
@@ -1243,6 +1171,62 @@ export default function App() {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join('') || 'U';
+
+  const formatReverseGeocodedLocation = (address: Record<string, string>) => {
+    const neighborhood = address.suburb || address.neighbourhood || address.quarter;
+    const city = address.city || address.town || address.village || address.municipality;
+    const state = address.state_code || address.state;
+    if (neighborhood && city && state) return `${neighborhood}, ${city} - ${state}`;
+    if (neighborhood && city) return `${neighborhood}, ${city}`;
+    if (city && state) return `${city}, ${state}`;
+    return getProfileLocation();
+  };
+
+  const handleUseGps = () => {
+    setIsLocatingGps(true);
+    let settled = false;
+    const finishWithFallback = () => {
+      if (settled) return;
+      settled = true;
+      const profileLocation = getProfileLocation();
+      setNewLocation(profileLocation);
+      setIsLocatingGps(false);
+      showToast(`📍 Usando sua localização cadastrada: ${profileLocation}`, 'info');
+    };
+    const timeoutId = window.setTimeout(finishWithFallback, 2000);
+
+    if (!navigator.geolocation) {
+      window.clearTimeout(timeoutId);
+      finishWithFallback();
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+      if (settled) return;
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}&zoom=18&addressdetails=1`,
+          { headers: { Accept: 'application/json' } }
+        );
+        if (!response.ok) throw new Error(`Geocodificação retornou HTTP ${response.status}`);
+        const data = await response.json() as { address?: Record<string, string> };
+        if (!data.address) throw new Error('Resposta de geocodificação sem endereço');
+        window.clearTimeout(timeoutId);
+        settled = true;
+        const realLocation = formatReverseGeocodedLocation(data.address);
+        setNewLocation(realLocation);
+        setIsLocatingGps(false);
+        showToast(`📍 Localização atualizada via GPS: ${realLocation}`, 'success');
+      } catch (error) {
+        console.error('Erro na geocodificação reversa:', error);
+        finishWithFallback();
+      }
+    }, (error) => {
+      console.warn('GPS indisponível:', error);
+      window.clearTimeout(timeoutId);
+      finishWithFallback();
+    }, { enableHighAccuracy: true, timeout: 1800, maximumAge: 300000 });
+  };
 
   const getDisplayLocation = (item: DonationItem) => {
     const location = item.location?.trim();
@@ -1334,24 +1318,6 @@ export default function App() {
       const condition = newCondition;
       const result = await evaluateItemWithGemini(base64Image, title, category, condition);
 
-      const blockedTerms = ['selfie', 'pessoa', 'animal'];
-      const isBlockedByTitle = blockedTerms.some((term) => (result?.title || '').toLowerCase().includes(term));
-      const isBlockedByZeroCredits = result?.credits === 0 && Boolean(result?.justification);
-
-      if (result?.isInvalid || isBlockedByTitle || isBlockedByZeroCredits) {
-        setIsItemInvalid(true);
-        setNewCredits(0);
-        setSuggestedCredits(0);
-        setCreditsMin(0);
-        setCreditsMax(0);
-        setPricingJustification('');
-        setAiSuggested(false);
-        showToast('Fotos de pessoas/selfies e animais não são permitidas para doação.', 'error');
-        return;
-      }
-
-      setIsItemInvalid(false);
-
       if (result) {
         if (!newTitle.trim()) setNewTitle(result.title);
         if (!isCategoryManuallySelected) {
@@ -1380,27 +1346,22 @@ export default function App() {
 
   const MAX_EXTRA_PHOTOS = 4;
 
-  const handleOpenExtraPhotoCamera = () => {
-    if (newExtraPhotos.length >= MAX_EXTRA_PHOTOS) return;
-    setExtraPhotoCameraError('');
-    setIsCapturingExtraPhoto(true);
-  };
+  // Reads up to the remaining slots of extra (complementary) photos
+  const handleExtraPhotosFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
 
-  const handleCaptureExtraPhoto = () => {
-    const video = extraPhotoVideoRef.current;
-    if (!video || !video.videoWidth || !video.videoHeight) {
-      setExtraPhotoCameraError('A câmera ainda está sendo preparada. Tente novamente em alguns instantes.');
-      return;
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const imageData = canvas.toDataURL('image/jpeg', 0.9);
-
-    setNewExtraPhotos((previousPhotos) => [...previousPhotos, imageData].slice(0, MAX_EXTRA_PHOTOS));
-    setIsCapturingExtraPhoto(false);
+    const remainingSlots = MAX_EXTRA_PHOTOS - newExtraPhotos.length;
+    files.slice(0, remainingSlots).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setNewExtraPhotos((prev) => [...prev, reader.result as string].slice(0, MAX_EXTRA_PHOTOS));
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
   };
 
   const handleRemoveExtraPhoto = (index: number) => {
@@ -1724,14 +1685,9 @@ export default function App() {
   const handleCreateDonation = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (isItemInvalid) {
-      showToast('Não é possível publicar itens contendo pessoas ou animais.', 'error');
-      return;
-    }
-
     if (donateStep === 1) {
-      if (isItemInvalid || newTitle.toLowerCase().includes('inválido') || newCredits === 0 || !newImageUrl) {
-        showToast('Esta foto foi identificada como pessoa/animal e não pode ser publicada. Tire a foto de um objeto.', 'error');
+      if (!newImageUrl) {
+        showToast('Tire uma foto para a IA calcular os Dodos.', 'error');
         return;
       }
       setDonateStep(2);
@@ -1783,7 +1739,7 @@ export default function App() {
       category: newCategory,
       credits: donationCredits,
       aiSuggestedCredits: suggestedCredits > 0 ? suggestedCredits : donationCredits,
-      location: newLocation.trim() || getProfileLocation(),
+      location: newLocation.trim() || 'São Paulo, SP',
       userLocation: getProfileLocation(),
       condition: newCondition,
       image: finalImageUrl,
@@ -2196,12 +2152,16 @@ export default function App() {
             {/* Translucent Card: Credits Balance */}
             <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3.5 border border-white/20 flex items-center justify-between shadow-inner">
               <div className="flex items-center gap-3">
-                <span className="text-3xl leading-none">🦤</span>
+                <img
+                  src={DODO_MASCOT_URL}
+                  alt="Dodo"
+                  className="w-8 h-8 object-contain"
+                />
                 <div>
                   <span className="text-[11px] uppercase tracking-wider text-emerald-100 font-medium block">
                     Seus Dodos
                   </span>
-                  <div className="text-2xl font-black tracking-tight text-white flex items-baseline gap-1">
+                  <div className="text-2xl font-black tracking-tight text-white flex items-center gap-1.5">
                     <span>{safeUserCredits}</span>
                     <span className="text-xs font-semibold text-emerald-200">
                       Dodos
@@ -2210,7 +2170,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setIsDodoInfoModalOpen(true)}
-                    className="text-[11px] text-white/90 underline mt-0.5 block hover:text-white"
+                    className="text-[11px] text-white/90 underline mt-1 block hover:text-white"
                   >
                     O que é um Dodo? ⓘ
                   </button>
@@ -2501,7 +2461,7 @@ export default function App() {
 
                             {/* Floating Credits Badge over Image */}
                             <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                              <span className="text-sm">🦤</span>
+                              <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
                               <span>{item.credits} Dodos</span>
                             </div>
 
@@ -2605,7 +2565,7 @@ export default function App() {
                           />
                           {/* Floating Credits Badge over Image */}
                           <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                            <span className="text-sm">🦤</span>
+                            <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
                             <span>{item.credits} Dodos</span>
                           </div>
                           <button
@@ -2681,20 +2641,21 @@ export default function App() {
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-500 truncate">{user.email} • São Paulo, SP</p>
-                    <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <span className="bg-[#FF8243]/10 text-[#FF8243] text-xs font-bold px-2.5 py-1 rounded-lg border border-[#FF8243]/20 flex items-center gap-1">
-                        🦤 {safeUserCredits} Dodos
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="bg-[#FF8243]/10 text-[#FF8243] text-xs font-bold px-2.5 py-0.5 rounded-lg border border-[#FF8243]/20">
+                        <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 inline mr-1" />
+                        {safeUserCredits} Dodos
                       </span>
                       <button
                         type="button"
                         onClick={() => setIsDodoInfoModalOpen(true)}
-                        className="text-xs font-bold text-[#14A76C] underline hover:text-[#108958]"
+                        className="text-[10px] font-semibold text-[#14A76C] underline hover:text-[#108958]"
                       >
                         O que é um Dodo? ⓘ
                       </button>
                     </div>
                   </div>
-                  <div className="flex items-center shrink-0 ml-3 p-1">
+                  <div className="flex items-center shrink-0 ml-2">
                     <button
                       type="button"
                       onClick={handleLogout}
@@ -4333,7 +4294,6 @@ export default function App() {
                                 setNewImageFile(null);
                                 setIsAnalyzingImage(false);
                                 setAiSuggested(false);
-                                setIsItemInvalid(false);
                               }}
                               className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-900/60 text-white hover:bg-slate-900/80 transition-all"
                               title="Remover foto"
@@ -4368,14 +4328,6 @@ export default function App() {
                             <span>Analisando imagem via IA...</span>
                           </div>
                         )}
-
-                        {isItemInvalid && (
-                          <div className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-center">
-                            <p className="text-[11px] font-semibold text-red-600">
-                              Item não permitido. Fotos de pessoas, selfies ou animais são bloqueadas. Por favor, tire a foto de um objeto válido.
-                            </p>
-                          </div>
-                        )}
                       </div>
                     )}
 
@@ -4403,8 +4355,16 @@ export default function App() {
                         {/* Complementary photos gallery */}
                         <div className="w-full max-w-full box-border">
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Fotos Complementares via Câmera (Opcional - até 4 fotos)
+                            Fotos Complementares (Opcional - até 4 fotos)
                           </label>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            id="extra-photos-upload"
+                            onChange={handleExtraPhotosFileChange}
+                          />
                           <div className="flex flex-wrap gap-2">
                             {newExtraPhotos.map((photo, index) => (
                               <div key={index} className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 shrink-0">
@@ -4420,14 +4380,12 @@ export default function App() {
                               </div>
                             ))}
                             {newExtraPhotos.length < MAX_EXTRA_PHOTOS && (
-                              <button
-                                type="button"
-                                onClick={handleOpenExtraPhotoCamera}
+                              <label
+                                htmlFor="extra-photos-upload"
                                 className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:border-[#14A76C]/50 flex items-center justify-center cursor-pointer transition-all shrink-0"
-                                title="Capturar foto complementar"
                               >
                                 <Plus className="w-5 h-5" />
-                              </button>
+                              </label>
                             )}
                           </div>
                         </div>
@@ -4534,7 +4492,7 @@ export default function App() {
                             />
                             <button
                               type="button"
-                              onClick={fetchCurrentLocation}
+                              onClick={handleUseGps}
                               disabled={isLocatingGps}
                               className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-[#14A76C] hover:bg-emerald-50 disabled:opacity-60 transition-all"
                               title="Usar minha localização atual"
@@ -4542,6 +4500,9 @@ export default function App() {
                               <LocateFixed className={`w-4 h-4 ${isLocatingGps ? 'animate-spin' : ''}`} />
                             </button>
                           </div>
+                          <p className="text-[10px] text-slate-400 mt-1">
+                            No app final, este campo utilizará seu CEP ou GPS para calcular o frete exato.
+                          </p>
                         </div>
 
                         {/* Credits Card with ±10% lock */}
@@ -4763,8 +4724,7 @@ export default function App() {
                     {donateStep < 3 ? (
                       <button
                         type="submit"
-                        disabled={isItemInvalid || isAnalyzingImage || !newImageUrl}
-                        className="flex-1 px-5 py-2.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-1 px-5 py-2.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                       >
                         <span>Continuar</span>
                         <ChevronRight className="w-4 h-4" />
@@ -4795,66 +4755,6 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {/* MODAL: CAPTURAR FOTO COMPLEMENTAR */}
-        <AnimatePresence>
-          {isCapturingExtraPhoto && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/75 p-4 backdrop-blur-xs">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.96, y: 16 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, y: 16 }}
-                className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
-              >
-                <div className="flex items-center justify-between border-b border-slate-200 p-4">
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-800">Capturar foto complementar</h2>
-                    <p className="text-[11px] text-slate-500">Use a câmera traseira para registrar o item.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsCapturingExtraPhoto(false)}
-                    className="rounded-full p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                    title="Fechar câmera"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="bg-slate-950 p-3">
-                  <video
-                    ref={extraPhotoVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="aspect-[3/4] w-full rounded-xl object-cover"
-                  />
-                </div>
-                <div className="space-y-2 p-4">
-                  {extraPhotoCameraError && (
-                    <p className="rounded-lg bg-rose-50 p-2 text-[11px] font-medium text-rose-700">
-                      {extraPhotoCameraError}
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleCaptureExtraPhoto}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#14A76C] py-3 text-xs font-bold text-white shadow-md transition-all hover:bg-[#108958] active:scale-98"
-                  >
-                    <Camera className="w-4 h-4" />
-                    Capturar Foto
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsCapturingExtraPhoto(false)}
-                    className="w-full rounded-xl py-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-
         {/* MODAL: INFORMAÇÕES SOBRE O DODO */}
         <AnimatePresence>
           {isDodoInfoModalOpen && (
@@ -4866,7 +4766,11 @@ export default function App() {
                 className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
               >
                 <div className="bg-[#14A76C] px-5 pb-4 pt-5 text-center">
-                  <div className="text-5xl text-center mb-2">🦤</div>
+                  <img
+                    src={DODO_MASCOT_URL}
+                    alt="Dodo"
+                    className="w-20 h-20 mx-auto mb-2 object-contain filter drop-shadow-md"
+                  />
                   <h2 className="text-base font-black text-white">🦤 O Manifesto do Dodo</h2>
                 </div>
 
@@ -5359,7 +5263,7 @@ export default function App() {
                                 </span>
                                 {/* Floating Credits Badge over Image */}
                                 <div className="absolute bottom-1.5 left-1.5 bg-[#FF8243] text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 z-10">
-                                  <span className="text-sm">🦤</span>
+                                  <img src={DODO_MASCOT_URL} alt="Dodo" className="w-4 h-4 object-contain shrink-0" />
                                   <span>{item.credits} Dodos</span>
                                 </div>
                               </div>
