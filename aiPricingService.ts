@@ -5,13 +5,11 @@ const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
 
 export interface EvaluationResult {
-  credits: number;
   title: string;
   category: string;
+  credits: number;
   justification: string;
-  isInvalid?: boolean;
-  reason?: string;
-  [key: string]: unknown;
+}
 
 export async function evaluateItemWithGemini(
   imageBase64?: string,
@@ -39,16 +37,6 @@ export async function evaluateItemWithGemini(
       2. Escolha a melhor categoria entre: ["Música & Instrumentos", "Casa, Cozinha & Utensílios", "Móveis & Decoração", "Eletrônicos & Tecnologia", "Esporte & Lazer", "Brinquedos & Jogos", "Moda & Acessórios", "Papelaria & Escritório", "Livros & Mídias", "Outros"].
       3. Estime o valor em BRL de mercado para seminovos (1 BRL = 1 Crédito).
          Regra de conservação: "Novo na caixa" = 100%, "Usado - Excelente" = 75-85%, "Usado - Bom" = 50-60%.
-      4. Verifique se a imagem contém rostos humanos, selfies, partes do corpo ou animais. Este app aceita apenas fotos de itens/objetos para doação.
-         Se a imagem contiver um rosto humano, selfie, pessoa ou animal, retorne obrigatoriamente:
-         {
-           "isInvalid": true,
-           "credits": 0,
-           "title": "Foto Inválida (Pessoa/Animal)",
-           "category": "Outros",
-           "justification": "Fotos de pessoas, selfies ou animais não são permitidas.",
-           "reason": "person_or_animal_detected"
-         }
 
       Retorne EXCLUSIVAMENTE um JSON VÁLIDO no seguinte formato (sem formatação markdown \`\`\`json):
       {
