@@ -97,6 +97,7 @@ interface DonationItem {
   receiverId?: string | null;
   userLocation?: string;
   isLargeItem?: boolean;
+  size?: string;
 }
 
 export interface FreightOption {
@@ -247,6 +248,19 @@ const DONATION_CATEGORIES = [
 
 const CATEGORIES = ['Todas', ...DONATION_CATEGORIES];
 
+// Categorias de vestuário/acessórios que exibem o seletor de tamanho no cadastro
+const APPAREL_CATEGORIES: string[] = ['Moda & Acessórios'];
+
+const CLOTHING_SIZE_OPTIONS = [
+  'Tamanho Único', 'RN', '0-3M', '3-6M', '6-12M', '1-2 anos', '2-4 anos',
+  '4-6 anos', '6-8 anos', '8-10 anos', '10-12 anos', 'PP', 'P', 'M', 'G', 'GG', 'XGG / Plus Size'
+];
+
+const SHOE_SIZE_OPTIONS = [
+  ...Array.from({ length: 45 - 16 + 1 }, (_, i) => String(16 + i)),
+  'Infantil / Diversos'
+];
+
 // Simple Google "G" logo used on the Auth Modal social button
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -319,6 +333,7 @@ export default function App() {
           aiSuggestedCredits: data.aiSuggestedCredits,
           location: data.location,
           condition: data.condition,
+          size: data.size || undefined,
           imageUrl: data.imageUrl || data.image,
           description: data.description,
           createdAt: 'Hoje',
@@ -1030,6 +1045,8 @@ export default function App() {
   const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
   const [newLocation, setNewLocation] = useState('São Paulo, SP');
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
+  const [newSizeType, setNewSizeType] = useState<'roupa' | 'calcado'>('roupa');
+  const [newSize, setNewSize] = useState('');
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newIsFeatured, setNewIsFeatured] = useState<boolean>(false);
@@ -1060,6 +1077,8 @@ export default function App() {
     setSuggestedCredits(100);
     setNewLocation('São Paulo, SP');
     setNewCondition('Usado - Excelente');
+    setNewSizeType('roupa');
+    setNewSize('');
     setNewImageUrl('');
     setNewDescription('');
     setNewIsFeatured(false);
@@ -1742,6 +1761,7 @@ export default function App() {
       location: newLocation.trim() || 'São Paulo, SP',
       userLocation: getProfileLocation(),
       condition: newCondition,
+      size: APPAREL_CATEGORIES.includes(newCategory) && newSize ? newSize : undefined,
       image: finalImageUrl,
       imageUrl: finalImageUrl,
       description: newDescription.trim() || 'Item doado recentemente na comunidade em ótimo estado.',
@@ -2496,6 +2516,11 @@ export default function App() {
                               <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                               <span className="truncate">{getDisplayLocation(item)}</span>
                             </div>
+                            {item.size && (
+                              <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-lg">
+                                📏 Tam: {item.size}
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -3164,6 +3189,14 @@ export default function App() {
                         <ShieldCheck className="w-3.5 h-3.5 text-[#14A76C]" />
                         <span>{selectedItemForDetails.condition || 'Seminovo - Excelente estado'}</span>
                       </div>
+
+                      {/* Size Badge */}
+                      {selectedItemForDetails.size && (
+                        <div className="flex items-center gap-1 text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
+                          <span aria-hidden="true">📏</span>
+                          <span>Tam: {selectedItemForDetails.size}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -4473,6 +4506,48 @@ export default function App() {
                             <option value="Para conserto/peças">Para conserto/peças</option>
                           </select>
                         </div>
+
+                        {APPAREL_CATEGORIES.includes(newCategory) && (
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                              Tamanho
+                            </label>
+                            <div className="flex gap-2 mb-2">
+                              <button
+                                type="button"
+                                onClick={() => { setNewSizeType('roupa'); setNewSize(''); }}
+                                className={`flex-1 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all ${
+                                  newSizeType === 'roupa'
+                                    ? 'bg-[#14A76C] text-white border-[#14A76C]'
+                                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                                }`}
+                              >
+                                👕 Roupas / Acessórios
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setNewSizeType('calcado'); setNewSize(''); }}
+                                className={`flex-1 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all ${
+                                  newSizeType === 'calcado'
+                                    ? 'bg-[#14A76C] text-white border-[#14A76C]'
+                                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                                }`}
+                              >
+                                👟 Calçados
+                              </button>
+                            </div>
+                            <select
+                              value={newSize}
+                              onChange={(e) => setNewSize(e.target.value)}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                            >
+                              <option value="">Selecione o tamanho</option>
+                              {(newSizeType === 'roupa' ? CLOTHING_SIZE_OPTIONS : SHOE_SIZE_OPTIONS).map((sizeOption) => (
+                                <option key={sizeOption} value={sizeOption}>{sizeOption}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
 
                         <div>
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">
