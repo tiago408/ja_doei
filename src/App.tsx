@@ -251,9 +251,14 @@ const CATEGORIES = ['Todas', ...DONATION_CATEGORIES];
 // Categorias de vestuário/acessórios que exibem o seletor de tamanho no cadastro
 const APPAREL_CATEGORIES: string[] = ['Moda & Acessórios'];
 
-const CLOTHING_SIZE_OPTIONS = [
-  'Tamanho Único', 'RN', '0-3M', '3-6M', '6-12M', '1-2 anos', '2-4 anos',
-  '4-6 anos', '6-8 anos', '8-10 anos', '10-12 anos', 'PP', 'P', 'M', 'G', 'GG', 'XGG / Plus Size'
+const CLOTHING_KIDS_SIZE_OPTIONS = [
+  'Prematuro', 'RN', '0-3 meses', '3-6 meses', '6-12 meses', '12 a 18 meses',
+  '18 a 24 meses', 'Tamanho 2', 'Tamanho 3', 'Tamanho 4', 'Tamanho 6', 'Tamanho 8',
+  'Tamanho 10', 'Tamanho 12'
+];
+
+const CLOTHING_ADULT_SIZE_OPTIONS = [
+  'Tamanho Único', 'PP', 'P', 'M', 'G', 'GG', 'XGG / Plus Size'
 ];
 
 const SHOE_SIZE_OPTIONS = [
@@ -616,9 +621,6 @@ export default function App() {
           location: profile.location
         };
         setUser(nextUser);
-        if (nextUser.city || nextUser.location) {
-          setNewLocation(nextUser.city?.trim() || nextUser.location?.trim() || 'São Paulo, SP');
-        }
       } else {
         setUser(null);
       }
@@ -667,18 +669,6 @@ export default function App() {
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
     );
   }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    const profileLocation = getProfileLocation();
-    if (profileLocation && !newLocation.trim()) {
-      setNewLocation(profileLocation);
-      return;
-    }
-    if (profileLocation && ['São Paulo, SP', 'Cotia, SP', 'Localização atual', 'Localização atual (GPS)', ''].includes(newLocation.trim())) {
-      setNewLocation(profileLocation);
-    }
-  }, [user?.uid, user?.city, user?.location]);
 
   // Syncs the credits balance in real time from the users/{uid} Firestore document
   useEffect(() => {
@@ -1043,7 +1033,7 @@ export default function App() {
   const [newCredits, setNewCredits] = useState<number>(100);
   const [suggestedCredits, setSuggestedCredits] = useState<number>(100);
   const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
-  const [newLocation, setNewLocation] = useState('São Paulo, SP');
+  const [newLocation, setNewLocation] = useState('');
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newSizeType, setNewSizeType] = useState<'roupa' | 'calcado'>('roupa');
   const [newSize, setNewSize] = useState('');
@@ -1075,7 +1065,7 @@ export default function App() {
     setNewCategory('Música & Instrumentos');
     setNewCredits(100);
     setSuggestedCredits(100);
-    setNewLocation('São Paulo, SP');
+    setNewLocation('');
     setNewCondition('Usado - Excelente');
     setNewSizeType('roupa');
     setNewSize('');
@@ -1105,6 +1095,7 @@ export default function App() {
   useEffect(() => {
     if (isDonateModalOpen) {
       setDonateStep(1);
+      setNewLocation('');
     }
   }, [isDonateModalOpen]);
 
@@ -1758,7 +1749,7 @@ export default function App() {
       category: newCategory,
       credits: donationCredits,
       aiSuggestedCredits: suggestedCredits > 0 ? suggestedCredits : donationCredits,
-      location: newLocation.trim() || 'São Paulo, SP',
+      location: newLocation.trim() || getProfileLocation() || '',
       userLocation: getProfileLocation(),
       condition: newCondition,
       size: APPAREL_CATEGORIES.includes(newCategory) && newSize ? newSize : undefined,
@@ -1815,6 +1806,9 @@ export default function App() {
     setNewImageFile(null);
     setNewExtraPhotos([]);
     setNewCondition('Usado - Excelente');
+    setNewLocation('');
+    setNewSizeType('roupa');
+    setNewSize('');
     setPricingJustification('');
     setPricingError('');
     setIsPricingAnalyzing(false);
@@ -2891,7 +2885,7 @@ export default function App() {
                               {item.title}
                             </span>
                             <span className="block text-[10px] text-slate-500 truncate">
-                              {item.category} · 🦤 {item.credits} Dodos
+                              {item.category} · <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" /> {item.credits} Dodos
                             </span>
                           </span>
                           <button
@@ -3162,7 +3156,7 @@ export default function App() {
                       {selectedItemForDetails.category}
                     </span>
                     <span className="bg-[#FF7A38] text-white text-xs font-semibold px-3 py-1 rounded-full shadow-md flex items-center">
-                      <span className="mr-1.5 text-sm" aria-hidden="true">🦤</span>
+                      <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0 mr-1.5" />
                       <span>{selectedItemForDetails.credits} Dodos</span>
                     </span>
                   </div>
@@ -3464,7 +3458,7 @@ export default function App() {
                 <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3">
                   <div className="flex items-center justify-between text-xs font-bold text-slate-700">
                     <span>Dodos</span>
-                    <span>🦤 {editCredits} Dodos</span>
+                    <span><img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" /> {editCredits} Dodos</span>
                   </div>
                   <p className="mt-1 text-[10px] text-slate-500">
                     Valor base da IA: {editBaseCredits} Dodos. Permitido: {Math.max(1, Math.round(editBaseCredits * 0.9))} a {Math.max(1, Math.round(editBaseCredits * 1.1))} Dodos (±10%).
@@ -3768,7 +3762,7 @@ export default function App() {
                             </p>
                             <span className="inline-flex items-center bg-[#FF7A38] text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full shadow-2xs mt-1">
                               <Coins className="w-3.5 h-3.5 text-white inline mr-1 shrink-0" />
-                              <span>🦤 Custo: {selectedItemForRedeem.credits} Dodos</span>
+                              <span><img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" /> Custo: {selectedItemForRedeem.credits} Dodos</span>
                             </span>
                           </div>
                         </div>
@@ -4027,12 +4021,12 @@ export default function App() {
                         <div className="text-xs text-slate-700 space-y-2.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
                           <div className="flex justify-between items-center text-slate-600 font-medium">
                             <span className="text-left text-slate-600 pr-2">Dodos do Item:</span>
-                            <span className="text-right shrink-0 font-black text-slate-800">🦤 {itemCost} Dodos</span>
+                            <span className="text-right shrink-0 font-black text-slate-800"><img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" /> {itemCost} Dodos</span>
                           </div>
 
                           <div className="flex justify-between items-center text-emerald-700 font-semibold">
                             <span className="text-left pr-2">Dodos Utilizados:</span>
-                            <span className="text-right shrink-0 font-bold">🦤 -{creditsUsed} Dodos</span>
+                            <span className="text-right shrink-0 font-bold"><img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" /> -{creditsUsed} Dodos</span>
                           </div>
 
                           {cashComplement > 0 && (
@@ -4249,7 +4243,7 @@ export default function App() {
                       </h2>
                       {isFirstDonation && (
                         <span className="text-[10px] text-emerald-600 font-semibold block">
-                          Ganhe +20% de Dodos bônus na sua primeira doação concluída! 🦤✨
+                          Ganhe +20% de Dodos bônus na sua primeira doação concluída! <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" />✨
                         </span>
                       )}
                     </div>
@@ -4289,7 +4283,7 @@ export default function App() {
                     {donateStep === 1 && (
                       <div className="w-full max-w-full box-border space-y-3">
                         <p className="text-xs font-semibold text-slate-700 text-center px-2">
-                          Passo 1: Tire uma foto e descubra quantos Dodos vale seu item 🦤✨
+                          Passo 1: Tire uma foto e descubra quantos Dodos vale seu item <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" />✨
                         </p>
 
                         <input
@@ -4332,7 +4326,7 @@ export default function App() {
                             {aiSuggested && (
                               <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 shadow-lg">
                                 <Sparkles className="w-3 h-3" />
-                                Dodos sugeridos pela IA 🦤✨
+                                Dodos sugeridos pela IA <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" />✨
                               </span>
                             )}
                           </div>
@@ -4542,9 +4536,24 @@ export default function App() {
                               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                             >
                               <option value="">Selecione o tamanho</option>
-                              {(newSizeType === 'roupa' ? CLOTHING_SIZE_OPTIONS : SHOE_SIZE_OPTIONS).map((sizeOption) => (
-                                <option key={sizeOption} value={sizeOption}>{sizeOption}</option>
-                              ))}
+                              {newSizeType === 'roupa' ? (
+                                <>
+                                  <optgroup label="Moda Infantil / Bebê">
+                                    {CLOTHING_KIDS_SIZE_OPTIONS.map((sizeOption) => (
+                                      <option key={sizeOption} value={sizeOption}>{sizeOption}</option>
+                                    ))}
+                                  </optgroup>
+                                  <optgroup label="Moda Adulto">
+                                    {CLOTHING_ADULT_SIZE_OPTIONS.map((sizeOption) => (
+                                      <option key={sizeOption} value={sizeOption}>{sizeOption}</option>
+                                    ))}
+                                  </optgroup>
+                                </>
+                              ) : (
+                                SHOE_SIZE_OPTIONS.map((sizeOption) => (
+                                  <option key={sizeOption} value={sizeOption}>{sizeOption}</option>
+                                ))
+                              )}
                             </select>
                           </div>
                         )}
@@ -4593,7 +4602,7 @@ export default function App() {
                           <div className="mb-2 rounded-xl border border-emerald-200 bg-white/70 px-2 py-1.5">
                             <div className="flex items-center justify-between text-[10px] font-bold text-slate-600">
                               <span>Faixa permitida</span>
-                              <span>🦤 {creditsMin} - {creditsMax} Dodos</span>
+                              <span><img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" /> {creditsMin} - {creditsMax} Dodos</span>
                             </div>
                             <div className="mt-1 flex items-center justify-between text-[9px] font-medium text-slate-500">
                               <span>Original da IA</span>
@@ -4728,7 +4737,7 @@ export default function App() {
                         <div className="w-full max-w-full box-border p-3 rounded-2xl border border-[#14A76C]/20 bg-emerald-50/40 space-y-1.5">
                           <div className="flex items-center justify-between text-[11px] text-slate-600">
                             <span>Dodos do Item</span>
-                            <span className="font-semibold text-slate-800">🦤 {newCredits ?? 'Aguardando'} Dodos</span>
+                            <span className="font-semibold text-slate-800"><img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" /> {newCredits ?? 'Aguardando'} Dodos</span>
                           </div>
                           {isFirstDonation && (
                             <div className="flex items-center justify-between text-[11px] text-slate-600">
@@ -4740,7 +4749,7 @@ export default function App() {
                             <span>Total a receber</span>
                             <span className="flex items-center gap-1 text-[#14A76C]">
                               <Coins className="w-3.5 h-3.5" />
-                              🦤 {newCredits !== null ? newCredits + firstDonationBonus : 'Aguardando'} Dodos
+                              <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" /> {newCredits !== null ? newCredits + firstDonationBonus : 'Aguardando'} Dodos
                             </span>
                           </div>
                         </div>
@@ -4838,7 +4847,7 @@ export default function App() {
               >
                 <div className="bg-[#14A76C] px-5 pb-4 pt-5 text-center">
                   <img src={dodoMascoteImg} alt="Dodo Mascote" className="h-24 w-auto object-contain mx-auto mb-2" />
-                  <h2 className="text-base font-black text-white">🦤 O Manifesto do Dodo</h2>
+                  <h2 className="text-base font-black text-white"><img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" /> O Manifesto do Dodo</h2>
                 </div>
 
                 <div className="space-y-3 p-5">
@@ -5893,7 +5902,7 @@ export default function App() {
                     onClick={() => handleSendIaMessage("Quando meus Dodos expiram?")}
                     className="px-2.5 py-1 bg-white hover:bg-emerald-50 text-slate-700 hover:text-[#14A76C] text-[10px] font-bold rounded-lg border border-slate-200/90 whitespace-nowrap active:scale-95 transition-all"
                   >
-                    🦤 Quando meus Dodos expiram?
+                    <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" /> Quando meus Dodos expiram?
                   </button>
                   <button
                     type="button"
@@ -6025,7 +6034,7 @@ export default function App() {
                         </span>
                         <div className="text-[10px] font-semibold text-white bg-[#FF7A38] px-2.5 py-0.5 rounded-full inline-flex items-center shadow-2xs">
                           <Coins className="w-3.5 h-3.5 text-white inline mr-1 shrink-0" />
-                          <span>🦤 {successRedeemData.creditsUsed} Dodos</span>
+                          <span><img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" /> {successRedeemData.creditsUsed} Dodos</span>
                           {successRedeemData.totalCashPaid > 0 && (
                             <span className="ml-1 text-amber-100">+ R$ {successRedeemData.totalCashPaid.toFixed(2).replace('.', ',')}</span>
                           )}
