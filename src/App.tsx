@@ -652,16 +652,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
-    const profileLocation = getProfileLocation();
-    if (profileLocation && !newLocation.trim()) {
-      setNewLocation(profileLocation);
-      return;
-    }
-    if (profileLocation && ['São Paulo, SP', 'Cotia, SP', 'Localização atual', 'Localização atual (GPS)', ''].includes(newLocation.trim())) {
-      setNewLocation(profileLocation);
-    }
-  }, [user?.uid, user?.city, user?.location]);
+    const placeholderLocations = ['São Paulo, SP', 'Cotia, SP', 'Localização atual', 'Localização atual (GPS)', 'Carregando...', ''];
+    if (!placeholderLocations.includes(newLocation.trim())) return;
+    setNewLocation(getProfileLocation());
+  }, [user?.uid, user?.city, user?.location, userLocationLabel]);
 
   // Syncs the credits balance in real time from the users/{uid} Firestore document
   useEffect(() => {
@@ -1020,13 +1014,15 @@ export default function App() {
     }, 350);
   };
 
+  const getProfileLocation = () => user?.city?.trim() || user?.location?.trim() || 'Cotia, SP';
+
   // New Item Form State
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Música & Instrumentos');
   const [newCredits, setNewCredits] = useState<number>(100);
   const [suggestedCredits, setSuggestedCredits] = useState<number>(100);
   const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
-  const [newLocation, setNewLocation] = useState('São Paulo, SP');
+  const [newLocation, setNewLocation] = useState(getProfileLocation);
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -1050,6 +1046,7 @@ export default function App() {
   const [isSubmittingDonation, setIsSubmittingDonation] = useState<boolean>(false);
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'publishing'>('idle');
+  const [isItemInvalid, setIsItemInvalid] = useState<boolean>(false);
   const pricingRequestId = useRef(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const extraPhotoVideoRef = useRef<HTMLVideoElement>(null);
@@ -1059,7 +1056,7 @@ export default function App() {
     setNewCategory('Música & Instrumentos');
     setNewCredits(100);
     setSuggestedCredits(100);
-    setNewLocation('São Paulo, SP');
+    setNewLocation(getProfileLocation());
     setNewCondition('Usado - Excelente');
     setNewImageUrl('');
     setNewDescription('');
@@ -1082,13 +1079,44 @@ export default function App() {
     setIsSubmittingDonation(false);
     setNewImageFile(null);
     setUploadPhase('idle');
+    setIsItemInvalid(false);
+  };
+
+  const fetchCurrentLocation = () => {
+    if (!navigator.geolocation) return;
+    setNewLocation('Buscando localização via GPS...');
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await response.json();
+          const city = data.address.city || data.address.town || data.address.municipality || 'Cotia';
+          const suburb = data.address.suburb || data.address.neighbourhood || '';
+          const locationString = suburb ? `${suburb}, ${city}` : `${city}, SP`;
+
+          setNewLocation(locationString);
+        } catch (error) {
+          setNewLocation('Cotia, SP');
+        }
+      },
+      () => {
+        // Fallback caso o usuário negue a permissão de GPS
+        setNewLocation(user?.city ? `${user.city}, SP` : 'Cotia, SP');
+      }
+    );
   };
 
   useEffect(() => {
     if (isDonateModalOpen) {
       setDonateStep(1);
+      setNewLocation(getProfileLocation());
+      fetchCurrentLocation();
     }
-  }, [isDonateModalOpen]);
+  }, [isDonateModalOpen, userLocationLabel, user]);
 
   useEffect(() => {
     if (!isCapturingExtraPhoto) return;
@@ -1205,8 +1233,6 @@ export default function App() {
     }, 3800);
   };
 
-  const getProfileLocation = () => user?.city?.trim() || user?.location?.trim() || 'Cotia, SP';
-
   const getUserInitials = (name: string) => name
     .trim()
     .split(/\s+/)
@@ -1214,62 +1240,6 @@ export default function App() {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join('') || 'U';
-
-  const formatReverseGeocodedLocation = (address: Record<string, string>) => {
-    const neighborhood = address.suburb || address.neighbourhood || address.quarter;
-    const city = address.city || address.town || address.village || address.municipality;
-    const state = address.state_code || address.state;
-    if (neighborhood && city && state) return `${neighborhood}, ${city} - ${state}`;
-    if (neighborhood && city) return `${neighborhood}, ${city}`;
-    if (city && state) return `${city}, ${state}`;
-    return getProfileLocation();
-  };
-
-  const handleUseGps = () => {
-    setIsLocatingGps(true);
-    let settled = false;
-    const finishWithFallback = () => {
-      if (settled) return;
-      settled = true;
-      const profileLocation = getProfileLocation();
-      setNewLocation(profileLocation);
-      setIsLocatingGps(false);
-      showToast(`📍 Usando sua localização cadastrada: ${profileLocation}`, 'info');
-    };
-    const timeoutId = window.setTimeout(finishWithFallback, 2000);
-
-    if (!navigator.geolocation) {
-      window.clearTimeout(timeoutId);
-      finishWithFallback();
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
-      if (settled) return;
-      try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}&zoom=18&addressdetails=1`,
-          { headers: { Accept: 'application/json' } }
-        );
-        if (!response.ok) throw new Error(`Geocodificação retornou HTTP ${response.status}`);
-        const data = await response.json() as { address?: Record<string, string> };
-        if (!data.address) throw new Error('Resposta de geocodificação sem endereço');
-        window.clearTimeout(timeoutId);
-        settled = true;
-        const realLocation = formatReverseGeocodedLocation(data.address);
-        setNewLocation(realLocation);
-        setIsLocatingGps(false);
-        showToast(`📍 Localização atualizada via GPS: ${realLocation}`, 'success');
-      } catch (error) {
-        console.error('Erro na geocodificação reversa:', error);
-        finishWithFallback();
-      }
-    }, (error) => {
-      console.warn('GPS indisponível:', error);
-      window.clearTimeout(timeoutId);
-      finishWithFallback();
-    }, { enableHighAccuracy: true, timeout: 1800, maximumAge: 300000 });
-  };
 
   const getDisplayLocation = (item: DonationItem) => {
     const location = item.location?.trim();
@@ -1360,6 +1330,24 @@ export default function App() {
       const category = newCategory;
       const condition = newCondition;
       const result = await evaluateItemWithGemini(base64Image, title, category, condition);
+
+      const blockedTerms = ['selfie', 'pessoa', 'animal'];
+      const isBlockedByTitle = blockedTerms.some((term) => (result?.title || '').toLowerCase().includes(term));
+      const isBlockedByZeroCredits = result?.credits === 0 && Boolean(result?.justification);
+
+      if (result?.isInvalid || isBlockedByTitle || isBlockedByZeroCredits) {
+        setIsItemInvalid(true);
+        setNewCredits(0);
+        setSuggestedCredits(0);
+        setCreditsMin(0);
+        setCreditsMax(0);
+        setPricingJustification('');
+        setAiSuggested(false);
+        showToast('Fotos de pessoas/selfies e animais não são permitidas para doação.', 'error');
+        return;
+      }
+
+      setIsItemInvalid(false);
 
       if (result) {
         if (!newTitle.trim()) setNewTitle(result.title);
@@ -1733,9 +1721,14 @@ export default function App() {
   const handleCreateDonation = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (isItemInvalid) {
+      showToast('Não é possível publicar itens contendo pessoas ou animais.', 'error');
+      return;
+    }
+
     if (donateStep === 1) {
-      if (!newImageUrl) {
-        showToast('Tire uma foto para a IA calcular os Dodos.', 'error');
+      if (isItemInvalid || newTitle.toLowerCase().includes('inválido') || newCredits === 0 || !newImageUrl) {
+        showToast('Esta foto foi identificada como pessoa/animal e não pode ser publicada. Tire a foto de um objeto.', 'error');
         return;
       }
       setDonateStep(2);
@@ -4337,6 +4330,7 @@ export default function App() {
                                 setNewImageFile(null);
                                 setIsAnalyzingImage(false);
                                 setAiSuggested(false);
+                                setIsItemInvalid(false);
                               }}
                               className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-900/60 text-white hover:bg-slate-900/80 transition-all"
                               title="Remover foto"
@@ -4369,6 +4363,14 @@ export default function App() {
                           <div className="flex items-center gap-2 rounded-xl border border-[#14A76C]/20 bg-emerald-50 p-2 text-[11px] font-semibold text-[#14A76C]">
                             <Sparkles className="w-4 h-4 animate-pulse" />
                             <span>Analisando imagem via IA...</span>
+                          </div>
+                        )}
+
+                        {isItemInvalid && (
+                          <div className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-center">
+                            <p className="text-[11px] font-semibold text-red-600">
+                              Item não permitido. Fotos de pessoas, selfies ou animais são bloqueadas. Por favor, tire a foto de um objeto válido.
+                            </p>
                           </div>
                         )}
                       </div>
@@ -4529,7 +4531,7 @@ export default function App() {
                             />
                             <button
                               type="button"
-                              onClick={handleUseGps}
+                              onClick={fetchCurrentLocation}
                               disabled={isLocatingGps}
                               className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-[#14A76C] hover:bg-emerald-50 disabled:opacity-60 transition-all"
                               title="Usar minha localização atual"
@@ -4537,9 +4539,6 @@ export default function App() {
                               <LocateFixed className={`w-4 h-4 ${isLocatingGps ? 'animate-spin' : ''}`} />
                             </button>
                           </div>
-                          <p className="text-[10px] text-slate-400 mt-1">
-                            No app final, este campo utilizará seu CEP ou GPS para calcular o frete exato.
-                          </p>
                         </div>
 
                         {/* Credits Card with ±10% lock */}
@@ -4761,7 +4760,8 @@ export default function App() {
                     {donateStep < 3 ? (
                       <button
                         type="submit"
-                        className="flex-1 px-5 py-2.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                        disabled={isItemInvalid || isAnalyzingImage || !newImageUrl}
+                        className="flex-1 px-5 py-2.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <span>Continuar</span>
                         <ChevronRight className="w-4 h-4" />
