@@ -1048,7 +1048,7 @@ export default function App() {
   const [newCredits, setNewCredits] = useState<number>(100);
   const [suggestedCredits, setSuggestedCredits] = useState<number>(100);
   const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
-  const [newLocation, setNewLocation] = useState('São Paulo, SP');
+  const [newLocation, setNewLocation] = useState('');
   const [newCondition, setNewCondition] = useState('Usado - Excelente');
   const [newSizeType, setNewSizeType] = useState<'roupa' | 'calcado'>('roupa');
   const [newSize, setNewSize] = useState('');
@@ -1080,7 +1080,7 @@ export default function App() {
     setNewCategory('Música & Instrumentos');
     setNewCredits(100);
     setSuggestedCredits(100);
-    setNewLocation('São Paulo, SP');
+    setNewLocation('');
     setNewCondition('Usado - Excelente');
     setNewSizeType('roupa');
     setNewSize('');
