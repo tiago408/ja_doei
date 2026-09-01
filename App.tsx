@@ -161,7 +161,7 @@ const INITIAL_ITEMS: DonationItem[] = [
     createdAt: 'Hoje',
     isFeatured: true,
     donorName: 'Fernanda Lima',
-    donorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150'
+    donorAvatar: 'https://images.pexels.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150'
   },
   {
     id: '2',
