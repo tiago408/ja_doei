@@ -4549,13 +4549,13 @@ export default function App() {
                               <option value="">Selecione o tamanho</option>
                               {newSizeType === 'roupa' ? (
                                 <>
-                                  <optgroup label="Infantil / Bebê">
-                                    {CLOTHING_KIDS_SIZE_OPTIONS.map((sizeOption) => (
+                                  <optgroup label="Moda Adulto">
+                                    {CLOTHING_ADULT_SIZE_OPTIONS.map((sizeOption) => (
                                       <option key={sizeOption} value={sizeOption}>{sizeOption}</option>
                                     ))}
                                   </optgroup>
-                                  <optgroup label="Adulto">
-                                    {CLOTHING_ADULT_SIZE_OPTIONS.map((sizeOption) => (
+                                  <optgroup label="Moda Infantil / Bebê">
+                                    {CLOTHING_KIDS_SIZE_OPTIONS.map((sizeOption) => (
                                       <option key={sizeOption} value={sizeOption}>{sizeOption}</option>
                                     ))}
                                   </optgroup>
