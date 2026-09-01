@@ -1739,6 +1739,50 @@ export default function App() {
     setChatModalItem(item);
   };
 
+  // Detects attempts to share external contact info (phone, links, social handles, e-mail, Pix keys) inside the chat
+  const validateChatMessage = (text: string): { isBlocked: boolean; sanitized: string } => {
+    let sanitized = text;
+    let isBlocked = false;
+    const maskPlaceholder = '[conteúdo ocultado por segurança]';
+
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    if (emailRegex.test(text)) {
+      isBlocked = true;
+      sanitized = sanitized.replace(emailRegex, maskPlaceholder);
+    }
+
+    const linkRegex = /(https?:\/\/\S+|www\.\S+|\S+\.(com|br)(\.\w+)?(\/\S*)?)/gi;
+    if (linkRegex.test(text)) {
+      isBlocked = true;
+      sanitized = sanitized.replace(linkRegex, maskPlaceholder);
+    }
+
+    const socialKeywordRegex = /(@\w+|instagram|insta\b|facebook|whatsapp|zap\b|telegram)/gi;
+    if (socialKeywordRegex.test(text)) {
+      isBlocked = true;
+      sanitized = sanitized.replace(socialKeywordRegex, maskPlaceholder);
+    }
+
+    const pixUuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+    if (pixUuidRegex.test(text)) {
+      isBlocked = true;
+      sanitized = sanitized.replace(pixUuidRegex, maskPlaceholder);
+    }
+
+    // Telefone/WhatsApp/CPF/CNPJ/Pix numérico: sequências de 8 a 14 dígitos, mesmo formatadas
+    const digitSequenceRegex = /\d[\d\s.\-()]{6,}\d/g;
+    sanitized = sanitized.replace(digitSequenceRegex, (match) => {
+      const digitsOnly = match.replace(/\D/g, '');
+      if (digitsOnly.length >= 8 && digitsOnly.length <= 14) {
+        isBlocked = true;
+        return maskPlaceholder;
+      }
+      return match;
+    });
+
+    return { isBlocked, sanitized };
+  };
+
   // Send Chat Message
   const handleSendChatMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1750,8 +1794,17 @@ export default function App() {
       return;
     }
 
-    const chatId = `${chatModalItem.id}__${[user.uid, otherUserId].sort().join('_')}`;
     const messageText = chatInputText.trim();
+    const { isBlocked } = validateChatMessage(messageText);
+    if (isBlocked) {
+      showToast(
+        'Para a sua segurança e garantia das suas trocas, não é permitido compartilhar telefones, links ou dados de contato externos. Mantenha a conversa no Já Doei.',
+        'error'
+      );
+      return;
+    }
+
+    const chatId = `${chatModalItem.id}__${[user.uid, otherUserId].sort().join('_')}`;
     setChatInputText('');
     setIsSendingChatMessage(true);
 
@@ -4282,6 +4335,11 @@ export default function App() {
 
                 {/* Chat Messages */}
                 <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-2.5 my-2">
+                  <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-[10px] font-semibold text-amber-800">
+                    <ShieldCheck className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>Dica de Segurança: Combine detalhes e tire dúvidas exclusivamente por aqui.</span>
+                  </div>
+
                   {chatMessages.length === 0 ? (
                     <p className="text-[11px] text-slate-400 text-center py-6">
                       Envie uma mensagem para iniciar a conversa. O doador aparecerá aqui assim que responder.
