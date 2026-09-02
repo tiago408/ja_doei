@@ -3287,7 +3287,7 @@ export default function App() {
                       <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                         Opções de Frete / Logística
                       </h3>
-                      {currentSelectedFreight && (
+                      {(selectedItemForDetails.isLargeItem || meShippingOptions.length > 0) && currentSelectedFreight && (
                         <span className="text-[10px] font-bold text-[#14A76C] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                           {currentSelectedFreight.id === 'lalamove_partner'
                             ? 'Transporte Utilitário / Carreto'
@@ -3324,8 +3324,15 @@ export default function App() {
                       </button>
                     </form>
 
+                    {isCalculatingCep && (
+                      <p className="mb-3 -mt-2 text-[10px] font-semibold text-[#14A76C] flex items-center gap-1.5">
+                        <span className="animate-spin">🌀</span>
+                        Calculando fretes...
+                      </p>
+                    )}
+
                     {/* Organized Selectable Shipping Radio Options */}
-                    {isCepCalculated && (
+                    {(selectedItemForDetails.isLargeItem ? isCepCalculated : meShippingOptions.length > 0) && (
                       <div className="space-y-3 max-h-64 overflow-y-auto no-scrollbar pr-1">
                         {/* [Opções Padrão / Econômica] */}
                         <div>
@@ -3335,7 +3342,7 @@ export default function App() {
                           <div className="space-y-1.5">
                             {(selectedItemForDetails.isLargeItem
                               ? FREIGHT_OPTIONS.filter((f) => f.id === 'lalamove_partner')
-                              : (meShippingOptions.length > 0 ? meShippingOptions : FREIGHT_OPTIONS.filter((f) => f.id !== 'lalamove_partner'))
+                              : meShippingOptions
                             ).map((opt) => (
                               <label
                                 key={opt.id}
