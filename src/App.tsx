@@ -73,7 +73,7 @@ import { evaluateItemWithGemini } from './aiPricingService';
 import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
 import dodoMascoteImg from './assets/dodo-mascote.png';
-import type { DonationItem, AppNotification, AdminReport } from './types/donation';
+import type { DonationItem, AppNotification, AdminReport, FreightOption } from './types/donation';
 import {
   FREIGHT_OPTIONS,
   INITIAL_ITEMS,
@@ -85,6 +85,7 @@ import {
   SHOE_SIZE_OPTIONS
 } from './constants/donations';
 import { GoogleIcon } from './components/icons/GoogleIcon';
+import { calculateShipping } from './services/melhorEnvio';
 
 export default function App() {
   const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
@@ -750,6 +751,7 @@ export default function App() {
   const [isCepCalculated, setIsCepCalculated] = useState<boolean>(false);
   const [isCalculatingCep, setIsCalculatingCep] = useState<boolean>(false);
   const [selectedFreightId, setSelectedFreightId] = useState<string>('ja_doei_express');
+  const [meShippingOptions, setMeShippingOptions] = useState<FreightOption[]>([]);
 
   // Checkout Payment simulation & Monetization state
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card'>('pix');
@@ -1307,8 +1309,9 @@ export default function App() {
   };
 
   const currentSelectedFreight = useMemo(() => {
-    return FREIGHT_OPTIONS.find((f) => f.id === selectedFreightId) || FREIGHT_OPTIONS[0];
-  }, [selectedFreightId]);
+    const combinedOptions = meShippingOptions.length > 0 ? meShippingOptions : FREIGHT_OPTIONS;
+    return combinedOptions.find((f) => f.id === selectedFreightId) || FREIGHT_OPTIONS.find((f) => f.id === selectedFreightId) || combinedOptions[0];
+  }, [selectedFreightId, meShippingOptions]);
 
   // Open Product Details
   const handleOpenDetails = (item: DonationItem) => {
@@ -1316,6 +1319,8 @@ export default function App() {
     setSelectedItemForDetails(item);
     setSelectedFreightId(item.isLargeItem ? 'lalamove_partner' : 'ja_doei_express');
     setIsCepCalculated(true);
+    setMeShippingOptions([]);
+    setCepInput('');
   };
 
   const handleSendReport = async (event: React.FormEvent) => {
@@ -1463,19 +1468,30 @@ export default function App() {
     }
   };
 
-  // Calculate Freight
-  const handleCalculateFreight = (e?: React.FormEvent) => {
+  // Calculate Freight (cotação real via Melhor Envio Sandbox, com margem de 20% da plataforma)
+  const handleCalculateFreight = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!cepInput.trim()) {
-      showToast('Por favor, informe o CEP para calcular o frete.', 'error');
+    const cepDigits = cepInput.replace(/\D/g, '');
+    if (cepDigits.length !== 8) {
+      showToast('Por favor, informe um CEP válido (8 dígitos) para calcular o frete.', 'error');
       return;
     }
+
     setIsCalculatingCep(true);
-    setTimeout(() => {
-      setIsCalculatingCep(false);
+    try {
+      const options = await calculateShipping(undefined, cepDigits, 1);
+      setMeShippingOptions(options);
+      if (options[0]) {
+        setSelectedFreightId(options[0].id);
+      }
       setIsCepCalculated(true);
       showToast(`🚚 Frete calculado com sucesso para o CEP ${cepInput}!`, 'success');
-    }, 500);
+    } catch (error) {
+      console.error('Erro ao calcular frete:', error);
+      showToast('Não foi possível calcular o frete agora. Tente novamente.', 'error');
+    } finally {
+      setIsCalculatingCep(false);
+    }
   };
 
   // Copy PIX Code
@@ -3317,9 +3333,10 @@ export default function App() {
                             Opções Padrão / Econômica
                           </span>
                           <div className="space-y-1.5">
-                            {FREIGHT_OPTIONS.filter((f) => selectedItemForDetails.isLargeItem
-                              ? f.id === 'lalamove_partner'
-                              : f.id !== 'lalamove_partner').map((opt) => (
+                            {(selectedItemForDetails.isLargeItem
+                              ? FREIGHT_OPTIONS.filter((f) => f.id === 'lalamove_partner')
+                              : (meShippingOptions.length > 0 ? meShippingOptions : FREIGHT_OPTIONS.filter((f) => f.id !== 'lalamove_partner'))
+                            ).map((opt) => (
                               <label
                                 key={opt.id}
                                 onClick={() => setSelectedFreightId(opt.id)}
@@ -3366,6 +3383,9 @@ export default function App() {
                           </div>
                         </div>
 
+                        <p className="text-[10px] text-slate-400 leading-relaxed px-0.5">
+                          A taxa de entrega e o serviço da plataforma (20% sobre o valor da transportadora) são pagos pelo recebedor no momento do resgate.
+                        </p>
                       </div>
                     )}
                   </div>
