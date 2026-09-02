@@ -1284,22 +1284,32 @@ export default function App() {
 
   const MAX_EXTRA_PHOTOS = 4;
 
-  // Reads up to the remaining slots of extra (complementary) photos
-  const handleExtraPhotosFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (!files.length) return;
-
-    const remainingSlots = MAX_EXTRA_PHOTOS - newExtraPhotos.length;
-    files.slice(0, remainingSlots).forEach((file) => {
+  const readFileAsDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setNewExtraPhotos((prev) => [...prev, reader.result as string].slice(0, MAX_EXTRA_PHOTOS));
-        }
-      };
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(file);
     });
-    e.target.value = '';
+
+  const handleExtraPhotosFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    if (!files.length) return;
+
+    if (newExtraPhotos.length >= MAX_EXTRA_PHOTOS) {
+      showToast(`Você já anexou o limite de ${MAX_EXTRA_PHOTOS} fotos complementares.`, 'info');
+      return;
+    }
+
+    try {
+      const dataUrls = await Promise.all(files.map(readFileAsDataUrl));
+      setNewExtraPhotos((prev) => [...prev, ...dataUrls].slice(0, MAX_EXTRA_PHOTOS));
+    } catch (error) {
+      console.error('Erro ao ler foto complementar:', error);
+      showToast('Não foi possível anexar a foto. Tente novamente.', 'error');
+    }
   };
 
   const handleRemoveExtraPhoto = (index: number) => {
@@ -3839,7 +3849,7 @@ export default function App() {
                   <label className="mt-1.5 flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 hover:border-[#14A76C] hover:bg-emerald-50/40">
                     <Camera className="h-5 w-5 text-[#14A76C]" />
                     <span className="text-[11px] font-semibold text-slate-600">Adicionar nova foto do produto</span>
-                    <input type="file" accept="image/*" onChange={handleEditPhotoChange} className="sr-only" />
+                    <input type="file" accept="image/*" capture="environment" onChange={handleEditPhotoChange} className="sr-only" />
                   </label>
                   {editImagePreview && (
                     <img src={editImagePreview} alt="Pré-visualização da nova foto" className="mt-2 h-32 w-full rounded-xl object-cover" />
@@ -4764,12 +4774,12 @@ export default function App() {
                         {/* Complementary photos gallery */}
                         <div className="w-full max-w-full box-border">
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Fotos Complementares (Opcional - até 4 fotos)
+                            Fotos Complementares (Opcional - {newExtraPhotos.length}/{MAX_EXTRA_PHOTOS})
                           </label>
                           <input
                             type="file"
                             accept="image/*"
-                            multiple
+                            capture="environment"
                             className="hidden"
                             id="extra-photos-upload"
                             onChange={handleExtraPhotosFileChange}
