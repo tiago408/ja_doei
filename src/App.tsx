@@ -1731,6 +1731,8 @@ export default function App() {
   const handleCreateDonation = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!requireAuth()) return;
+
     if (donateStep === 1) {
       if (!newImageUrl) {
         showToast('Tire uma foto para a IA calcular os Dodos.', 'error');
@@ -1795,7 +1797,7 @@ export default function App() {
       credits: donationCredits,
       aiSuggestedCredits: suggestedCredits > 0 ? suggestedCredits : donationCredits,
       location: newLocation.trim() || getProfileLocation() || '',
-      userLocation: getProfileLocation(),
+      userLocation: getProfileLocation() || undefined,
       condition: newCondition,
       size: APPAREL_CATEGORIES.includes(newCategory) && newSize ? newSize : undefined,
       image: finalImageUrl,
@@ -1813,8 +1815,11 @@ export default function App() {
     setUploadPhase('publishing');
 
     try {
+      const donationDocument = Object.fromEntries(
+        Object.entries(donationPayload).map(([key, value]) => [key, value === undefined ? null : value])
+      );
       const donationDocRef = await addDoc(collection(db, 'donations'), {
-        ...donationPayload,
+        ...donationDocument,
         createdAt: serverTimestamp()
       });
       // Optimistic update: mostra o item no feed imediatamente, sem depender da chegada do listener em tempo real
@@ -1835,9 +1840,10 @@ export default function App() {
       ));
     } catch (error) {
       console.error('Erro ao salvar doação no Firestore:', error);
+      const errorDetails = error instanceof Error ? ` Detalhe: ${error.message}` : '';
       setIsSubmittingDonation(false);
       setUploadPhase('idle');
-      showToast('Não foi possível salvar a doação no Firestore. Verifique as regras/permissões e tente novamente.', 'error');
+      showToast(`Não foi possível salvar a doação no Firestore. Verifique as regras/permissões e tente novamente.${errorDetails}`, 'error');
       return;
     }
 
