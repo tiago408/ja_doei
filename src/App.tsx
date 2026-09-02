@@ -760,29 +760,20 @@ export default function App() {
   const [selectedFreightId, setSelectedFreightId] = useState<string>('ja_doei_express');
   const [meShippingOptions, setMeShippingOptions] = useState<FreightOption[]>([]);
 
-  // Caixinha do Dodô: itens selecionados para envio consolidado
+  // Caixinha do Dodô: itens de um único doador, consolidados em um envio
   const [caixinha, setCaixinha] = useState<DonationItem[]>([]);
   const [isCaixinhaModalOpen, setIsCaixinhaModalOpen] = useState<boolean>(false);
 
-  // Itens da Caixinha agrupados por doador (cada doador vira uma caixa/envio separado)
-  const caixinhaGroups = useMemo(() => {
-    const groups = new Map<string, { doadorId: string; donorName: string; items: DonationItem[] }>();
+  const getDoadorId = (item: DonationItem) => item.userId || item.donorName || 'desconhecido';
 
-    for (const item of caixinha) {
-      const doadorId = item.userId || item.donorName || 'desconhecido';
-      const group = groups.get(doadorId);
-      if (group) {
-        group.items.push(item);
-      } else {
-        groups.set(doadorId, {
-          doadorId,
-          donorName: item.donorName || 'Doador',
-          items: [item]
-        });
-      }
-    }
-
-    return Array.from(groups.values());
+  // Doador dono da Caixinha atual; enquanto houver itens, só ele pode receber novos itens
+  const caixinhaDonor = useMemo(() => {
+    const first = caixinha[0];
+    if (!first) return null;
+    return {
+      doadorId: getDoadorId(first),
+      donorName: first.donorName || 'Doador'
+    };
   }, [caixinha]);
 
   const handleAddToCaixinha = (item: DonationItem) => {
@@ -791,12 +782,35 @@ export default function App() {
       showToast('Este item já está na sua Caixinha do Dodô.', 'info');
       return;
     }
+    if (caixinhaDonor && caixinhaDonor.doadorId !== getDoadorId(item)) {
+      showToast(
+        `Sua Caixinha é de ${caixinhaDonor.donorName}. Cada doador tem frete próprio — finalize ou esvazie a Caixinha para começar outra.`,
+        'error'
+      );
+      return;
+    }
     setCaixinha((prev) => [...prev, item]);
     showToast('📦 Item adicionado à Caixinha do Dodô!', 'success');
   };
 
   const handleRemoveFromCaixinha = (itemId: string) => {
     setCaixinha((prev) => prev.filter((item) => item.id !== itemId));
+  };
+
+  const handleClearCaixinha = () => {
+    setCaixinha([]);
+    setIsCaixinhaModalOpen(false);
+    showToast('Caixinha esvaziada. Agora você pode montar a de outro doador.', 'info');
+  };
+
+  const handleCheckoutCaixinha = () => {
+    if (!requireAuth()) return;
+    const firstItem = caixinha[0];
+    if (!firstItem) return;
+
+    setIsCaixinhaModalOpen(false);
+    setSelectedItemForDetails(null);
+    setSelectedItemForRedeem(firstItem);
   };
 
   // Checkout Payment simulation & Monetization state
@@ -1525,11 +1539,13 @@ export default function App() {
 
     setIsCalculatingCep(true);
     try {
-      // Consolida os itens do doador do item aberto que já estão na Caixinha do Dodô
-      const donorId = selectedItemForDetails?.userId || selectedItemForDetails?.donorName || 'desconhecido';
-      const donorGroup = caixinhaGroups.find((group) => group.doadorId === donorId);
-      const itemsToQuote = donorGroup?.items.length
-        ? donorGroup.items
+      // Consolida os itens da Caixinha quando ela pertence ao doador do item aberto
+      const sameDonorCaixinha =
+        selectedItemForDetails && caixinhaDonor?.doadorId === getDoadorId(selectedItemForDetails)
+          ? caixinha
+          : [];
+      const itemsToQuote = sameDonorCaixinha.length
+        ? sameDonorCaixinha
         : selectedItemForDetails
           ? [selectedItemForDetails]
           : [];
@@ -3109,8 +3125,8 @@ export default function App() {
               </span>
               <span className="text-xs font-bold">Caixinha do Dodô</span>
             </span>
-            <span className="text-[10px] font-semibold text-slate-300">
-              {caixinhaGroups.length} {caixinhaGroups.length === 1 ? 'caixa' : 'caixas'} · ver
+            <span className="truncate text-[10px] font-semibold text-slate-300">
+              {caixinhaDonor?.donorName} · ver
             </span>
           </button>
         )}
@@ -3133,8 +3149,8 @@ export default function App() {
                     <div>
                       <h3 className="text-sm font-bold text-slate-800">Caixinha do Dodô</h3>
                       <p className="text-[10px] text-slate-500">
-                        {caixinha.length} {caixinha.length === 1 ? 'item' : 'itens'} em{' '}
-                        {caixinhaGroups.length} {caixinhaGroups.length === 1 ? 'envio' : 'envios'}
+                        {caixinha.length} {caixinha.length === 1 ? 'item' : 'itens'}
+                        {caixinhaDonor ? ` de ${caixinhaDonor.donorName}` : ''}
                       </p>
                     </div>
                   </div>
@@ -3149,60 +3165,76 @@ export default function App() {
                 </div>
 
                 <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-                  {caixinhaGroups.length === 0 ? (
+                  {caixinha.length === 0 ? (
                     <p className="py-8 text-center text-xs text-slate-400">
                       Sua Caixinha está vazia. Adicione itens pela tela de detalhes do desapego.
                     </p>
                   ) : (
-                    caixinhaGroups.map((group) => (
-                      <div key={group.doadorId} className="rounded-2xl border border-slate-200 p-3">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-bold text-slate-700">
-                            Caixa de {group.donorName}
-                          </span>
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                            {group.items.length} {group.items.length === 1 ? 'item' : 'itens'}
-                          </span>
-                        </div>
-                        <div className="space-y-2">
-                          {group.items.map((item) => (
-                            <div key={item.id} className="flex items-center gap-2">
-                              <img
-                                src={item.imageUrl}
-                                alt={item.title}
-                                className="h-10 w-10 shrink-0 rounded-lg object-cover"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-[11px] font-semibold text-slate-700">{item.title}</p>
-                                <p className="text-[10px] text-slate-400">{item.category} · {item.credits} Dodos</p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveFromCaixinha(item.id)}
-                                className="rounded-full p-1.5 text-slate-300 transition-all hover:bg-rose-50 hover:text-rose-500"
-                                title="Remover da Caixinha"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                        <p className="mt-2 text-[10px] text-slate-400">
-                          Itens deste doador viajam juntos em uma única caixa consolidada.
-                        </p>
+                    <div className="rounded-2xl border border-slate-200 p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold text-slate-700">
+                          Caixa de {caixinhaDonor?.donorName}
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                          {caixinha.length} {caixinha.length === 1 ? 'item' : 'itens'}
+                        </span>
                       </div>
-                    ))
+                      <div className="space-y-2">
+                        {caixinha.map((item) => (
+                          <div key={item.id} className="flex items-center gap-2">
+                            <img
+                              src={item.imageUrl}
+                              alt={item.title}
+                              className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[11px] font-semibold text-slate-700">{item.title}</p>
+                              <p className="text-[10px] text-slate-400">{item.category} · {item.credits} Dodos</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveFromCaixinha(item.id)}
+                              className="rounded-full p-1.5 text-slate-300 transition-all hover:bg-rose-50 hover:text-rose-500"
+                              title="Remover da Caixinha"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-[10px] text-slate-400">
+                        Só é possível montar uma caixa por doador — os itens deste doador viajam juntos em um único frete.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleClearCaixinha}
+                        className="mt-2 w-full rounded-xl border border-slate-200 py-2 text-[10px] font-bold text-slate-500 transition-all hover:bg-slate-50"
+                      >
+                        Esvaziar Caixinha para escolher outro doador
+                      </button>
+                    </div>
                   )}
                 </div>
 
                 <div className="shrink-0 border-t border-slate-100 px-5 py-4">
-                  <button
-                    type="button"
-                    onClick={() => setIsCaixinhaModalOpen(false)}
-                    className="w-full rounded-2xl bg-slate-100 py-2.5 text-xs font-bold text-slate-700 transition-all hover:bg-slate-200"
-                  >
-                    Continuar garimpando
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsCaixinhaModalOpen(false)}
+                      className="flex-1 rounded-2xl border border-slate-300 bg-white py-2.5 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 active:scale-[0.98]"
+                    >
+                      Continuar garimpando
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCheckoutCaixinha}
+                      disabled={caixinha.length === 0}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-[#14A76C] py-2.5 text-xs font-bold text-white shadow-md transition-all hover:bg-[#108958] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <PackageCheck className="h-4 w-4 text-emerald-200" />
+                      <span>Fechar e enviar</span>
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             </div>
@@ -3634,7 +3666,9 @@ export default function App() {
                     <span>
                       {caixinha.some((caixinhaItem) => caixinhaItem.id === selectedItemForDetails.id)
                         ? 'Já está na Caixinha do Dodô'
-                        : 'Adicionar à Caixinha do Dodô'}
+                        : caixinhaDonor && caixinhaDonor.doadorId !== getDoadorId(selectedItemForDetails)
+                          ? `Caixinha em uso por ${caixinhaDonor.donorName}`
+                          : 'Adicionar à Caixinha do Dodô'}
                     </span>
                   </button>
                   <button
