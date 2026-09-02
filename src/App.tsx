@@ -1819,14 +1819,30 @@ export default function App() {
     return { isBlocked, sanitized };
   };
 
-  // Filtro adicional simples e rápido para bloquear tentativas óbvias de compartilhar contato externo no chat
-  const isUnsafeMessage = (text: string) => {
-    const clean = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const hasDigits = (clean.match(/\d/g) || []).length >= 8; // Bloqueia 8+ dígitos no total (mesmo picados)
-    const hasPhone = /(?:0?xx\d{2}|\b\d{2}\b)?\s*9?\s*\d{4}[\s-]*\d{4}/.test(clean);
-    const hasAddress = /\b(rua|av|avenida|alameda|praca|estrada|rodovia|bairro|cep)\b/i.test(clean) && /\d+/.test(clean);
-    const hasContact = /\b(zap|whats|whatsapp|insta|instagram|tele|telegram|email|gmail|pix)\b/i.test(clean) || /@|http|\.com|\.br/.test(clean);
-    return hasDigits || hasPhone || hasAddress || hasContact;
+  // Converte números por extenso (ex: "meia oito nove") em dígitos, para detectar tentativas de contornar o filtro
+  const wordToNum = (str: string) => {
+    const map: Record<string, string> = { zero: '0', um: '1', dois: '2', tres: '3', quatro: '4', cinco: '5', seis: '6', sete: '7', oito: '8', nove: '9', meia: '6' };
+    let norm = str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    Object.entries(map).forEach(([w, n]) => { norm = norm.replaceAll(w, n); });
+    return norm;
+  };
+
+  // Analisa o histórico recente do usuário + a nova mensagem, para bloquear tentativas de enviar contato "picado" em várias mensagens
+  const isUnsafeMessage = (newMessage: string, recentMessages: { text: string; senderId: string }[], currentUserId: string) => {
+    // Junta as últimas 5 mensagens do mesmo usuário com a nova
+    const userHistory = recentMessages
+      .filter(m => m.senderId === currentUserId)
+      .slice(-5)
+      .map(m => m.text)
+      .join(" ") + " " + newMessage;
+
+    const normalized = wordToNum(userHistory);
+    const digitsOnly = normalized.replace(/\D/g, "");
+
+    // Bloqueia se o acumulado tiver 8+ dígitos ou padrão de telefone/extenso
+    const hasAccumulatedPhone = digitsOnly.length >= 8;
+    const hasContactWords = /\b(zap|whats|whatsapp|insta|instagram|tele|telegram|email|gmail|pix)\b/i.test(normalized) || /@|http|\.com|\.br/.test(normalized);
+    return hasAccumulatedPhone || hasContactWords;
   };
 
   // Send Chat Message
@@ -1836,8 +1852,8 @@ export default function App() {
 
     const messageText = chatInputText.trim();
 
-    if (isUnsafeMessage(messageText)) {
-      alert("Por segurança, não é permitido enviar telefones, endereços ou contatos externos.");
+    if (isUnsafeMessage(messageText, chatMessages, user.uid)) {
+      alert("Envio bloqueado: a sequência de mensagens contém um número de telefone ou contato externo.");
       return;
     }
 
