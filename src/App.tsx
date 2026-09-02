@@ -488,6 +488,7 @@ export default function App() {
     photoURL?: string | null;
     city?: string;
     location?: string;
+    createdAt?: Date | null;
   } | null>(null);
   const [authName, setAuthName] = useState<string>('');
   const [authEmail, setAuthEmail] = useState<string>('');
@@ -632,7 +633,8 @@ export default function App() {
           email: firebaseUser.email || '',
           photoURL: firebaseUser.photoURL,
           city: profile.city,
-          location: profile.location
+          location: profile.location,
+          createdAt: profile.createdAt?.toDate?.() ?? (firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime) : null)
         };
         setUser(nextUser);
       } else {
@@ -2884,18 +2886,20 @@ export default function App() {
                         {isPremium ? '👑 Assinante Premium' : 'Membro Ouro 🌟'}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500 truncate">{user.email} • São Paulo, SP</p>
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="bg-[#FF8243]/10 text-[#FF8243] text-xs font-bold px-2.5 py-0.5 rounded-lg border border-[#FF8243]/20">
-                        <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block shrink-0 mr-1" />
-                        {safeUserCredits} Dodos
-                      </span>
+                    <p className="text-xs text-slate-500">
+                      Membro desde {(user.createdAt || new Date()).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })} • {user.city || user.location || getProfileLocation()}
+                    </p>
+                    <div className="flex items-center gap-3 mt-2.5">
+                      <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200/60 rounded-full">
+                        <img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain" />
+                        <span className="text-xs font-bold text-amber-900">{safeUserCredits} Dodos</span>
+                      </div>
                       <button
                         type="button"
                         onClick={() => setIsDodoInfoModalOpen(true)}
-                        className="text-[10px] font-semibold text-[#14A76C] underline hover:text-[#108958]"
+                        className="text-xs text-[#14A76C] font-semibold underline underline-offset-2 hover:opacity-80 flex items-center gap-1"
                       >
-                        O que é um Dodo? ⓘ
+                        O que é um Dodo? <span className="text-[10px]">ⓘ</span>
                       </button>
                     </div>
                   </div>
