@@ -2886,8 +2886,8 @@ export default function App() {
                         {isPremium ? '👑 Assinante Premium' : 'Membro Ouro 🌟'}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500">
-                      Membro desde {(user.createdAt || new Date()).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })} • {user.city || user.location || getProfileLocation()}
+                    <p className="text-xs text-slate-500 font-medium">
+                      Membro desde {(user.createdAt || new Date()).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' })}
                     </p>
                     <div className="flex items-center gap-3 mt-2.5">
                       <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200/60 rounded-full">
@@ -2946,7 +2946,7 @@ export default function App() {
                 </button>
               )}
 
-              {/* CLUBE JÁ DOEI PREMIUM BANNER */}
+              {/* CLUBE JÁ DOEI PREMIUM BANNER - oculto temporariamente
               <div className="bg-gradient-to-r from-amber-500 via-[#FF8243] to-amber-600 rounded-2xl p-4 text-white shadow-md space-y-2 relative overflow-hidden">
                 <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
                 <div className="flex items-center justify-between">
@@ -2976,6 +2976,7 @@ export default function App() {
                   <span>{isPremium ? 'Gerenciar Minha Assinatura' : 'Assinar Clube Premium por R$ 19,90'}</span>
                 </button>
               </div>
+              */}
 
               {/* MEU QUARTINHO DA BAGUNÇA BUTTON */}
               <button
