@@ -934,12 +934,12 @@ export default function App() {
 
   // New Item Form State
   const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState('Música & Instrumentos');
+  const [newCategory, setNewCategory] = useState('');
   const [newCredits, setNewCredits] = useState<number>(100);
   const [suggestedCredits, setSuggestedCredits] = useState<number>(100);
   const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
   const [newLocation, setNewLocation] = useState('');
-  const [newCondition, setNewCondition] = useState('Usado - Excelente');
+  const [newCondition, setNewCondition] = useState('');
   const [newSizeType, setNewSizeType] = useState<'roupa' | 'calcado'>('roupa');
   const [newSize, setNewSize] = useState('');
   const [newImageUrl, setNewImageUrl] = useState('');
@@ -965,14 +965,32 @@ export default function App() {
   const [isItemInvalid, setIsItemInvalid] = useState<boolean>(false);
   const pricingRequestId = useRef(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const photoFieldRef = useRef<HTMLDivElement>(null);
+  const categorySelectRef = useRef<HTMLSelectElement>(null);
+  const conditionSelectRef = useRef<HTMLSelectElement>(null);
+  const sizeSelectRef = useRef<HTMLSelectElement>(null);
+  const locationInputRef = useRef<HTMLInputElement>(null);
+
+  const [donationErrors, setDonationErrors] = useState<Record<string, boolean>>({});
+
+  const ERROR_FIELD_CLASS = 'border-red-500 bg-red-50 focus:ring-red-500';
+
+  const clearDonationError = (field: string) => {
+    setDonationErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
 
   const resetForm = () => {
     setNewTitle('');
-    setNewCategory('Música & Instrumentos');
+    setNewCategory('');
     setNewCredits(100);
     setSuggestedCredits(100);
     setNewLocation('');
-    setNewCondition('Usado - Excelente');
+    setNewCondition('');
     setNewSizeType('roupa');
     setNewSize('');
     setNewImageUrl('');
@@ -997,12 +1015,14 @@ export default function App() {
     setNewImageFile(null);
     setUploadPhase('idle');
     setIsItemInvalid(false);
+    setDonationErrors({});
   };
 
   useEffect(() => {
     if (isDonateModalOpen) {
       setDonateStep(1);
       setNewLocation('');
+      setDonationErrors({});
     }
   }, [isDonateModalOpen]);
 
@@ -1102,6 +1122,7 @@ export default function App() {
 
   const handleUseGps = () => {
     setIsLocatingGps(true);
+    clearDonationError('location');
     let settled = false;
     const finishWithFallback = () => {
       if (settled) return;
@@ -1231,6 +1252,7 @@ export default function App() {
     try {
       const base64Image = await resizeImageForAnalysis(file);
       setNewImageUrl(base64Image);
+      clearDonationError('image');
 
       const title = newTitle.trim() || 'Item fotografado';
       const category = newCategory;
@@ -1826,13 +1848,52 @@ export default function App() {
   };
 
   // Submit New Donation
+  const focusFirstDonationError = (errors: Record<string, boolean>) => {
+    const fieldOrder: { key: string; element: HTMLElement | null }[] = [
+      { key: 'image', element: photoFieldRef.current },
+      { key: 'title', element: titleInputRef.current },
+      { key: 'category', element: categorySelectRef.current },
+      { key: 'condition', element: conditionSelectRef.current },
+      { key: 'size', element: sizeSelectRef.current },
+      { key: 'location', element: locationInputRef.current }
+    ];
+
+    const firstInvalid = fieldOrder.find(({ key, element }) => errors[key] && element);
+    if (!firstInvalid?.element) return;
+
+    firstInvalid.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (firstInvalid.element instanceof HTMLInputElement || firstInvalid.element instanceof HTMLSelectElement) {
+      firstInvalid.element.focus({ preventScroll: true });
+    }
+  };
+
+  const validateDonateStep = (step: number): Record<string, boolean> => {
+    const errors: Record<string, boolean> = {};
+
+    if (step === 1) {
+      if (!newImageUrl) errors.image = true;
+      return errors;
+    }
+
+    if (!newTitle.trim()) errors.title = true;
+    if (!newCategory.trim()) errors.category = true;
+    if (!newCondition.trim()) errors.condition = true;
+    if (APPAREL_CATEGORIES.includes(newCategory) && !newSize.trim()) errors.size = true;
+    if (!newLocation.trim() && !getProfileLocation()) errors.location = true;
+
+    return errors;
+  };
+
   const handleCreateDonation = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!requireAuth()) return;
 
     if (donateStep === 1) {
-      if (!newImageUrl) {
+      const errors = validateDonateStep(1);
+      if (Object.keys(errors).length) {
+        setDonationErrors(errors);
+        focusFirstDonationError(errors);
         showToast('Tire uma foto para a IA calcular os Dodos.', 'error');
         return;
       }
@@ -1840,21 +1901,29 @@ export default function App() {
         showToast('Esta foto não é permitida. Tire uma nova foto de um objeto válido para continuar.', 'error');
         return;
       }
+      setDonationErrors({});
       setDonateStep(2);
       return;
     }
 
     if (donateStep === 2) {
-      if (!newTitle.trim()) {
-        showToast('Por favor, informe o título do item.', 'error');
+      const errors = validateDonateStep(2);
+      if (Object.keys(errors).length) {
+        setDonationErrors(errors);
+        focusFirstDonationError(errors);
+        showToast('Preencha todos os campos obrigatórios para continuar.', 'error');
         return;
       }
+      setDonationErrors({});
       setDonateStep(3);
       return;
     }
 
-    if (!newTitle.trim()) {
-      showToast('Por favor, informe o título do item.', 'error');
+    const finalErrors = { ...validateDonateStep(1), ...validateDonateStep(2) };
+    if (Object.keys(finalErrors).length) {
+      setDonationErrors(finalErrors);
+      setDonateStep(finalErrors.image ? 1 : 2);
+      showToast('Preencha todos os campos obrigatórios para publicar.', 'error');
       return;
     }
 
@@ -1947,7 +2016,7 @@ export default function App() {
 
     // Reset Form
     setNewTitle('');
-    setNewCategory('Música & Instrumentos');
+    setNewCategory('');
     setNewCredits(0);
     setSuggestedCredits(100);
     setCreditsMin(0);
@@ -1957,7 +2026,7 @@ export default function App() {
     setNewImageUrl('');
     setNewImageFile(null);
     setNewExtraPhotos([]);
-    setNewCondition('Usado - Excelente');
+    setNewCondition('');
     setNewLocation('');
     setNewSizeType('roupa');
     setNewSize('');
@@ -1974,6 +2043,7 @@ export default function App() {
     setUploadPhase('idle');
     setDonateStep(1);
     setIsDonateModalOpen(false);
+    setDonationErrors({});
     // Garante que nenhum filtro ativo (categoria/busca) esconda o item recém-publicado no feed
     setSelectedCategory('Todas');
     setSearchQuery('');
@@ -4683,6 +4753,7 @@ export default function App() {
                           onChange={handlePhotoFileChange}
                         />
 
+                        <div ref={photoFieldRef}>
                         {newImageUrl ? (
                           <div className="relative w-full max-w-full box-border rounded-2xl overflow-hidden border border-slate-200">
                             <img
@@ -4722,7 +4793,11 @@ export default function App() {
                         ) : (
                           <label
                             htmlFor="photo-upload"
-                            className="flex flex-col items-center justify-center gap-2 w-full max-w-full box-border h-44 rounded-2xl border-2 border-dashed border-[#14A76C]/40 bg-emerald-50/50 text-[#14A76C] cursor-pointer hover:bg-emerald-50 transition-all"
+                            className={`flex flex-col items-center justify-center gap-2 w-full max-w-full box-border h-44 rounded-2xl border-2 border-dashed cursor-pointer transition-all ${
+                              donationErrors.image
+                                ? 'border-red-500 bg-red-50 text-red-600'
+                                : 'border-[#14A76C]/40 bg-emerald-50/50 text-[#14A76C] hover:bg-emerald-50'
+                            }`}
                           >
                             <div className="w-14 h-14 rounded-full bg-[#14A76C] text-white flex items-center justify-center shadow-md">
                               <Camera className="w-7 h-7" />
@@ -4733,6 +4808,12 @@ export default function App() {
                             </span>
                           </label>
                         )}
+                        {donationErrors.image && (
+                          <p className="mt-1 text-[10px] font-semibold text-red-600">
+                            A foto do item é obrigatória
+                          </p>
+                        )}
+                        </div>
 
                         {isAnalyzingImage && (
                           <div className="flex items-center gap-2 rounded-xl border border-[#14A76C]/20 bg-emerald-50 p-2 text-[11px] font-semibold text-[#14A76C]">
@@ -4820,21 +4901,30 @@ export default function App() {
                             onChange={(e) => {
                               setNewTitle(e.target.value);
                               setPricingError('');
+                              if (e.target.value.trim()) clearDonationError('title');
                             }}
                             onBlur={() => {
                               if (newTitle.trim().length >= 3) void handleCalculatePricing();
                             }}
                             placeholder="Ex: Vaso de Cerâmica, Jaqueta Jeans..."
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                            className={`w-full px-3 py-2 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 border ${
+                              donationErrors.title
+                                ? ERROR_FIELD_CLASS
+                                : 'bg-slate-50 border-slate-200 focus:bg-white focus:ring-[#14A76C]/40'
+                            }`}
                             required
                           />
+                          {donationErrors.title && (
+                            <p className="mt-1 text-[10px] font-semibold text-red-600">O título do desapego é obrigatório</p>
+                          )}
                         </div>
 
                         <div>
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Categoria
+                            Categoria *
                           </label>
                           <select
+                            ref={categorySelectRef}
                             value={newCategory}
                             onChange={(e) => {
                               const category = e.target.value;
@@ -4842,14 +4932,23 @@ export default function App() {
                               setIsCategoryManuallySelected(true);
                               setPricingError('');
                               setIsLargeItem(category === 'Móveis & Decoração');
+                              if (category) clearDonationError('category');
                               void handleCalculatePricing(newCondition, category);
                             }}
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                            className={`w-full px-3 py-2 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 border ${
+                              donationErrors.category
+                                ? ERROR_FIELD_CLASS
+                                : 'bg-slate-50 border-slate-200 focus:bg-white focus:ring-[#14A76C]/40'
+                            }`}
                           >
+                            <option value="">Selecione a categoria</option>
                             {DONATION_CATEGORIES.map((category) => (
                               <option key={category} value={category}>{category}</option>
                             ))}
                           </select>
+                          {donationErrors.category && (
+                            <p className="mt-1 text-[10px] font-semibold text-red-600">Selecione a categoria do item</p>
+                          )}
                         </div>
 
                         <label className="flex items-start gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50 text-[11px] font-semibold text-amber-900 cursor-pointer">
@@ -4879,22 +4978,32 @@ export default function App() {
 
                         <div>
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Estado de Conservação
+                            Estado de Conservação *
                           </label>
                           <select
+                            ref={conditionSelectRef}
                             value={newCondition}
                             onChange={(e) => {
                               setNewCondition(e.target.value);
                               setPricingError('');
+                              if (e.target.value) clearDonationError('condition');
                               void handleCalculatePricing(e.target.value);
                             }}
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                            className={`w-full px-3 py-2 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 border ${
+                              donationErrors.condition
+                                ? ERROR_FIELD_CLASS
+                                : 'bg-slate-50 border-slate-200 focus:bg-white focus:ring-[#14A76C]/40'
+                            }`}
                           >
+                            <option value="">Selecione o estado de conservação</option>
                             <option value="Novo na caixa">Novo na caixa</option>
                             <option value="Usado - Excelente">Usado - Excelente</option>
                             <option value="Usado - Marcas de uso">Usado - Marcas de uso</option>
                             <option value="Para conserto/peças">Para conserto/peças</option>
                           </select>
+                          {donationErrors.condition && (
+                            <p className="mt-1 text-[10px] font-semibold text-red-600">Informe o estado de conservação</p>
+                          )}
                         </div>
 
                         {APPAREL_CATEGORIES.includes(newCategory) && (
@@ -4927,9 +5036,17 @@ export default function App() {
                               </button>
                             </div>
                             <select
+                              ref={sizeSelectRef}
                               value={newSize}
-                              onChange={(e) => setNewSize(e.target.value)}
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                              onChange={(e) => {
+                                setNewSize(e.target.value);
+                                if (e.target.value) clearDonationError('size');
+                              }}
+                              className={`w-full px-3 py-2 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 border ${
+                                donationErrors.size
+                                  ? ERROR_FIELD_CLASS
+                                  : 'bg-slate-50 border-slate-200 focus:bg-white focus:ring-[#14A76C]/40'
+                              }`}
                             >
                               <option value="">Selecione o tamanho</option>
                               {newSizeType === 'roupa' ? (
@@ -4951,20 +5068,31 @@ export default function App() {
                                 ))
                               )}
                             </select>
+                            {donationErrors.size && (
+                              <p className="mt-1 text-[10px] font-semibold text-red-600">Selecione o tamanho do item</p>
+                            )}
                           </div>
                         )}
 
                         <div>
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Bairro / Localização
+                            Bairro / Localização *
                           </label>
                           <div className="relative">
                             <input
                               type="text"
+                              ref={locationInputRef}
                               value={newLocation}
-                              onChange={(e) => setNewLocation(e.target.value)}
+                              onChange={(e) => {
+                                setNewLocation(e.target.value);
+                                if (e.target.value.trim()) clearDonationError('location');
+                              }}
                               placeholder="Ex: Pinheiros, SP"
-                              className="w-full px-3 py-2 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                              className={`w-full px-3 py-2 pr-10 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 border ${
+                                donationErrors.location
+                                  ? ERROR_FIELD_CLASS
+                                  : 'bg-slate-50 border-slate-200 focus:bg-white focus:ring-[#14A76C]/40'
+                              }`}
                             />
                             <button
                               type="button"
@@ -4976,6 +5104,9 @@ export default function App() {
                               <LocateFixed className={`w-4 h-4 ${isLocatingGps ? 'animate-spin' : ''}`} />
                             </button>
                           </div>
+                          {donationErrors.location && (
+                            <p className="mt-1 text-[10px] font-semibold text-red-600">A localização do item é obrigatória</p>
+                          )}
                         </div>
 
                         {/* Credits Card with ±10% lock */}
