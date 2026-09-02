@@ -1812,7 +1812,6 @@ export default function App() {
 
     setUploadPhase('publishing');
 
-    let savedToFirestore = true;
     try {
       const donationDocRef = await addDoc(collection(db, 'donations'), {
         ...donationPayload,
@@ -1836,22 +1835,10 @@ export default function App() {
       ));
     } catch (error) {
       console.error('Erro ao salvar doação no Firestore:', error);
-      savedToFirestore = false;
-    }
-
-    // Always fall back to local state so the flow never gets stuck, even if Firestore fails
-    if (!savedToFirestore) {
-      setItems((prev) => [
-        {
-          id: Date.now().toString(),
-          ...donationPayload,
-          createdAt: 'Hoje',
-          isFavorite: false,
-          isRedeemed: false,
-          status: 'available'
-        },
-        ...prev
-      ]);
+      setIsSubmittingDonation(false);
+      setUploadPhase('idle');
+      showToast('Não foi possível salvar a doação no Firestore. Verifique as regras/permissões e tente novamente.', 'error');
+      return;
     }
 
     // Reset Form
@@ -1887,12 +1874,7 @@ export default function App() {
     setSelectedCategory('Todas');
     setSearchQuery('');
 
-    showToast(
-      savedToFirestore
-        ? `🎉 Doação cadastrada com sucesso! ${newIsFeatured ? '🔥 Item destacado no topo!' : ''} Os Dodos serão liberados após a confirmação da entrega.`
-        : `🎉 Doação salva localmente! Ela será sincronizada assim que a conexão for restabelecida.`,
-      'success'
-    );
+    showToast(`🎉 Doação cadastrada com sucesso! ${newIsFeatured ? '🔥 Item destacado no topo!' : ''} Os Dodos serão liberados após a confirmação da entrega.`, 'success');
   };
 
   // Confirm Redeem (Confirmação Troca Final)
