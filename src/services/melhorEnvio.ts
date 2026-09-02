@@ -1,4 +1,17 @@
 import type { FreightOption } from '../types/donation';
+import { getDimensionsByCategory, DEFAULT_DIMENSIONS } from '../constants/shippingDimensions';
+
+export interface ShippingItemInput {
+  category?: string;
+  quantity?: number;
+}
+
+interface ConsolidatedBox {
+  weight: number;
+  height: number;
+  width: number;
+  length: number;
+}
 
 const MELHOR_ENVIO_TOKEN = import.meta.env.VITE_MELHOR_ENVIO_TOKEN || '';
 const MELHOR_ENVIO_SANDBOX_URL = 'https://sandbox.melhorenvio.com.br/api/v2/me/shipment/calculate';
@@ -31,8 +44,43 @@ function getCarrierIcon(companyName: string, serviceName: string): string {
   return '📦';
 }
 
-// Payload padrão estimado para um pacote pequeno (item de desapego médio)
-function buildPayload(fromCep: string, toCep: string, weight: number) {
+/**
+ * Consolida vários itens do mesmo doador em uma única caixa: soma os pesos e o volume acumulado,
+ * mantendo a maior largura/comprimento e derivando a altura a partir do volume total.
+ */
+export function consolidatePackage(items: ShippingItemInput[]): ConsolidatedBox {
+  if (!items.length) {
+    return { ...DEFAULT_DIMENSIONS };
+  }
+
+  let totalWeight = 0;
+  let totalVolume = 0;
+  let maxWidth = 0;
+  let maxLength = 0;
+
+  for (const item of items) {
+    const quantity = Math.max(1, item.quantity ?? 1);
+    const dimensions = getDimensionsByCategory(item.category || '');
+
+    totalWeight += dimensions.weight * quantity;
+    totalVolume += dimensions.volume * quantity;
+    maxWidth = Math.max(maxWidth, dimensions.width);
+    maxLength = Math.max(maxLength, dimensions.length);
+  }
+
+  const width = maxWidth || DEFAULT_DIMENSIONS.width;
+  const length = maxLength || DEFAULT_DIMENSIONS.length;
+  const height = Math.max(2, Math.ceil(totalVolume / (width * length)));
+
+  return {
+    weight: Number(totalWeight.toFixed(2)),
+    height,
+    width,
+    length
+  };
+}
+
+function buildPayload(fromCep: string, toCep: string, box: ConsolidatedBox) {
   const originDigits = fromCep.replace(/\D/g, '');
   const validOrigin = originDigits.length === 8 ? originDigits : DEFAULT_ORIGIN_CEP.replace(/\D/g, '');
 
@@ -40,10 +88,10 @@ function buildPayload(fromCep: string, toCep: string, weight: number) {
     from: { postal_code: validOrigin },
     to: { postal_code: toCep.replace(/\D/g, '') },
     package: {
-      weight,
-      width: 15,
-      height: 10,
-      length: 20
+      weight: box.weight,
+      width: box.width,
+      height: box.height,
+      length: box.length
     }
   };
 }
@@ -102,15 +150,17 @@ function buildFallbackOptions(): FreightOption[] {
 }
 
 /**
- * Calcula as opções de frete via API Sandbox do Melhor Envio, aplicando a margem de 20% da plataforma.
- * Em caso de falha na requisição (rede, token ausente/inválido, etc.), retorna um fallback fixo com
- * PAC, SEDEX, Jadlog e Loggi simulados.
+ * Calcula as opções de frete consolidadas (uma caixa por doador) via API Sandbox do Melhor Envio,
+ * aplicando a margem de 20% da plataforma. Em caso de falha na requisição (rede, token ausente/inválido,
+ * etc.), retorna um fallback fixo com PAC, SEDEX, Jadlog e Loggi simulados.
  */
 export async function calculateShipping(
   fromCep: string = DEFAULT_ORIGIN_CEP,
   toCep: string,
-  weight: number = 1
+  items: ShippingItemInput[] = []
 ): Promise<FreightOption[]> {
+  const box = consolidatePackage(items);
+
   if (!MELHOR_ENVIO_TOKEN) {
     console.warn('VITE_MELHOR_ENVIO_TOKEN não configurado. Usando cotação de frete estimada (fallback).');
     return buildFallbackOptions();
@@ -125,7 +175,7 @@ export async function calculateShipping(
         Accept: 'application/json',
         'User-Agent': 'Já Doei (contato@jadoei.app)'
       },
-      body: JSON.stringify(buildPayload(fromCep, toCep, weight))
+      body: JSON.stringify(buildPayload(fromCep, toCep, box))
     });
 
     if (!response.ok) {

@@ -771,6 +771,40 @@ export default function App() {
   const [selectedFreightId, setSelectedFreightId] = useState<string>('ja_doei_express');
   const [meShippingOptions, setMeShippingOptions] = useState<FreightOption[]>([]);
 
+  // Caixinha do Dodô: itens selecionados para envio consolidado
+  const [caixinha, setCaixinha] = useState<DonationItem[]>([]);
+
+  // Itens da Caixinha agrupados por doador (cada doador vira uma caixa/envio separado)
+  const caixinhaGroups = useMemo(() => {
+    const groups = new Map<string, { doadorId: string; donorName: string; items: DonationItem[] }>();
+
+    for (const item of caixinha) {
+      const doadorId = item.userId || item.donorName || 'desconhecido';
+      const group = groups.get(doadorId);
+      if (group) {
+        group.items.push(item);
+      } else {
+        groups.set(doadorId, {
+          doadorId,
+          donorName: item.donorName || 'Doador',
+          items: [item]
+        });
+      }
+    }
+
+    return Array.from(groups.values());
+  }, [caixinha]);
+
+  const handleAddToCaixinha = (item: DonationItem) => {
+    if (!requireAuth()) return;
+    if (caixinha.some((caixinhaItem) => caixinhaItem.id === item.id)) {
+      showToast('Este item já está na sua Caixinha do Dodô.', 'info');
+      return;
+    }
+    setCaixinha((prev) => [...prev, item]);
+    showToast('📦 Item adicionado à Caixinha do Dodô!', 'success');
+  };
+
   // Checkout Payment simulation & Monetization state
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card'>('pix');
   const [cardNumber, setCardNumber] = useState<string>('4532 8892 1029 3841');
@@ -1497,7 +1531,20 @@ export default function App() {
 
     setIsCalculatingCep(true);
     try {
-      const options = await calculateShipping(undefined, cepDigits, 1);
+      // Consolida os itens do doador do item aberto que já estão na Caixinha do Dodô
+      const donorId = selectedItemForDetails?.userId || selectedItemForDetails?.donorName || 'desconhecido';
+      const donorGroup = caixinhaGroups.find((group) => group.doadorId === donorId);
+      const itemsToQuote = donorGroup?.items.length
+        ? donorGroup.items
+        : selectedItemForDetails
+          ? [selectedItemForDetails]
+          : [];
+
+      const options = await calculateShipping(
+        undefined,
+        cepDigits,
+        itemsToQuote.map((item) => ({ category: item.category, quantity: 1 }))
+      );
       setMeShippingOptions(options);
       if (options[0]) {
         setSelectedFreightId(options[0].id);
@@ -3466,6 +3513,19 @@ export default function App() {
                   >
                     <Truck className="w-4 h-4" />
                     <span>Como enviar meu desapego?</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddToCaixinha(selectedItemForDetails)}
+                    disabled={caixinha.some((caixinhaItem) => caixinhaItem.id === selectedItemForDetails.id)}
+                    className="w-full py-2.5 rounded-2xl border border-amber-300 bg-amber-50 hover:bg-amber-100 disabled:opacity-60 disabled:cursor-not-allowed text-amber-700 text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                  >
+                    <Box className="w-4 h-4" />
+                    <span>
+                      {caixinha.some((caixinhaItem) => caixinhaItem.id === selectedItemForDetails.id)
+                        ? 'Já está na Caixinha do Dodô'
+                        : 'Adicionar à Caixinha do Dodô'}
+                    </span>
                   </button>
                   <button
                     onClick={() => {
