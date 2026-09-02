@@ -1,0 +1,146 @@
+.auth-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.auth-modal {
+  background: var(--bg-primary);
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: var(--text-primary);
+}
+
+.auth-modal h2 {
+  margin: 0 0 24px 0;
+  text-align: center;
+  color: var(--text-primary);
+}
+
+.auth-modal form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.auth-modal input {
+  padding: 12px;
+  border: 2px solid var(--bg-secondary);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 1rem;
+  transition: border-color 0.2s;
+}
+
+.auth-modal input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.auth-modal button[type="submit"] {
+  padding: 12px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.auth-modal button[type="submit"]:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.auth-modal button[type="submit"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-message {
+  background: #fee;
+  color: #c33;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+  border-left: 4px solid #c33;
+}
+
+.toggle-auth {
+  text-align: center;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.toggle-auth button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.toggle-auth button:hover {
+  opacity: 0.8;
+}
+
+.user-info {
+  text-align: center;
+}
+
+.user-info h2 {
+  margin: 0 0 12px 0;
+}
+
+.user-info p {
+  color: var(--text-secondary);
+  margin: 0 0 20px 0;
+  word-break: break-all;
+}
+
+.logout-btn {
+  background: #c33;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: opacity 0.2s;
+}
+
+.logout-btn:hover {
+  opacity: 0.9;
+}
