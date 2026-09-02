@@ -789,8 +789,17 @@ export default function App() {
       );
       return;
     }
-    setCaixinha((prev) => [...prev, item]);
-    showToast('📦 Item adicionado à Caixinha do Dodô!', 'success');
+
+    const cepDigits = cepInput.replace(/\D/g, '');
+    if (cepDigits.length !== 8 || meShippingOptions.length === 0) {
+      showToast('Informe o CEP e escolha a forma de envio antes de adicionar à Caixinha do Dodô.', 'error');
+      return;
+    }
+
+    const nextCaixinha = [...caixinha, item];
+    setCaixinha(nextCaixinha);
+    showToast('📦 Item adicionado à Caixinha do Dodô! Recalculando o frete da caixa...', 'success');
+    void quoteFreightForItems(nextCaixinha, cepDigits);
   };
 
   const handleRemoveFromCaixinha = (itemId: string) => {
@@ -812,6 +821,19 @@ export default function App() {
     setSelectedItemForDetails(null);
     setSelectedItemForRedeem(firstItem);
   };
+
+  // Itens que entram no checkout: a Caixinha inteira quando o item resgatado faz parte dela
+  const checkoutItems = useMemo(() => {
+    if (!selectedItemForRedeem) return [];
+    return caixinha.some((item) => item.id === selectedItemForRedeem.id)
+      ? caixinha
+      : [selectedItemForRedeem];
+  }, [caixinha, selectedItemForRedeem]);
+
+  const checkoutCreditsTotal = useMemo(
+    () => checkoutItems.reduce((total, item) => total + item.credits, 0),
+    [checkoutItems]
+  );
 
   // Checkout Payment simulation & Monetization state
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card'>('pix');
@@ -1529,27 +1551,9 @@ export default function App() {
   };
 
   // Calculate Freight (cotação real via Melhor Envio Sandbox, com margem de 20% da plataforma)
-  const handleCalculateFreight = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    const cepDigits = cepInput.replace(/\D/g, '');
-    if (cepDigits.length !== 8) {
-      showToast('Por favor, informe um CEP válido (8 dígitos) para calcular o frete.', 'error');
-      return;
-    }
-
+  const quoteFreightForItems = async (itemsToQuote: DonationItem[], cepDigits: string) => {
     setIsCalculatingCep(true);
     try {
-      // Consolida os itens da Caixinha quando ela pertence ao doador do item aberto
-      const sameDonorCaixinha =
-        selectedItemForDetails && caixinhaDonor?.doadorId === getDoadorId(selectedItemForDetails)
-          ? caixinha
-          : [];
-      const itemsToQuote = sameDonorCaixinha.length
-        ? sameDonorCaixinha
-        : selectedItemForDetails
-          ? [selectedItemForDetails]
-          : [];
-
       const options = await calculateShipping(
         undefined,
         cepDigits,
@@ -1560,12 +1564,39 @@ export default function App() {
         setSelectedFreightId(options[0].id);
       }
       setIsCepCalculated(true);
-      showToast(`🚚 Frete calculado com sucesso para o CEP ${cepInput}!`, 'success');
+      return true;
     } catch (error) {
       console.error('Erro ao calcular frete:', error);
-      showToast('Não foi possível calcular o frete agora. Tente novamente.', 'error');
+      return false;
     } finally {
       setIsCalculatingCep(false);
+    }
+  };
+
+  const handleCalculateFreight = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const cepDigits = cepInput.replace(/\D/g, '');
+    if (cepDigits.length !== 8) {
+      showToast('Por favor, informe um CEP válido (8 dígitos) para calcular o frete.', 'error');
+      return;
+    }
+
+    // Consolida os itens da Caixinha quando ela pertence ao doador do item aberto
+    const sameDonorCaixinha =
+      selectedItemForDetails && caixinhaDonor?.doadorId === getDoadorId(selectedItemForDetails)
+        ? caixinha
+        : [];
+    const itemsToQuote = sameDonorCaixinha.some((item) => item.id === selectedItemForDetails?.id)
+      ? sameDonorCaixinha
+      : selectedItemForDetails
+        ? [...sameDonorCaixinha, selectedItemForDetails]
+        : [];
+
+    const succeeded = await quoteFreightForItems(itemsToQuote, cepDigits);
+    if (succeeded) {
+      showToast(`🚚 Frete calculado com sucesso para o CEP ${cepInput}!`, 'success');
+    } else {
+      showToast('Não foi possível calcular o frete agora. Tente novamente.', 'error');
     }
   };
 
@@ -2024,7 +2055,8 @@ export default function App() {
   const handleConfirmRedeem = async () => {
     if (!selectedItemForRedeem || !user) return;
 
-    const itemCredits = selectedItemForRedeem.credits;
+    const itemsToRedeem = checkoutItems.length ? checkoutItems : [selectedItemForRedeem];
+    const itemCredits = itemsToRedeem.reduce((total, item) => total + item.credits, 0);
     const donorId = selectedItemForRedeem.userId;
 
     if (!donorId) {
@@ -2050,22 +2082,31 @@ export default function App() {
       await updateDoc(userRef, {
         credits: nextCredits
       });
-      await updateDoc(doc(db, 'donations', selectedItemForRedeem.id), {
-        status: 'reserved',
-        receiverId: user.uid,
-      });
+      await Promise.all(
+        itemsToRedeem.map((item) =>
+          updateDoc(doc(db, 'donations', item.id), {
+            status: 'reserved',
+            receiverId: user.uid,
+          })
+        )
+      );
       await addDoc(collection(db, 'notifications'), {
         userId: donorId,
-        title: 'Item resgatado',
-        message: `Seu item ${selectedItemForRedeem.title} foi solicitado por ${user.name}!`,
+        title: itemsToRedeem.length > 1 ? 'Caixinha do Dodô resgatada' : 'Item resgatado',
+        message:
+          itemsToRedeem.length > 1
+            ? `${user.name} resgatou ${itemsToRedeem.length} itens seus em uma Caixinha do Dodô: ${itemsToRedeem.map((item) => item.title).join(', ')}.`
+            : `Seu item ${selectedItemForRedeem.title} foi solicitado por ${user.name}!`,
         createdAt: serverTimestamp(),
         read: false
       });
 
+      const redeemedIds = new Set(itemsToRedeem.map((item) => item.id));
+
       setUserCredits(nextCredits);
       setItems((prev) =>
         prev.map((item) =>
-          item.id === selectedItemForRedeem.id
+          redeemedIds.has(item.id)
             ? {
                 ...item,
                 isRedeemed: true,
@@ -2079,6 +2120,7 @@ export default function App() {
       const redeemedItem = selectedItemForRedeem;
       const orderNumber = `#JD-${Math.floor(1000 + Math.random() * 9000)}`;
 
+      setCaixinha((prev) => prev.filter((item) => !redeemedIds.has(item.id)));
       setSelectedItemForRedeem(null);
       setSelectedItemForDetails(null);
       setActiveTab('profile');
@@ -2096,7 +2138,12 @@ export default function App() {
         freightName: currentSelectedFreight.name,
       });
 
-      showToast('Resgate realizado com sucesso. O doador foi notificado.', 'success');
+      showToast(
+        itemsToRedeem.length > 1
+          ? `Caixinha com ${itemsToRedeem.length} itens resgatada! O doador foi notificado.`
+          : 'Resgate realizado com sucesso. O doador foi notificado.',
+        'success'
+      );
     } catch (error) {
       console.error('Erro ao confirmar resgate:', error);
       showToast('Não foi possível confirmar o resgate. Tente novamente.', 'error');
@@ -3656,21 +3703,36 @@ export default function App() {
                     <Truck className="w-4 h-4" />
                     <span>Como enviar meu desapego?</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAddToCaixinha(selectedItemForDetails)}
-                    disabled={caixinha.some((caixinhaItem) => caixinhaItem.id === selectedItemForDetails.id)}
-                    className="w-full py-2.5 rounded-2xl border border-amber-300 bg-amber-50 hover:bg-amber-100 disabled:opacity-60 disabled:cursor-not-allowed text-amber-700 text-xs font-bold flex items-center justify-center gap-2 transition-all"
-                  >
-                    <Box className="w-4 h-4" />
-                    <span>
-                      {caixinha.some((caixinhaItem) => caixinhaItem.id === selectedItemForDetails.id)
-                        ? 'Já está na Caixinha do Dodô'
-                        : caixinhaDonor && caixinhaDonor.doadorId !== getDoadorId(selectedItemForDetails)
-                          ? `Caixinha em uso por ${caixinhaDonor.donorName}`
-                          : 'Adicionar à Caixinha do Dodô'}
-                    </span>
-                  </button>
+                  {(() => {
+                    const isAlreadyInCaixinha = caixinha.some(
+                      (caixinhaItem) => caixinhaItem.id === selectedItemForDetails.id
+                    );
+                    const isOtherDonorCaixinha = Boolean(
+                      caixinhaDonor && caixinhaDonor.doadorId !== getDoadorId(selectedItemForDetails)
+                    );
+                    const isShippingReady =
+                      cepInput.replace(/\D/g, '').length === 8 && meShippingOptions.length > 0;
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleAddToCaixinha(selectedItemForDetails)}
+                        disabled={isAlreadyInCaixinha || isOtherDonorCaixinha || !isShippingReady}
+                        className="w-full py-2.5 rounded-2xl border border-amber-300 bg-amber-50 hover:bg-amber-100 disabled:opacity-60 disabled:cursor-not-allowed text-amber-700 text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                      >
+                        <Box className="w-4 h-4" />
+                        <span>
+                          {isAlreadyInCaixinha
+                            ? 'Já está na Caixinha do Dodô'
+                            : isOtherDonorCaixinha
+                              ? `Caixinha em uso por ${caixinhaDonor?.donorName}`
+                              : !isShippingReady
+                                ? 'Calcule o CEP e escolha o envio primeiro'
+                                : 'Adicionar à Caixinha do Dodô'}
+                        </span>
+                      </button>
+                    );
+                  })()}
                   <button
                     onClick={() => {
                       if (!requireAuth()) return;
@@ -4008,7 +4070,7 @@ export default function App() {
 
                 {/* Resumo Discriminado do Resgate e Complemento em R$ */}
                 {(() => {
-                  const itemCost = selectedItemForRedeem.credits;
+                  const itemCost = checkoutCreditsTotal || selectedItemForRedeem.credits;
                   const limitePermitido = -Math.round(itemCost * 0.30);
                   const maxMissingAllowed = Math.round(itemCost * 0.30);
                   const safeItemCredits = Math.max(limitePermitido, userCredits);
@@ -4026,24 +4088,40 @@ export default function App() {
                       {/* Scrollable Modal Content */}
                       <div className="overflow-y-auto p-4 space-y-3.5 flex-1 no-scrollbar">
                         {/* Resumo do Item */}
-                        <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                          <img
-                            src={selectedItemForRedeem.imageUrl}
-                            alt={selectedItemForRedeem.title}
-                            className="w-14 h-14 rounded-xl object-cover shrink-0 shadow-xs"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-xs font-bold text-slate-800 truncate">
-                              {selectedItemForRedeem.title}
-                            </h4>
-                            <p className="text-[11px] text-slate-500">
-                              Localização: {selectedItemForRedeem.location}
-                            </p>
-                            <span className="inline-flex items-center bg-[#FF7A38] text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full shadow-2xs mt-1">
-                              <Coins className="w-3.5 h-3.5 text-white inline mr-1 shrink-0" />
-                              <span><img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" /> Custo: {selectedItemForRedeem.credits} Dodos</span>
-                            </span>
-                          </div>
+                        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 space-y-2.5">
+                          {checkoutItems.length > 1 && (
+                            <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-600">
+                              <Box className="w-3.5 h-3.5" />
+                              <span>Caixinha do Dodô · {checkoutItems.length} itens em um único frete</span>
+                            </div>
+                          )}
+                          {(checkoutItems.length ? checkoutItems : [selectedItemForRedeem]).map((checkoutItem) => (
+                            <div key={checkoutItem.id} className="flex items-center gap-3">
+                              <img
+                                src={checkoutItem.imageUrl}
+                                alt={checkoutItem.title}
+                                className="w-14 h-14 rounded-xl object-cover shrink-0 shadow-xs"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <h4 className="text-xs font-bold text-slate-800 truncate">
+                                  {checkoutItem.title}
+                                </h4>
+                                <p className="text-[11px] text-slate-500">
+                                  Localização: {checkoutItem.location}
+                                </p>
+                                <span className="inline-flex items-center bg-[#FF7A38] text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full shadow-2xs mt-1">
+                                  <Coins className="w-3.5 h-3.5 text-white inline mr-1 shrink-0" />
+                                  <span><img src={dodoMascoteImg} alt="Dodo" className="w-4 h-4 object-contain inline-block align-middle shrink-0" /> Custo: {checkoutItem.credits} Dodos</span>
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                          {checkoutItems.length > 1 && (
+                            <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-[11px] font-bold text-slate-700">
+                              <span>Total da Caixinha</span>
+                              <span>{itemCost} Dodos</span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Opção de Frete Escolhida (Transferida da Tela de Detalhes) */}
