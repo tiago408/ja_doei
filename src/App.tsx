@@ -753,17 +753,6 @@ export default function App() {
   );
   const [checkInStatus, setCheckInStatus] = useState<string>('Verificando o check-in de hoje...');
 
-  useEffect(() => {
-    if (!selectedItemForDetails) return;
-
-    const previousBodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow;
-    };
-  }, [selectedItemForDetails]);
-
   // Shipping & Logística state
   const [cepInput, setCepInput] = useState<string>('');
   const [isCepCalculated, setIsCepCalculated] = useState<boolean>(false);
@@ -773,6 +762,7 @@ export default function App() {
 
   // Caixinha do Dodô: itens selecionados para envio consolidado
   const [caixinha, setCaixinha] = useState<DonationItem[]>([]);
+  const [isCaixinhaModalOpen, setIsCaixinhaModalOpen] = useState<boolean>(false);
 
   // Itens da Caixinha agrupados por doador (cada doador vira uma caixa/envio separado)
   const caixinhaGroups = useMemo(() => {
@@ -805,6 +795,10 @@ export default function App() {
     showToast('📦 Item adicionado à Caixinha do Dodô!', 'success');
   };
 
+  const handleRemoveFromCaixinha = (itemId: string) => {
+    setCaixinha((prev) => prev.filter((item) => item.id !== itemId));
+  };
+
   // Checkout Payment simulation & Monetization state
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card'>('pix');
   const [cardNumber, setCardNumber] = useState<string>('4532 8892 1029 3841');
@@ -824,16 +818,16 @@ export default function App() {
     bio?: string;
   } | null>(null);
 
-  useEffect(() => {
-    if (!baguncaDonor) return;
+  // Trava única do scroll do body: evita que o cleanup de um modal restaure o "hidden" de outro
+  const isAnyOverlayOpen = Boolean(selectedItemForDetails || baguncaDonor || isCaixinhaModalOpen);
 
-    const previousBodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+  useEffect(() => {
+    document.body.style.overflow = isAnyOverlayOpen ? 'hidden' : '';
 
     return () => {
-      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.overflow = '';
     };
-  }, [baguncaDonor]);
+  }, [isAnyOverlayOpen]);
 
   const [chatModalItem, setChatModalItem] = useState<DonationItem | null>(null);
   const [chatPartner, setChatPartner] = useState<{ id: string; name: string; avatar?: string } | null>(null);
@@ -3098,6 +3092,122 @@ export default function App() {
             </div>
           )}
         </main>
+
+        {/* FLOATING: CAIXINHA DO DODÔ */}
+        {!showSplash && caixinha.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setIsCaixinhaModalOpen(true)}
+            className="fixed bottom-20 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center justify-between gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-white shadow-xl transition-all active:scale-[0.98]"
+          >
+            <span className="flex items-center gap-2">
+              <span className="relative">
+                <Box className="h-5 w-5 text-amber-300" />
+                <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-bold text-slate-900">
+                  {caixinha.length}
+                </span>
+              </span>
+              <span className="text-xs font-bold">Caixinha do Dodô</span>
+            </span>
+            <span className="text-[10px] font-semibold text-slate-300">
+              {caixinhaGroups.length} {caixinhaGroups.length === 1 ? 'caixa' : 'caixas'} · ver
+            </span>
+          </button>
+        )}
+
+        {/* MODAL: CAIXINHA DO DODÔ */}
+        <AnimatePresence>
+          {isCaixinhaModalOpen && (
+            <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/60 p-0 backdrop-blur-xs sm:items-center sm:p-4">
+              <motion.div
+                initial={{ opacity: 0, y: 40 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 40 }}
+                className="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-[32px] bg-white shadow-2xl sm:max-w-md sm:rounded-3xl"
+              >
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                      <Box className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800">Caixinha do Dodô</h3>
+                      <p className="text-[10px] text-slate-500">
+                        {caixinha.length} {caixinha.length === 1 ? 'item' : 'itens'} em{' '}
+                        {caixinhaGroups.length} {caixinhaGroups.length === 1 ? 'envio' : 'envios'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsCaixinhaModalOpen(false)}
+                    className="rounded-full p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-600"
+                    title="Fechar"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                  {caixinhaGroups.length === 0 ? (
+                    <p className="py-8 text-center text-xs text-slate-400">
+                      Sua Caixinha está vazia. Adicione itens pela tela de detalhes do desapego.
+                    </p>
+                  ) : (
+                    caixinhaGroups.map((group) => (
+                      <div key={group.doadorId} className="rounded-2xl border border-slate-200 p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold text-slate-700">
+                            Caixa de {group.donorName}
+                          </span>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                            {group.items.length} {group.items.length === 1 ? 'item' : 'itens'}
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          {group.items.map((item) => (
+                            <div key={item.id} className="flex items-center gap-2">
+                              <img
+                                src={item.imageUrl}
+                                alt={item.title}
+                                className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-[11px] font-semibold text-slate-700">{item.title}</p>
+                                <p className="text-[10px] text-slate-400">{item.category} · {item.credits} Dodos</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveFromCaixinha(item.id)}
+                                className="rounded-full p-1.5 text-slate-300 transition-all hover:bg-rose-50 hover:text-rose-500"
+                                title="Remover da Caixinha"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-[10px] text-slate-400">
+                          Itens deste doador viajam juntos em uma única caixa consolidada.
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="shrink-0 border-t border-slate-100 px-5 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsCaixinhaModalOpen(false)}
+                    className="w-full rounded-2xl bg-slate-100 py-2.5 text-xs font-bold text-slate-700 transition-all hover:bg-slate-200"
+                  >
+                    Continuar garimpando
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* BOTTOM NAVIGATION BAR */}
         {!showSplash && (
