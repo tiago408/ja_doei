@@ -76,7 +76,6 @@ import dodoMascoteImg from './assets/dodo-mascote.png';
 import type { DonationItem, AppNotification, AdminReport, FreightOption } from './types/donation';
 import {
   FREIGHT_OPTIONS,
-  INITIAL_ITEMS,
   DONATION_CATEGORIES,
   CATEGORIES,
   APPAREL_CATEGORIES,
@@ -101,7 +100,7 @@ export default function App() {
   }, [showSplash]);
 
   // App state
-  const [items, setItems] = useState<DonationItem[]>(INITIAL_ITEMS);
+  const [items, setItems] = useState<DonationItem[]>([]);
   const [userCredits, setUserCredits] = useState<number>(0);
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -110,43 +109,62 @@ export default function App() {
   const [userCoordinates, setUserCoordinates] = useState<{ lat: number; lon: number } | null>(null);
   const [userLocationLabel, setUserLocationLabel] = useState<string>('Carregando...');
 
-  // Loads donations from Firestore in real time and merges them with the local mock feed
+  // Loads donations from Firestore in real time
   useEffect(() => {
     const donationsRef = collection(db, 'donations');
-    const donationsQuery = query(donationsRef, orderBy('createdAt', 'desc'));
 
-    const unsubscribe = onSnapshot(donationsQuery, (snapshot) => {
+    const unsubscribe = onSnapshot(donationsRef, (snapshot) => {
+      console.log('Itens carregados do Firestore:', snapshot.docs);
+
+      const getCreatedAtMillis = (createdAt: unknown) => {
+        if (createdAt instanceof Date) return createdAt.getTime();
+        if (typeof createdAt === 'number') return createdAt;
+        if (typeof createdAt === 'string') {
+          const parsedDate = Date.parse(createdAt);
+          return Number.isNaN(parsedDate) ? 0 : parsedDate;
+        }
+        if (
+          createdAt &&
+          typeof createdAt === 'object' &&
+          'toMillis' in createdAt &&
+          typeof (createdAt as { toMillis: () => number }).toMillis === 'function'
+        ) {
+          return (createdAt as { toMillis: () => number }).toMillis();
+        }
+        return 0;
+      };
+
       const firestoreItems: DonationItem[] = snapshot.docs.map((docSnap) => {
         const data = docSnap.data();
         return {
-          id: docSnap.id,
-          title: data.title,
-          category: data.category,
-          credits: data.credits,
-          aiSuggestedCredits: data.aiSuggestedCredits,
-          location: data.location,
-          condition: data.condition,
-          size: data.size || undefined,
-          imageUrl: data.imageUrl || data.image,
-          description: data.description,
-          createdAt: 'Hoje',
-          isFeatured: data.isFeatured || false,
-          status: data.status || 'available',
-          donorName: data.donorName || data.userName || 'Você',
-          donorAvatar: data.donorAvatar,
-          userId: data.userId || null,
-          receiverId: data.receiverId || null,
-          userLocation: data.userLocation || data.location || undefined,
-          isLargeItem: data.isLargeItem === true,
-          isFavorite: false,
-          isRedeemed: ['reserved', 'completed'].includes(data.status || 'available')
+          createdAtMillis: getCreatedAtMillis(data.createdAt),
+          item: {
+            id: docSnap.id,
+            title: data.title,
+            category: data.category,
+            credits: data.credits,
+            aiSuggestedCredits: data.aiSuggestedCredits,
+            location: data.location,
+            condition: data.condition,
+            size: data.size || undefined,
+            imageUrl: data.imageUrl || data.image,
+            description: data.description,
+            createdAt: 'Hoje',
+            isFeatured: data.isFeatured || false,
+            status: data.status || 'available',
+            donorName: data.donorName || data.userName || 'Você',
+            donorAvatar: data.donorAvatar,
+            userId: data.userId || null,
+            receiverId: data.receiverId || null,
+            userLocation: data.userLocation || data.location || undefined,
+            isLargeItem: data.isLargeItem === true,
+            isFavorite: false,
+            isRedeemed: ['reserved', 'completed'].includes(data.status || 'available')
+          }
         };
-      });
+      }).sort((left, right) => right.createdAtMillis - left.createdAtMillis).map(({ item }) => item);
 
-      setItems((prev) => {
-        const mockOnly = prev.filter((item) => INITIAL_ITEMS.some((mock) => mock.id === item.id));
-        return [...firestoreItems, ...mockOnly];
-      });
+      setItems(firestoreItems);
     }, (error) => {
       console.error('Erro ao carregar doações do Firestore:', error);
     });
@@ -1796,10 +1814,26 @@ export default function App() {
 
     let savedToFirestore = true;
     try {
-      await addDoc(collection(db, 'donations'), {
+      const donationDocRef = await addDoc(collection(db, 'donations'), {
         ...donationPayload,
         createdAt: serverTimestamp()
       });
+      // Optimistic update: mostra o item no feed imediatamente, sem depender da chegada do listener em tempo real
+      setItems((prev) => (
+        prev.some((item) => item.id === donationDocRef.id)
+          ? prev
+          : [
+              {
+                id: donationDocRef.id,
+                ...donationPayload,
+                createdAt: 'Agora',
+                isFavorite: false,
+                isRedeemed: false,
+                status: 'available'
+              },
+              ...prev
+            ]
+      ));
     } catch (error) {
       console.error('Erro ao salvar doação no Firestore:', error);
       savedToFirestore = false;
@@ -1849,6 +1883,9 @@ export default function App() {
     setUploadPhase('idle');
     setDonateStep(1);
     setIsDonateModalOpen(false);
+    // Garante que nenhum filtro ativo (categoria/busca) esconda o item recém-publicado no feed
+    setSelectedCategory('Todas');
+    setSearchQuery('');
 
     showToast(
       savedToFirestore
@@ -2493,6 +2530,13 @@ export default function App() {
                             ) : (
                               <span className="absolute top-1.5 left-1.5 bg-slate-900/70 backdrop-blur-md text-white text-[9px] font-semibold px-2 py-0.5 rounded-full z-10">
                                 {item.category}
+                              </span>
+                            )}
+
+                            {/* "Sua doação" tag for items published by the logged-in user */}
+                            {user?.uid && item.userId === user.uid && (
+                              <span className="absolute top-9 right-1.5 bg-[#14A76C] text-white text-[9px] font-bold px-2 py-0.5 rounded-full z-10 shadow-xs">
+                                Sua doação
                               </span>
                             )}
 
