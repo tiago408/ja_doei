@@ -17,7 +17,7 @@ export interface DonationItem {
   isFavorite?: boolean;
   isRedeemed?: boolean;
   isFeatured?: boolean;
-  status?: 'available' | 'reserved' | 'express_accepted' | 'in_transit' | 'completed';
+  status?: 'available' | 'reserved' | 'express_accepted' | 'in_transit' | 'delivered' | 'completed';
   donorName?: string;
   donorAvatar?: string;
   userId?: string | null;

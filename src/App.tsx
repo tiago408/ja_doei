@@ -86,6 +86,9 @@ import {
 import { GoogleIcon } from './components/icons/GoogleIcon';
 import { calculateShipping } from './services/melhorEnvio';
 
+// Em modo de teste o recebimento pode ser confirmado sem a atualização da transportadora
+const IS_TEST_MODE = true;
+
 const EMPTY_ADDRESS: UserAddress = {
   cep: '',
   logradouro: '',
@@ -2354,40 +2357,6 @@ export default function App() {
     showToast(`🎉 Doação cadastrada com sucesso! ${newIsFeatured ? '🔥 Item destacado no topo!' : ''} Os Dodos serão liberados após a confirmação da entrega.`, 'success');
   };
 
-  // Confirm Redeem (Confirmação Troca Final)
-  const handleConfirmDonationDelivery = async (item: DonationItem) => {
-    if (!user || !item.userId) {
-      showToast('Não foi possível identificar o doador deste item.', 'error');
-      return;
-    }
-
-    if (!window.confirm('Confirmar o recebimento desta doação?')) return;
-
-    try {
-      await updateDoc(doc(db, 'donations', item.id), { status: 'completed' });
-      await updateDoc(doc(db, 'users', item.userId), {
-        credits: increment(item.credits)
-      });
-      await addDoc(collection(db, 'notifications'), {
-        userId: item.userId,
-        title: 'Dodos liberados',
-        message: `Dodos de ${item.title} foram liberados após a confirmação de ${user.name}.`,
-        createdAt: serverTimestamp(),
-        read: false
-      });
-      setItems((prev) => prev.map((currentItem) => (
-        currentItem.id === item.id
-          ? { ...currentItem, status: 'completed', isRedeemed: true }
-          : currentItem
-      )));
-      setSuccessRedeemData(null);
-      showToast(`Entrega confirmada. +${item.credits} Dodos foram liberados ao doador.`, 'success');
-    } catch (error) {
-      console.error('Erro ao concluir doação:', error);
-      showToast('Não foi possível confirmar a entrega. Tente novamente.', 'error');
-    }
-  };
-
   const handleConfirmItemReceived = async (item: DonationItem) => {
     if (!user || !item.receiverId || item.receiverId !== user.uid) {
       showToast('Você precisa estar vinculado a este resgate para confirmar a entrega.', 'error');
@@ -3503,7 +3472,10 @@ export default function App() {
                           </span>
                         </div>
 
-                        {(item.status === 'reserved' || item.status === 'in_transit') && user?.uid === item.receiverId && (
+                        {user?.uid === item.receiverId &&
+                          (IS_TEST_MODE
+                            ? item.status === 'reserved' || item.status === 'in_transit' || item.status === 'delivered'
+                            : item.status === 'delivered') && (
                           <div className="w-full">
                             <button
                               type="button"
@@ -3512,6 +3484,11 @@ export default function App() {
                             >
                               Confirmar Recebimento do Item
                             </button>
+                            {IS_TEST_MODE && item.status !== 'delivered' && (
+                              <p className="mt-1 text-center text-[9px] font-semibold text-amber-600">
+                                Modo de teste: liberado antes da confirmação da transportadora
+                              </p>
+                            )}
                           </div>
                         )}
 
@@ -4862,31 +4839,6 @@ export default function App() {
                               Garante reembolso imediato e reenvio sem custo caso o item venha danificado ou diferente do anunciado.
                             </p>
                           </div>
-                        </div>
-
-                        {/* Premium Advantage Banner in Checkout */}
-                        <div className={`p-2.5 rounded-xl border flex items-center justify-between text-xs font-semibold ${
-                          isPremium 
-                            ? 'bg-amber-50 border-amber-300 text-amber-900' 
-                            : 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
-                        }`}>
-                          <div className="flex items-center gap-1.5">
-                            <Sparkles className={`w-4 h-4 ${isPremium ? 'text-[#FF8243]' : 'text-[#14A76C]'}`} />
-                            <span>
-                              {isPremium 
-                                ? '⭐ Sua conta Premium permite completar até 40% em R$!' 
-                                : 'Permite completar até 30% em R$'}
-                            </span>
-                          </div>
-                          {!isPremium && (
-                            <button
-                              type="button"
-                              onClick={() => setIsPremiumModalOpen(true)}
-                              className="text-[10px] font-extrabold text-white bg-[#FF8243] hover:bg-[#ff712b] px-2 py-1 rounded-md shrink-0 shadow-2xs"
-                            >
-                              Virar 40% Premium
-                            </button>
-                          )}
                         </div>
 
                         {/* Resumo Discriminado Box */}
@@ -7113,14 +7065,6 @@ export default function App() {
 
                 {/* Action Buttons */}
                 <div className="space-y-2 mt-auto">
-                  <button
-                    type="button"
-                    onClick={() => void handleConfirmDonationDelivery(successRedeemData.item)}
-                    className="w-full py-3 px-4 bg-[#FF8243] hover:bg-[#e96f2f] active:scale-98 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Confirmar recebimento da doação</span>
-                  </button>
                   <button
                     type="button"
                     onClick={() => {
