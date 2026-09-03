@@ -5276,7 +5276,7 @@ export default function App() {
 
                         <div ref={locationFieldRef} className="space-y-2">
                           <label className="block text-[11px] font-bold text-slate-700">
-                            Endereço de retirada do item *
+                            Endereço de origem da postagem *
                           </label>
 
                           <label className="flex items-start gap-2 p-3 rounded-xl border border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-700 cursor-pointer">
@@ -5289,7 +5289,7 @@ export default function App() {
                               }}
                               className="mt-0.5 accent-[#14A76C]"
                             />
-                            <span>Retirar no meu endereço residencial cadastrado</span>
+                            <span>Utilizar o CEP do meu perfil como origem da postagem</span>
                           </label>
 
                           {useProfileAddress ? (
@@ -5300,7 +5300,7 @@ export default function App() {
                               </div>
                             ) : (
                               <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-[11px] font-semibold text-amber-900">
-                                Seu endereço residencial está incompleto. Complete-o em "Editar Perfil" ou desmarque a opção acima para informar outro endereço.
+                                Seu endereço do perfil está incompleto. Complete-o em "Editar Perfil" ou desmarque a opção acima para informar outro CEP de origem.
                               </div>
                             )
                           ) : (
@@ -5312,7 +5312,7 @@ export default function App() {
                                   ref={locationInputRef}
                                   value={donationAddress.cep}
                                   onChange={(e) => void handleDonationCepChange(e.target.value)}
-                                  placeholder="CEP do local do item (00000-000)"
+                                  placeholder="CEP de origem da postagem (00000-000)"
                                   maxLength={9}
                                   className={`w-full px-3 py-2 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 border ${
                                     donationErrors.location
@@ -5383,9 +5383,13 @@ export default function App() {
 
                           {donationErrors.location && (
                             <p className="text-[10px] font-semibold text-red-600">
-                              Informe o endereço completo de retirada (CEP, rua, número, bairro, cidade e UF)
+                              Informe o endereço completo de origem (CEP, rua, número, bairro, cidade e UF)
                             </p>
                           )}
+
+                          <p className="text-[10px] leading-relaxed text-slate-400">
+                            Usamos o CEP para calcular o frete e emitir a etiqueta. O envio do pacote é feito por você no ponto de postagem mais próximo.
+                          </p>
                         </div>
 
                         {/* Credits Card with ±10% lock */}
