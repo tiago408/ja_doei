@@ -96,7 +96,32 @@ function buildPayload(fromCep: string, toCep: string, box: ConsolidatedBox) {
   };
 }
 
-function buildFallbackOptions(): FreightOption[] {
+// Fator de distância aproximado a partir da região dos CEPs (1º e 2º dígitos)
+function estimateDistanceFactor(fromCep: string, toCep: string) {
+  const from = Number(fromCep.slice(0, 2));
+  const to = Number(toCep.slice(0, 2));
+  if (Number.isNaN(from) || Number.isNaN(to)) return 1.3;
+  const regionGap = Math.min(Math.abs(from - to), 60);
+  return 1 + (regionGap / 60) * 0.9;
+}
+
+// Peso cobrado: o maior entre peso real e peso cúbico (volume / 6000)
+function billableWeight(box: ConsolidatedBox) {
+  const cubic = (box.width * box.height * box.length) / 6000;
+  return Math.max(box.weight, cubic, 0.3);
+}
+
+/**
+ * Estimativa local usada quando a API do Melhor Envio não está disponível (token ausente ou bloqueio de CORS).
+ * O valor varia conforme o peso/volume consolidado e a distância entre os CEPs de origem e destino.
+ */
+function buildFallbackOptions(box: ConsolidatedBox, fromCep: string, toCep: string): FreightOption[] {
+  const weight = billableWeight(box);
+  const distanceFactor = estimateDistanceFactor(fromCep, toCep);
+
+  const price = (base: number, perKg: number) =>
+    Number((((base + perKg * weight) * distanceFactor) * PLATFORM_MARKUP).toFixed(2));
+
   return [
     {
       id: 'me_fallback_pac',
@@ -104,7 +129,7 @@ function buildFallbackOptions(): FreightOption[] {
       categoryLabel: 'Opções Padrão / Econômica',
       name: 'PAC (estimado)',
       carrierName: 'Correios',
-      price: 18.90 * PLATFORM_MARKUP,
+      price: price(12.90, 4.20),
       deliveryTime: '5 a 9 dias úteis',
       icon: '📮',
       type: 'standard',
@@ -116,7 +141,7 @@ function buildFallbackOptions(): FreightOption[] {
       categoryLabel: 'Opções Padrão / Econômica',
       name: 'SEDEX (estimado)',
       carrierName: 'Correios',
-      price: 32.50 * PLATFORM_MARKUP,
+      price: price(23.50, 7.40),
       deliveryTime: '2 a 4 dias úteis',
       icon: '🚚',
       type: 'express',
@@ -128,7 +153,7 @@ function buildFallbackOptions(): FreightOption[] {
       categoryLabel: 'Opções Padrão / Econômica',
       name: 'Jadlog Package (estimado)',
       carrierName: 'Jadlog',
-      price: 22.00 * PLATFORM_MARKUP,
+      price: price(15.40, 5.10),
       deliveryTime: '4 a 7 dias úteis',
       icon: '📦',
       type: 'standard',
@@ -140,7 +165,7 @@ function buildFallbackOptions(): FreightOption[] {
       categoryLabel: 'Opções Padrão / Econômica',
       name: 'Loggi (estimado)',
       carrierName: 'Loggi',
-      price: 15.90 * PLATFORM_MARKUP,
+      price: price(11.20, 6.30),
       deliveryTime: '1 a 2 dias úteis',
       icon: '🛵',
       type: 'express',
@@ -160,10 +185,13 @@ export async function calculateShipping(
   items: ShippingItemInput[] = []
 ): Promise<FreightOption[]> {
   const box = consolidatePackage(items);
+  const originDigits = fromCep.replace(/\D/g, '');
+  const validOrigin = originDigits.length === 8 ? originDigits : DEFAULT_ORIGIN_CEP.replace(/\D/g, '');
+  const destinationDigits = toCep.replace(/\D/g, '');
 
   if (!MELHOR_ENVIO_TOKEN) {
     console.warn('VITE_MELHOR_ENVIO_TOKEN não configurado. Usando cotação de frete estimada (fallback).');
-    return buildFallbackOptions();
+    return buildFallbackOptions(box, validOrigin, destinationDigits);
   }
 
   try {
@@ -206,7 +234,10 @@ export async function calculateShipping(
       } satisfies FreightOption;
     });
   } catch (error) {
-    console.error('Erro ao calcular frete via Melhor Envio, usando fallback:', error);
-    return buildFallbackOptions();
+    console.error(
+      'Erro ao calcular frete via Melhor Envio (token inválido ou bloqueio de CORS no navegador). Usando estimativa local:',
+      error
+    );
+    return buildFallbackOptions(box, validOrigin, destinationDigits);
   }
 }

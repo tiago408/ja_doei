@@ -135,9 +135,43 @@ const fetchAddressByCep = async (cepDigits: string) => {
 };
 
 const formatAddressLabel = (address: UserAddress) => {
-  const parts = [address.bairro, address.cidade].filter(Boolean);
-  const label = parts.join(', ');
-  return address.estado ? `${label}${label ? ' - ' : ''}${address.estado}` : label;
+  const bairro = address.bairro?.trim();
+  const cidade = address.cidade?.trim();
+  const estado = address.estado?.trim().toUpperCase();
+  if (!cidade && !estado) return bairro || '';
+  return `${bairro ? `${bairro}, ` : ''}${cidade}${estado ? ` - ${estado}` : ''}`;
+};
+
+// Interpreta rótulos legados como "Pinheiros, São Paulo - SP" ou "Cotia, SP"
+const parseLocationLabel = (label: string) => {
+  const [beforeState, stateRaw] = label.split(' - ');
+  let estado = (stateRaw || '').trim().toUpperCase();
+  const parts = (beforeState || '').split(',').map((part) => part.trim()).filter(Boolean);
+
+  if (!estado && parts.length > 1 && parts[parts.length - 1].length === 2) {
+    estado = parts.pop()!.toUpperCase();
+  }
+
+  if (parts.length >= 2) return { bairro: parts[0], cidade: parts[1], estado };
+  return { bairro: '', cidade: parts[0] || '', estado };
+};
+
+// Normaliza o endereço do perfil mesmo quando só existem os campos legados (city/location)
+const resolveProfileAddress = (
+  address?: UserAddress,
+  cityFallback?: string,
+  locationFallback?: string
+): UserAddress => {
+  const base = address ?? EMPTY_ADDRESS;
+  if (base.bairro && base.cidade && base.estado) return base;
+
+  const parsed = parseLocationLabel(locationFallback?.trim() || cityFallback?.trim() || '');
+  return {
+    ...base,
+    bairro: base.bairro || parsed.bairro,
+    cidade: base.cidade || parsed.cidade,
+    estado: base.estado || parsed.estado
+  };
 };
 
 const isAddressComplete = (address: UserAddress) =>
@@ -871,6 +905,35 @@ export default function App() {
       : [selectedItemForDetails.imageUrl];
     return photos.filter(Boolean);
   }, [selectedItemForDetails]);
+
+  const photoSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const goToPhoto = (direction: 1 | -1) => {
+    if (detailsPhotos.length < 2) return;
+    setDetailsPhotoIndex((prev) => (prev + direction + detailsPhotos.length) % detailsPhotos.length);
+  };
+
+  const handlePhotoSwipeStart = (event: React.TouchEvent) => {
+    const touch = event.touches[0];
+    photoSwipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handlePhotoSwipeEnd = (event: React.TouchEvent) => {
+    const start = photoSwipeStartRef.current;
+    photoSwipeStartRef.current = null;
+    if (!start || detailsPhotos.length < 2) return;
+
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+
+    const deltaX = touch.clientX - start.x;
+    const deltaY = Math.abs(touch.clientY - start.y);
+    if (Math.abs(deltaX) < 45 || Math.abs(deltaX) <= deltaY) return;
+
+    // Evita que o swipe da galeria feche o modal de detalhes
+    event.stopPropagation();
+    goToPhoto(deltaX < 0 ? 1 : -1);
+  };
   const [isDodoInfoModalOpen, setIsDodoInfoModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [reportReason, setReportReason] = useState<string>('');
@@ -1118,7 +1181,12 @@ export default function App() {
   const [isDonationCepLoading, setIsDonationCepLoading] = useState<boolean>(false);
   const [donationCepError, setDonationCepError] = useState<string>('');
 
-  const activePickupAddress = useProfileAddress ? (user?.address ?? EMPTY_ADDRESS) : donationAddress;
+  const profileAddress = useMemo(
+    () => resolveProfileAddress(user?.address, user?.city, user?.location),
+    [user?.address, user?.city, user?.location]
+  );
+
+  const activePickupAddress = useProfileAddress ? profileAddress : donationAddress;
 
   const updateDonationAddress = (field: keyof UserAddress, value: string) => {
     setDonationAddress((prev) => ({ ...prev, [field]: value }));
@@ -2126,8 +2194,8 @@ export default function App() {
       category: newCategory,
       credits: donationCredits,
       aiSuggestedCredits: suggestedCredits > 0 ? suggestedCredits : donationCredits,
-      location: newLocation.trim() || getProfileLocation() || '',
-      userLocation: getProfileLocation() || undefined,
+      location: newLocation.trim() || formatAddressLabel(activePickupAddress) || getProfileLocation() || '',
+      userLocation: formatAddressLabel(profileAddress) || getProfileLocation() || undefined,
       pickupAddress,
       condition: newCondition,
       size: APPAREL_CATEGORIES.includes(newCategory) && newSize ? newSize : undefined,
@@ -3631,10 +3699,14 @@ export default function App() {
                 {/* Scrollable Modal Body */}
                 <div className="overflow-y-auto no-scrollbar flex-1 flex flex-col">
                   {/* Large Product Photo with Overlay Actions */}
-                <div className="relative h-80 sm:h-96 w-full bg-slate-100 overflow-hidden shrink-0">
+                <div
+                  className="relative h-80 sm:h-96 w-full bg-slate-100 overflow-hidden shrink-0"
+                  onTouchStart={handlePhotoSwipeStart}
+                  onTouchEnd={handlePhotoSwipeEnd}
+                >
                   <img
                     src={detailsPhotos[detailsPhotoIndex] || selectedItemForDetails.imageUrl}
-                    alt={selectedItemForDetails.title}
+                    alt={`${selectedItemForDetails.title} - foto ${detailsPhotoIndex + 1}`}
                     className="w-full h-full object-contain cursor-zoom-in"
                     onClick={() => setIsImageZoomed(true)}
                   />
@@ -3642,9 +3714,7 @@ export default function App() {
                     <>
                       <button
                         type="button"
-                        onClick={() =>
-                          setDetailsPhotoIndex((prev) => (prev - 1 + detailsPhotos.length) % detailsPhotos.length)
-                        }
+                        onClick={() => goToPhoto(-1)}
                         className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/85 p-2 text-slate-700 shadow-md transition-all hover:bg-white active:scale-90"
                         title="Foto anterior"
                       >
@@ -3652,7 +3722,7 @@ export default function App() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setDetailsPhotoIndex((prev) => (prev + 1) % detailsPhotos.length)}
+                        onClick={() => goToPhoto(1)}
                         className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/85 p-2 text-slate-700 shadow-md transition-all hover:bg-white active:scale-90"
                         title="Próxima foto"
                       >
@@ -4175,9 +4245,32 @@ export default function App() {
               >
                 <X className="w-6 h-6" />
               </button>
+              {detailsPhotos.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(event) => { event.stopPropagation(); goToPhoto(-1); }}
+                    className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/15 p-2.5 text-white transition-colors hover:bg-white/25"
+                    title="Foto anterior"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => { event.stopPropagation(); goToPhoto(1); }}
+                    className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/15 p-2.5 text-white transition-colors hover:bg-white/25"
+                    title="Próxima foto"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                  <span className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold text-white">
+                    {detailsPhotoIndex + 1} / {detailsPhotos.length}
+                  </span>
+                </>
+              )}
               <img
                 src={detailsPhotos[detailsPhotoIndex] || selectedItemForDetails.imageUrl}
-                alt={selectedItemForDetails.title}
+                alt={`${selectedItemForDetails.title} - foto ${detailsPhotoIndex + 1}`}
                 className="max-h-[85vh] max-w-full object-contain rounded-lg"
                 onClick={(event) => event.stopPropagation()}
                 style={{
@@ -5293,10 +5386,10 @@ export default function App() {
                           </label>
 
                           {useProfileAddress ? (
-                            isAddressComplete(user?.address ?? EMPTY_ADDRESS) ? (
+                            isAddressComplete(profileAddress) ? (
                               <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-[11px] text-slate-700">
-                                <p className="font-bold">{user?.address?.bairro}, {user?.address?.cidade} - {user?.address?.estado}</p>
-                                <p className="text-slate-500">CEP {user?.address?.cep}</p>
+                                <p className="font-bold">{formatAddressLabel(profileAddress)}</p>
+                                <p className="text-slate-500">CEP {profileAddress.cep}</p>
                               </div>
                             ) : (
                               <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-[11px] font-semibold text-amber-900">
