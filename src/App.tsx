@@ -74,6 +74,7 @@ import logoImg from './assets/logo.png';
 import simboloImg from './assets/simbolo.png';
 import dodoMascoteImg from './assets/dodo-mascote.png';
 import type { DonationItem, AppNotification, AdminReport, FreightOption } from './types/donation';
+import type { UserAddress } from './types/database';
 import {
   FREIGHT_OPTIONS,
   DONATION_CATEGORIES,
@@ -85,6 +86,31 @@ import {
 } from './constants/donations';
 import { GoogleIcon } from './components/icons/GoogleIcon';
 import { calculateShipping } from './services/melhorEnvio';
+
+const EMPTY_ADDRESS: UserAddress = {
+  cep: '',
+  logradouro: '',
+  numero: '',
+  complemento: '',
+  bairro: '',
+  cidade: '',
+  estado: ''
+};
+
+const readUserAddress = (profile: Record<string, unknown>): UserAddress => ({
+  cep: String(profile.cep ?? ''),
+  logradouro: String(profile.logradouro ?? ''),
+  numero: String(profile.numero ?? ''),
+  complemento: String(profile.complemento ?? ''),
+  bairro: String(profile.bairro ?? ''),
+  cidade: String(profile.cidade ?? profile.city ?? ''),
+  estado: String(profile.estado ?? profile.state ?? '')
+});
+
+const formatCep = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  return digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
+};
 
 export default function App() {
   const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
@@ -288,6 +314,7 @@ export default function App() {
     city?: string;
     location?: string;
     createdAt?: Date | null;
+    address?: UserAddress;
   } | null>(null);
   const [authName, setAuthName] = useState<string>('');
   const [authEmail, setAuthEmail] = useState<string>('');
@@ -409,6 +436,9 @@ export default function App() {
   const [editProfilePhotoPreview, setEditProfilePhotoPreview] = useState<string>('');
   const [editProfilePhotoFile, setEditProfilePhotoFile] = useState<File | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
+  const [editAddress, setEditAddress] = useState<UserAddress>(EMPTY_ADDRESS);
+  const [isLookingUpCep, setIsLookingUpCep] = useState<boolean>(false);
+  const [cepLookupError, setCepLookupError] = useState<string>('');
 
   const profileDonations = useMemo(
     () => (user
@@ -433,6 +463,7 @@ export default function App() {
           photoURL: firebaseUser.photoURL,
           city: profile.city,
           location: profile.location,
+          address: readUserAddress(profile),
           createdAt: profile.createdAt?.toDate?.() ?? (firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime) : null)
         };
         setUser(nextUser);
@@ -676,7 +707,55 @@ export default function App() {
     setEditProfileName(user.name);
     setEditProfilePhotoPreview(user.photoURL || '');
     setEditProfilePhotoFile(null);
+    setEditAddress(user.address ?? EMPTY_ADDRESS);
+    setCepLookupError('');
     setIsEditProfileOpen(true);
+  };
+
+  const updateEditAddress = (field: keyof UserAddress, value: string) => {
+    setEditAddress((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Autocompleta logradouro/bairro/cidade/estado assim que o CEP tem 8 dígitos
+  const handleCepChange = async (value: string) => {
+    const masked = formatCep(value);
+    setEditAddress((prev) => ({ ...prev, cep: masked }));
+    setCepLookupError('');
+
+    const digits = masked.replace(/\D/g, '');
+    if (digits.length !== 8) return;
+
+    setIsLookingUpCep(true);
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      if (!response.ok) throw new Error(`ViaCEP respondeu HTTP ${response.status}`);
+
+      const data = (await response.json()) as {
+        erro?: boolean | string;
+        logradouro?: string;
+        bairro?: string;
+        localidade?: string;
+        uf?: string;
+      };
+
+      if (data.erro) {
+        setCepLookupError('CEP não encontrado. Confira o número digitado.');
+        return;
+      }
+
+      setEditAddress((prev) => ({
+        ...prev,
+        logradouro: data.logradouro || prev.logradouro,
+        bairro: data.bairro || prev.bairro,
+        cidade: data.localidade || prev.cidade,
+        estado: data.uf || prev.estado
+      }));
+    } catch (error) {
+      console.error('Erro ao consultar o ViaCEP:', error);
+      setCepLookupError('Não foi possível buscar o CEP agora. Preencha o endereço manualmente.');
+    } finally {
+      setIsLookingUpCep(false);
+    }
   };
 
   const handleEditProfilePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -710,11 +789,32 @@ export default function App() {
       }
 
       const displayName = editProfileName.trim() || user.name;
+      const address: UserAddress = {
+        cep: editAddress.cep.trim(),
+        logradouro: editAddress.logradouro.trim(),
+        numero: editAddress.numero.trim(),
+        complemento: editAddress.complemento?.trim() || '',
+        bairro: editAddress.bairro.trim(),
+        cidade: editAddress.cidade.trim(),
+        estado: editAddress.estado.trim().toUpperCase()
+      };
 
       await updateProfile(auth.currentUser, { displayName, photoURL });
-      await setDoc(doc(db, 'users', user.uid), { name: displayName, photoURL }, { merge: true });
+      await setDoc(
+        doc(db, 'users', user.uid),
+        {
+          name: displayName,
+          photoURL,
+          ...address,
+          // Mantidos em sincronia com os campos legados usados no feed e no frete
+          city: address.cidade || user.city || '',
+          state: address.estado,
+          zipCode: address.cep
+        },
+        { merge: true }
+      );
 
-      setUser({ ...user, name: displayName, photoURL });
+      setUser({ ...user, name: displayName, photoURL, address, city: address.cidade || user.city });
       setIsEditProfileOpen(false);
       showToast('✅ Perfil atualizado com sucesso!', 'success');
     } catch (error) {
@@ -6639,7 +6739,7 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className="w-full sm:max-w-md bg-white rounded-2xl p-5 shadow-2xl flex flex-col gap-4 border border-slate-200"
+                className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-2xl p-5 shadow-2xl flex flex-col gap-4 border border-slate-200"
               >
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                   <h3 className="text-sm font-bold text-slate-800">Editar Perfil</h3>
@@ -6688,6 +6788,110 @@ export default function App() {
                       placeholder="Seu nome"
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#14A76C]"
                     />
+                  </div>
+
+                  <div className="space-y-3 rounded-2xl border border-slate-200 p-3">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-[#14A76C]" />
+                      <span className="text-[11px] font-bold text-slate-700">
+                        Endereço de coleta e entrega
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      Usado para gerar a etiqueta de envio e cotar o frete.
+                    </p>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">CEP</label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={editAddress.cep}
+                          onChange={(e) => void handleCepChange(e.target.value)}
+                          placeholder="00000-000"
+                          maxLength={9}
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#14A76C]"
+                        />
+                        {isLookingUpCep && (
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                            Buscando...
+                          </span>
+                        )}
+                      </div>
+                      {cepLookupError && (
+                        <p className="mt-1 text-[10px] font-semibold text-red-600">{cepLookupError}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">Logradouro</label>
+                      <input
+                        type="text"
+                        value={editAddress.logradouro}
+                        onChange={(e) => updateEditAddress('logradouro', e.target.value)}
+                        placeholder="Rua / Avenida"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#14A76C]"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-600 block mb-1">Número</label>
+                        <input
+                          type="text"
+                          value={editAddress.numero}
+                          onChange={(e) => updateEditAddress('numero', e.target.value)}
+                          placeholder="123"
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#14A76C]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-600 block mb-1">Complemento</label>
+                        <input
+                          type="text"
+                          value={editAddress.complemento || ''}
+                          onChange={(e) => updateEditAddress('complemento', e.target.value)}
+                          placeholder="Apto, bloco (opcional)"
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#14A76C]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">Bairro</label>
+                      <input
+                        type="text"
+                        value={editAddress.bairro}
+                        onChange={(e) => updateEditAddress('bairro', e.target.value)}
+                        placeholder="Bairro"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#14A76C]"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-[1fr_88px] gap-2">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-600 block mb-1">Cidade</label>
+                        <input
+                          type="text"
+                          value={editAddress.cidade}
+                          onChange={(e) => updateEditAddress('cidade', e.target.value)}
+                          placeholder="Cidade"
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#14A76C]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-600 block mb-1">UF</label>
+                        <input
+                          type="text"
+                          value={editAddress.estado}
+                          onChange={(e) => updateEditAddress('estado', e.target.value.toUpperCase())}
+                          placeholder="SP"
+                          maxLength={2}
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#14A76C]"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <button

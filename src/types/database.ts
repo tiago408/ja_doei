@@ -1,3 +1,13 @@
+export interface UserAddress {
+  cep: string;
+  logradouro: string;
+  numero: string;
+  complemento?: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+}
+
 export interface UserDocument {
   id: string;
   email: string;
@@ -10,6 +20,13 @@ export interface UserDocument {
   city?: string;
   state?: string;
   zipCode?: string;
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
   isActive: boolean;
 }
 
