@@ -962,21 +962,43 @@ export default function App() {
   const [selectedFreightId, setSelectedFreightId] = useState<string>('ja_doei_express');
   const [meShippingOptions, setMeShippingOptions] = useState<FreightOption[]>([]);
 
-  // Caixinha do Dodô: itens de um único doador, consolidados em um envio
+  // Caixinha do Dodô: itens agrupados por doador, cada grupo vira uma caixa/etiqueta independente
   const [caixinha, setCaixinha] = useState<DonationItem[]>([]);
   const [isCaixinhaModalOpen, setIsCaixinhaModalOpen] = useState<boolean>(false);
+  const [caixinhaQuotes, setCaixinhaQuotes] = useState<
+    Record<string, { options: FreightOption[]; selectedId: string }>
+  >({});
 
   const getDoadorId = (item: DonationItem) => item.userId || item.donorName || 'desconhecido';
 
-  // Doador dono da Caixinha atual; enquanto houver itens, só ele pode receber novos itens
-  const caixinhaDonor = useMemo(() => {
-    const first = caixinha[0];
-    if (!first) return null;
-    return {
-      doadorId: getDoadorId(first),
-      donorName: first.donorName || 'Doador'
-    };
+  const caixinhaGroups = useMemo(() => {
+    const groups = new Map<string, { doadorId: string; donorName: string; items: DonationItem[] }>();
+
+    for (const item of caixinha) {
+      const doadorId = getDoadorId(item);
+      const group = groups.get(doadorId);
+      if (group) {
+        group.items.push(item);
+      } else {
+        groups.set(doadorId, {
+          doadorId,
+          donorName: item.donorName || 'Doador',
+          items: [item]
+        });
+      }
+    }
+
+    return Array.from(groups.values());
   }, [caixinha]);
+
+  const invalidateCaixinhaQuote = (doadorId: string) => {
+    setCaixinhaQuotes((prev) => {
+      if (!prev[doadorId]) return prev;
+      const next = { ...prev };
+      delete next[doadorId];
+      return next;
+    });
+  };
 
   const handleAddToCaixinha = (item: DonationItem) => {
     if (!requireAuth()) return;
@@ -984,53 +1006,109 @@ export default function App() {
       showToast('Este item já está na sua Caixinha do Dodô.', 'info');
       return;
     }
-    if (caixinhaDonor && caixinhaDonor.doadorId !== getDoadorId(item)) {
-      showToast(
-        `Sua Caixinha é de ${caixinhaDonor.donorName}. Cada doador tem frete próprio — finalize ou esvazie a Caixinha para começar outra.`,
-        'error'
-      );
-      return;
-    }
 
-    const cepDigits = cepInput.replace(/\D/g, '');
-    if (cepDigits.length !== 8 || meShippingOptions.length === 0) {
-      showToast('Informe o CEP e escolha a forma de envio antes de adicionar à Caixinha do Dodô.', 'error');
-      return;
-    }
-
-    const nextCaixinha = [...caixinha, item];
-    setCaixinha(nextCaixinha);
-    showToast('📦 Item adicionado à Caixinha do Dodô! Recalculando o frete da caixa...', 'success');
-    void quoteFreightForItems(nextCaixinha, cepDigits);
+    setCaixinha((prev) => [...prev, item]);
+    invalidateCaixinhaQuote(getDoadorId(item));
+    showToast('📦 Item adicionado à Caixinha do Dodô!', 'success');
   };
 
   const handleRemoveFromCaixinha = (itemId: string) => {
+    const removed = caixinha.find((item) => item.id === itemId);
     setCaixinha((prev) => prev.filter((item) => item.id !== itemId));
+    if (removed) invalidateCaixinhaQuote(getDoadorId(removed));
   };
 
   const handleClearCaixinha = () => {
     setCaixinha([]);
+    setCaixinhaQuotes({});
     setIsCaixinhaModalOpen(false);
-    showToast('Caixinha esvaziada. Agora você pode montar a de outro doador.', 'info');
+    showToast('Caixinha esvaziada.', 'info');
   };
 
-  const handleCheckoutCaixinha = () => {
-    if (!requireAuth()) return;
-    const firstItem = caixinha[0];
-    if (!firstItem) return;
+  // Uma cotação por doador: cada caixa usa o CEP de origem do seu próprio doador
+  const handleCalculateCaixinhaFreight = async () => {
+    const cepDigits = cepInput.replace(/\D/g, '');
+    if (cepDigits.length !== 8) {
+      showToast('Informe um CEP de destino válido (8 dígitos).', 'error');
+      return;
+    }
+    if (!caixinhaGroups.length) return;
 
+    setIsCalculatingCep(true);
+    try {
+      const results = await Promise.all(
+        caixinhaGroups.map(async (group) => {
+          const originCep = group.items[0]?.pickupAddress?.cep?.replace(/\D/g, '');
+          const options = await calculateShipping(
+            originCep && originCep.length === 8 ? originCep : undefined,
+            cepDigits,
+            group.items.map((item) => ({ category: item.category, quantity: 1 }))
+          );
+          return { doadorId: group.doadorId, options };
+        })
+      );
+
+      setCaixinhaQuotes((prev) => {
+        const next = { ...prev };
+        for (const { doadorId, options } of results) {
+          const previousSelection = prev[doadorId]?.selectedId;
+          next[doadorId] = {
+            options,
+            selectedId: options.some((option) => option.id === previousSelection)
+              ? previousSelection!
+              : (options[0]?.id ?? '')
+          };
+        }
+        return next;
+      });
+
+      setIsCepCalculated(true);
+      showToast(
+        caixinhaGroups.length > 1
+          ? `🚚 Frete calculado para as ${caixinhaGroups.length} caixas.`
+          : '🚚 Frete da Caixinha calculado com os itens consolidados!',
+        'success'
+      );
+    } catch (error) {
+      console.error('Erro ao calcular o frete da Caixinha:', error);
+      showToast('Não foi possível calcular o frete agora. Tente novamente.', 'error');
+    } finally {
+      setIsCalculatingCep(false);
+    }
+  };
+
+  // Cada caixa é fechada e paga separadamente, com a transportadora escolhida para aquele doador
+  const handleCheckoutCaixinhaGroup = (doadorId: string) => {
+    if (!requireAuth()) return;
+
+    const group = caixinhaGroups.find((currentGroup) => currentGroup.doadorId === doadorId);
+    const quote = caixinhaQuotes[doadorId];
+    if (!group) return;
+
+    if (!quote?.options.length) {
+      showToast('Calcule o frete desta caixa antes de avançar.', 'error');
+      return;
+    }
+    if (!quote.options.some((option) => option.id === quote.selectedId)) {
+      showToast('Escolha a transportadora desta caixa para continuar.', 'error');
+      return;
+    }
+
+    setMeShippingOptions(quote.options);
+    setSelectedFreightId(quote.selectedId);
     setIsCaixinhaModalOpen(false);
     setSelectedItemForDetails(null);
-    setSelectedItemForRedeem(firstItem);
+    setSelectedItemForRedeem(group.items[0]);
   };
 
-  // Itens que entram no checkout: a Caixinha inteira quando o item resgatado faz parte dela
+  // Itens que entram no checkout: a caixa do doador quando o item resgatado faz parte dela
   const checkoutItems = useMemo(() => {
     if (!selectedItemForRedeem) return [];
-    return caixinha.some((item) => item.id === selectedItemForRedeem.id)
-      ? caixinha
-      : [selectedItemForRedeem];
-  }, [caixinha, selectedItemForRedeem]);
+    const group = caixinhaGroups.find((currentGroup) =>
+      currentGroup.items.some((item) => item.id === selectedItemForRedeem.id)
+    );
+    return group?.items ?? [selectedItemForRedeem];
+  }, [caixinhaGroups, selectedItemForRedeem]);
 
   const checkoutCreditsTotal = useMemo(
     () => checkoutItems.reduce((total, item) => total + item.credits, 0),
@@ -1639,7 +1717,6 @@ export default function App() {
     setSelectedFreightId(item.isLargeItem ? 'lalamove_partner' : 'ja_doei_express');
     setIsCepCalculated(true);
     setMeShippingOptions([]);
-    setCepInput('');
   };
 
   const handleSendReport = async (event: React.FormEvent) => {
@@ -1799,9 +1876,10 @@ export default function App() {
         itemsToQuote.map((item) => ({ category: item.category, quantity: 1 }))
       );
       setMeShippingOptions(options);
-      if (options[0]) {
-        setSelectedFreightId(options[0].id);
-      }
+      // Mantém a transportadora escolhida pelo usuário; só volta ao padrão quando ela não existe mais
+      setSelectedFreightId((current) =>
+        options.some((option) => option.id === current) ? current : (options[0]?.id ?? current)
+      );
       setIsCepCalculated(true);
       return true;
     } catch (error) {
@@ -1820,16 +1898,8 @@ export default function App() {
       return;
     }
 
-    // Consolida os itens da Caixinha quando ela pertence ao doador do item aberto
-    const sameDonorCaixinha =
-      selectedItemForDetails && caixinhaDonor?.doadorId === getDoadorId(selectedItemForDetails)
-        ? caixinha
-        : [];
-    const itemsToQuote = sameDonorCaixinha.some((item) => item.id === selectedItemForDetails?.id)
-      ? sameDonorCaixinha
-      : selectedItemForDetails
-        ? [...sameDonorCaixinha, selectedItemForDetails]
-        : [];
+    // Cotação individual do item aberto; a Caixinha tem cotação própria por doador
+    const itemsToQuote = selectedItemForDetails ? [selectedItemForDetails] : [];
 
     const succeeded = await quoteFreightForItems(itemsToQuote, cepDigits);
     if (succeeded) {
@@ -3486,7 +3556,7 @@ export default function App() {
               <span className="text-xs font-bold">Caixinha do Dodô</span>
             </span>
             <span className="truncate text-[10px] font-semibold text-slate-300">
-              {caixinhaDonor?.donorName} · ver
+              {caixinhaGroups.length} {caixinhaGroups.length === 1 ? 'caixa' : 'caixas'} · ver
             </span>
           </button>
         )}
@@ -3509,8 +3579,8 @@ export default function App() {
                     <div>
                       <h3 className="text-sm font-bold text-slate-800">Caixinha do Dodô</h3>
                       <p className="text-[10px] text-slate-500">
-                        {caixinha.length} {caixinha.length === 1 ? 'item' : 'itens'}
-                        {caixinhaDonor ? ` de ${caixinhaDonor.donorName}` : ''}
+                        {caixinha.length} {caixinha.length === 1 ? 'item' : 'itens'} em{' '}
+                        {caixinhaGroups.length} {caixinhaGroups.length === 1 ? 'caixa' : 'caixas'}
                       </p>
                     </div>
                   </div>
@@ -3530,71 +3600,154 @@ export default function App() {
                       Sua Caixinha está vazia. Adicione itens pela tela de detalhes do desapego.
                     </p>
                   ) : (
-                    <div className="rounded-2xl border border-slate-200 p-3">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-bold text-slate-700">
-                          Caixa de {caixinhaDonor?.donorName}
-                        </span>
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                          {caixinha.length} {caixinha.length === 1 ? 'item' : 'itens'}
-                        </span>
+                    <>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <Truck className="h-4 w-4 text-[#14A76C]" />
+                          <span className="text-[11px] font-bold text-slate-700">CEP de destino</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={cepInput}
+                            onChange={(e) => setCepInput(formatCep(e.target.value))}
+                            placeholder="00000-000"
+                            maxLength={9}
+                            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void handleCalculateCaixinhaFreight()}
+                            disabled={isCalculatingCep}
+                            className="rounded-xl bg-slate-900 px-3 py-2 text-[11px] font-bold text-white transition-all hover:bg-slate-800 disabled:opacity-60"
+                          >
+                            {isCalculatingCep
+                              ? 'Calculando...'
+                              : caixinhaGroups.length > 1
+                                ? 'Calcular fretes'
+                                : 'Calcular'}
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-slate-400">
+                          Cada doador gera uma caixa, uma cotação e uma etiqueta independentes.
+                        </p>
                       </div>
-                      <div className="space-y-2">
-                        {caixinha.map((item) => (
-                          <div key={item.id} className="flex items-center gap-2">
-                            <img
-                              src={item.imageUrl}
-                              alt={item.title}
-                              className="h-10 w-10 shrink-0 rounded-lg object-cover"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-[11px] font-semibold text-slate-700">{item.title}</p>
-                              <p className="text-[10px] text-slate-400">{item.category} · {item.credits} Dodos</p>
+
+                      {caixinhaGroups.map((group, groupIndex) => {
+                        const quote = caixinhaQuotes[group.doadorId];
+                        const groupCredits = group.items.reduce((total, item) => total + item.credits, 0);
+
+                        return (
+                          <div key={group.doadorId} className="rounded-2xl border border-slate-200 p-3">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <span className="text-[11px] font-bold text-slate-700">
+                                {caixinhaGroups.length > 1 ? `Caixinha ${groupIndex + 1} - ` : 'Caixa de '}
+                                {group.donorName}
+                              </span>
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                                {group.items.length} {group.items.length === 1 ? 'item' : 'itens'} · {groupCredits} Dodos
+                              </span>
                             </div>
+
+                            <div className="space-y-2">
+                              {group.items.map((item) => (
+                                <div key={item.id} className="flex items-center gap-2">
+                                  <img
+                                    src={item.imageUrl}
+                                    alt={item.title}
+                                    className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-[11px] font-semibold text-slate-700">{item.title}</p>
+                                    <p className="text-[10px] text-slate-400">{item.category} · {item.credits} Dodos</p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveFromCaixinha(item.id)}
+                                    className="rounded-full p-1.5 text-slate-300 transition-all hover:bg-rose-50 hover:text-rose-500"
+                                    title="Remover da Caixinha"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+
+                            {quote?.options.length ? (
+                              <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">
+                                {quote.options.map((option) => (
+                                  <label
+                                    key={option.id}
+                                    className={`flex cursor-pointer items-center justify-between gap-2 rounded-xl border-2 p-2.5 transition-all ${
+                                      quote.selectedId === option.id
+                                        ? 'border-[#14A76C] bg-emerald-50/60'
+                                        : 'border-slate-200 bg-white hover:border-slate-300'
+                                    }`}
+                                  >
+                                    <div className="flex min-w-0 items-center gap-2">
+                                      <input
+                                        type="radio"
+                                        name={`caixinhaFreight-${group.doadorId}`}
+                                        checked={quote.selectedId === option.id}
+                                        onChange={() =>
+                                          setCaixinhaQuotes((prev) => ({
+                                            ...prev,
+                                            [group.doadorId]: { ...prev[group.doadorId], selectedId: option.id }
+                                          }))
+                                        }
+                                        className="accent-[#14A76C] shrink-0"
+                                      />
+                                      <span className="shrink-0 text-base">{option.icon}</span>
+                                      <div className="min-w-0">
+                                        <span className="block truncate text-[11px] font-bold text-slate-800">{option.name}</span>
+                                        <span className="block text-[10px] text-slate-500">{option.deliveryTime}</span>
+                                      </div>
+                                    </div>
+                                    <span className="shrink-0 text-[11px] font-black text-slate-800">
+                                      R$ {option.price.toFixed(2).replace('.', ',')}
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-[10px] text-slate-400">
+                                Informe o CEP acima e calcule para ver as opções de envio desta caixa.
+                              </p>
+                            )}
+
                             <button
                               type="button"
-                              onClick={() => handleRemoveFromCaixinha(item.id)}
-                              className="rounded-full p-1.5 text-slate-300 transition-all hover:bg-rose-50 hover:text-rose-500"
-                              title="Remover da Caixinha"
+                              onClick={() => handleCheckoutCaixinhaGroup(group.doadorId)}
+                              disabled={!quote?.options.length}
+                              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#14A76C] py-2.5 text-[11px] font-bold text-white shadow-sm transition-all hover:bg-[#108958] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <PackageCheck className="h-4 w-4 text-emerald-200" />
+                              <span>Fechar esta caixa e pagar</span>
                             </button>
                           </div>
-                        ))}
-                      </div>
-                      <p className="mt-2 text-[10px] text-slate-400">
-                        Só é possível montar uma caixa por doador — os itens deste doador viajam juntos em um único frete.
-                      </p>
+                        );
+                      })}
+
                       <button
                         type="button"
                         onClick={handleClearCaixinha}
-                        className="mt-2 w-full rounded-xl border border-slate-200 py-2 text-[10px] font-bold text-slate-500 transition-all hover:bg-slate-50"
+                        className="w-full rounded-xl border border-slate-200 py-2 text-[10px] font-bold text-slate-500 transition-all hover:bg-slate-50"
                       >
-                        Esvaziar Caixinha para escolher outro doador
+                        Esvaziar Caixinha
                       </button>
-                    </div>
+                    </>
                   )}
                 </div>
 
                 <div className="shrink-0 border-t border-slate-100 px-5 py-4">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsCaixinhaModalOpen(false)}
-                      className="flex-1 rounded-2xl border border-slate-300 bg-white py-2.5 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 active:scale-[0.98]"
-                    >
-                      Continuar garimpando
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCheckoutCaixinha}
-                      disabled={caixinha.length === 0}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-[#14A76C] py-2.5 text-xs font-bold text-white shadow-md transition-all hover:bg-[#108958] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <PackageCheck className="h-4 w-4 text-emerald-200" />
-                      <span>Fechar e enviar</span>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsCaixinhaModalOpen(false)}
+                    className="w-full rounded-2xl border border-slate-300 bg-white py-2.5 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 active:scale-[0.98]"
+                  >
+                    Continuar garimpando
+                  </button>
                 </div>
               </motion.div>
             </div>
@@ -4057,28 +4210,17 @@ export default function App() {
                     const isAlreadyInCaixinha = caixinha.some(
                       (caixinhaItem) => caixinhaItem.id === selectedItemForDetails.id
                     );
-                    const isOtherDonorCaixinha = Boolean(
-                      caixinhaDonor && caixinhaDonor.doadorId !== getDoadorId(selectedItemForDetails)
-                    );
-                    const isShippingReady =
-                      cepInput.replace(/\D/g, '').length === 8 && meShippingOptions.length > 0;
 
                     return (
                       <button
                         type="button"
                         onClick={() => handleAddToCaixinha(selectedItemForDetails)}
-                        disabled={isAlreadyInCaixinha || isOtherDonorCaixinha || !isShippingReady}
+                        disabled={isAlreadyInCaixinha}
                         className="w-full py-2.5 rounded-2xl border border-amber-300 bg-amber-50 hover:bg-amber-100 disabled:opacity-60 disabled:cursor-not-allowed text-amber-700 text-xs font-bold flex items-center justify-center gap-2 transition-all"
                       >
                         <Box className="w-4 h-4" />
                         <span>
-                          {isAlreadyInCaixinha
-                            ? 'Já está na Caixinha do Dodô'
-                            : isOtherDonorCaixinha
-                              ? `Caixinha em uso por ${caixinhaDonor?.donorName}`
-                              : !isShippingReady
-                                ? 'Calcule o CEP e escolha o envio primeiro'
-                                : 'Adicionar à Caixinha do Dodô'}
+                          {isAlreadyInCaixinha ? 'Já está na Caixinha do Dodô' : 'Adicionar à Caixinha do Dodô'}
                         </span>
                       </button>
                     );
