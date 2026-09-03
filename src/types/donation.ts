@@ -1,4 +1,6 @@
 // Item Interface
+import type { UserAddress } from './database';
+
 export interface DonationItem {
   id: string;
   title: string;
@@ -7,6 +9,8 @@ export interface DonationItem {
   aiSuggestedCredits?: number;
   location: string;
   imageUrl: string;
+  images?: string[];
+  pickupAddress?: UserAddress;
   description?: string;
   condition?: string;
   createdAt: string;

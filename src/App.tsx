@@ -36,7 +36,6 @@ import {
   Bot,
   LogOut,
   Camera,
-  LocateFixed,
   Inbox,
   Pencil,
   Trash2,
@@ -58,7 +57,7 @@ import {
   updateDoc,
   increment
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, uploadString, getDownloadURL } from 'firebase/storage';
 import {
   signInWithPopup,
   GoogleAuthProvider,
@@ -111,6 +110,43 @@ const formatCep = (value: string) => {
   const digits = value.replace(/\D/g, '').slice(0, 8);
   return digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
 };
+
+// Consulta o ViaCEP; retorna null quando o CEP não existe
+const fetchAddressByCep = async (cepDigits: string) => {
+  const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`);
+  if (!response.ok) throw new Error(`ViaCEP respondeu HTTP ${response.status}`);
+
+  const data = (await response.json()) as {
+    erro?: boolean | string;
+    logradouro?: string;
+    bairro?: string;
+    localidade?: string;
+    uf?: string;
+  };
+
+  if (data.erro) return null;
+
+  return {
+    logradouro: data.logradouro || '',
+    bairro: data.bairro || '',
+    cidade: data.localidade || '',
+    estado: data.uf || ''
+  };
+};
+
+const formatAddressLabel = (address: UserAddress) => {
+  const parts = [address.bairro, address.cidade].filter(Boolean);
+  const label = parts.join(', ');
+  return address.estado ? `${label}${label ? ' - ' : ''}${address.estado}` : label;
+};
+
+const isAddressComplete = (address: UserAddress) =>
+  address.cep.replace(/\D/g, '').length === 8 &&
+  Boolean(address.logradouro.trim()) &&
+  Boolean(address.numero.trim()) &&
+  Boolean(address.bairro.trim()) &&
+  Boolean(address.cidade.trim()) &&
+  Boolean(address.estado.trim());
 
 export default function App() {
   const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
@@ -174,6 +210,10 @@ export default function App() {
             condition: data.condition,
             size: data.size || undefined,
             imageUrl: data.imageUrl || data.image,
+            images: Array.isArray(data.images) && data.images.length
+              ? (data.images as string[])
+              : [data.imageUrl || data.image].filter(Boolean),
+            pickupAddress: data.pickupAddress || undefined,
             description: data.description,
             createdAt: 'Hoje',
             isFeatured: data.isFeatured || false,
@@ -727,28 +767,18 @@ export default function App() {
 
     setIsLookingUpCep(true);
     try {
-      const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
-      if (!response.ok) throw new Error(`ViaCEP respondeu HTTP ${response.status}`);
-
-      const data = (await response.json()) as {
-        erro?: boolean | string;
-        logradouro?: string;
-        bairro?: string;
-        localidade?: string;
-        uf?: string;
-      };
-
-      if (data.erro) {
+      const found = await fetchAddressByCep(digits);
+      if (!found) {
         setCepLookupError('CEP não encontrado. Confira o número digitado.');
         return;
       }
 
       setEditAddress((prev) => ({
         ...prev,
-        logradouro: data.logradouro || prev.logradouro,
-        bairro: data.bairro || prev.bairro,
-        cidade: data.localidade || prev.cidade,
-        estado: data.uf || prev.estado
+        logradouro: found.logradouro || prev.logradouro,
+        bairro: found.bairro || prev.bairro,
+        cidade: found.cidade || prev.cidade,
+        estado: found.estado || prev.estado
       }));
     } catch (error) {
       console.error('Erro ao consultar o ViaCEP:', error);
@@ -832,6 +862,15 @@ export default function App() {
   const [selectedItemForDetails, setSelectedItemForDetails] = useState<DonationItem | null>(null);
   const [selectedItemForRedeem, setSelectedItemForRedeem] = useState<DonationItem | null>(null);
   const [isImageZoomed, setIsImageZoomed] = useState<boolean>(false);
+  const [detailsPhotoIndex, setDetailsPhotoIndex] = useState<number>(0);
+
+  const detailsPhotos = useMemo(() => {
+    if (!selectedItemForDetails) return [];
+    const photos = selectedItemForDetails.images?.length
+      ? selectedItemForDetails.images
+      : [selectedItemForDetails.imageUrl];
+    return photos.filter(Boolean);
+  }, [selectedItemForDetails]);
   const [isDodoInfoModalOpen, setIsDodoInfoModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [reportReason, setReportReason] = useState<string>('');
@@ -1057,7 +1096,6 @@ export default function App() {
   const [isCategoryManuallySelected, setIsCategoryManuallySelected] = useState<boolean>(false);
   const [requiresModeration, setRequiresModeration] = useState<boolean>(false);
   const [donateStep, setDonateStep] = useState<number>(1);
-  const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
   const [newExtraPhotos, setNewExtraPhotos] = useState<string[]>([]);
   const [isSubmittingDonation, setIsSubmittingDonation] = useState<boolean>(false);
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
@@ -1070,8 +1108,62 @@ export default function App() {
   const conditionSelectRef = useRef<HTMLSelectElement>(null);
   const sizeSelectRef = useRef<HTMLSelectElement>(null);
   const locationInputRef = useRef<HTMLInputElement>(null);
+  const locationFieldRef = useRef<HTMLDivElement>(null);
 
   const [donationErrors, setDonationErrors] = useState<Record<string, boolean>>({});
+
+  // Endereço de retirada do item: perfil do doador ou endereço alternativo
+  const [useProfileAddress, setUseProfileAddress] = useState<boolean>(true);
+  const [donationAddress, setDonationAddress] = useState<UserAddress>(EMPTY_ADDRESS);
+  const [isDonationCepLoading, setIsDonationCepLoading] = useState<boolean>(false);
+  const [donationCepError, setDonationCepError] = useState<string>('');
+
+  const activePickupAddress = useProfileAddress ? (user?.address ?? EMPTY_ADDRESS) : donationAddress;
+
+  const updateDonationAddress = (field: keyof UserAddress, value: string) => {
+    setDonationAddress((prev) => ({ ...prev, [field]: value }));
+    clearDonationError('location');
+  };
+
+  const handleDonationCepChange = async (value: string) => {
+    const masked = formatCep(value);
+    setDonationAddress((prev) => ({ ...prev, cep: masked }));
+    setDonationCepError('');
+    clearDonationError('location');
+
+    const digits = masked.replace(/\D/g, '');
+    if (digits.length !== 8) return;
+
+    setIsDonationCepLoading(true);
+    try {
+      const found = await fetchAddressByCep(digits);
+      if (!found) {
+        setDonationCepError('CEP não encontrado. Confira o número digitado.');
+        return;
+      }
+      setDonationAddress((prev) => ({
+        ...prev,
+        logradouro: found.logradouro || prev.logradouro,
+        bairro: found.bairro || prev.bairro,
+        cidade: found.cidade || prev.cidade,
+        estado: found.estado || prev.estado
+      }));
+    } catch (error) {
+      console.error('Erro ao consultar o ViaCEP:', error);
+      setDonationCepError('Não foi possível buscar o CEP agora. Preencha o endereço manualmente.');
+    } finally {
+      setIsDonationCepLoading(false);
+    }
+  };
+
+  // Mantém o rótulo de localização do item em sincronia com o endereço escolhido
+  useEffect(() => {
+    setNewLocation(formatAddressLabel(activePickupAddress));
+  }, [
+    activePickupAddress.bairro,
+    activePickupAddress.cidade,
+    activePickupAddress.estado
+  ]);
 
   const ERROR_FIELD_CLASS = 'border-red-500 bg-red-50 focus:ring-red-500';
 
@@ -1109,7 +1201,6 @@ export default function App() {
     setIsCategoryManuallySelected(false);
     setRequiresModeration(false);
     setDonateStep(1);
-    setIsLocatingGps(false);
     setNewExtraPhotos([]);
     setIsSubmittingDonation(false);
     setNewImageFile(null);
@@ -1121,8 +1212,10 @@ export default function App() {
   useEffect(() => {
     if (isDonateModalOpen) {
       setDonateStep(1);
-      setNewLocation('');
       setDonationErrors({});
+      setUseProfileAddress(true);
+      setDonationAddress(EMPTY_ADDRESS);
+      setDonationCepError('');
     }
   }, [isDonateModalOpen]);
 
@@ -1209,63 +1302,6 @@ export default function App() {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join('') || 'U';
-
-  const formatReverseGeocodedLocation = (address: Record<string, string>) => {
-    const neighborhood = address.suburb || address.neighbourhood || address.quarter;
-    const city = address.city || address.town || address.village || address.municipality;
-    const state = address.state_code || address.state;
-    if (neighborhood && city && state) return `${neighborhood}, ${city} - ${state}`;
-    if (neighborhood && city) return `${neighborhood}, ${city}`;
-    if (city && state) return `${city}, ${state}`;
-    return getProfileLocation();
-  };
-
-  const handleUseGps = () => {
-    setIsLocatingGps(true);
-    clearDonationError('location');
-    let settled = false;
-    const finishWithFallback = () => {
-      if (settled) return;
-      settled = true;
-      const profileLocation = getProfileLocation();
-      setNewLocation(profileLocation);
-      setIsLocatingGps(false);
-      showToast(`📍 Usando sua localização cadastrada: ${profileLocation}`, 'info');
-    };
-    const timeoutId = window.setTimeout(finishWithFallback, 2000);
-
-    if (!navigator.geolocation) {
-      window.clearTimeout(timeoutId);
-      finishWithFallback();
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
-      if (settled) return;
-      try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}&zoom=18&addressdetails=1`,
-          { headers: { Accept: 'application/json' } }
-        );
-        if (!response.ok) throw new Error(`Geocodificação retornou HTTP ${response.status}`);
-        const data = await response.json() as { address?: Record<string, string> };
-        if (!data.address) throw new Error('Resposta de geocodificação sem endereço');
-        window.clearTimeout(timeoutId);
-        settled = true;
-        const realLocation = formatReverseGeocodedLocation(data.address);
-        setNewLocation(realLocation);
-        setIsLocatingGps(false);
-        showToast(`📍 Localização atualizada via GPS: ${realLocation}`, 'success');
-      } catch (error) {
-        console.error('Erro na geocodificação reversa:', error);
-        finishWithFallback();
-      }
-    }, (error) => {
-      console.warn('GPS indisponível:', error);
-      window.clearTimeout(timeoutId);
-      finishWithFallback();
-    }, { enableHighAccuracy: true, timeout: 1800, maximumAge: 300000 });
-  };
 
   const getDisplayLocation = (item: DonationItem) => {
     const location = item.location?.trim();
@@ -1530,6 +1566,7 @@ export default function App() {
   // Open Product Details
   const handleOpenDetails = (item: DonationItem) => {
     setIsImageZoomed(false);
+    setDetailsPhotoIndex(0);
     setSelectedItemForDetails(item);
     setSelectedFreightId(item.isLargeItem ? 'lalamove_partner' : 'ja_doei_express');
     setIsCepCalculated(true);
@@ -1686,8 +1723,10 @@ export default function App() {
   const quoteFreightForItems = async (itemsToQuote: DonationItem[], cepDigits: string) => {
     setIsCalculatingCep(true);
     try {
+      // Origem do frete: CEP de retirada informado na doação
+      const originCep = itemsToQuote[0]?.pickupAddress?.cep?.replace(/\D/g, '');
       const options = await calculateShipping(
-        undefined,
+        originCep && originCep.length === 8 ? originCep : undefined,
         cepDigits,
         itemsToQuote.map((item) => ({ category: item.category, quantity: 1 }))
       );
@@ -1955,7 +1994,7 @@ export default function App() {
       { key: 'category', element: categorySelectRef.current },
       { key: 'condition', element: conditionSelectRef.current },
       { key: 'size', element: sizeSelectRef.current },
-      { key: 'location', element: locationInputRef.current }
+      { key: 'location', element: locationInputRef.current ?? locationFieldRef.current }
     ];
 
     const firstInvalid = fieldOrder.find(({ key, element }) => errors[key] && element);
@@ -1979,7 +2018,7 @@ export default function App() {
     if (!newCategory.trim()) errors.category = true;
     if (!newCondition.trim()) errors.condition = true;
     if (APPAREL_CATEGORIES.includes(newCategory) && !newSize.trim()) errors.size = true;
-    if (!newLocation.trim() && !getProfileLocation()) errors.location = true;
+    if (!isAddressComplete(activePickupAddress)) errors.location = true;
 
     return errors;
   };
@@ -2058,6 +2097,30 @@ export default function App() {
       }
     }
 
+    // Fotos complementares são capturadas como data URL; sobem para o Storage antes de publicar
+    const extraPhotoUrls: string[] = [];
+    for (const [index, photo] of newExtraPhotos.entries()) {
+      try {
+        const extraRef = ref(storage, `donations_images/${Date.now()}_extra_${index}`);
+        const uploadSnapshot = await uploadString(extraRef, photo, 'data_url');
+        extraPhotoUrls.push(await getDownloadURL(uploadSnapshot.ref));
+      } catch (error) {
+        console.error('Erro ao enviar foto complementar para o Firebase Storage:', error);
+      }
+    }
+
+    const donationImages = [finalImageUrl, ...extraPhotoUrls].filter(Boolean);
+
+    const pickupAddress: UserAddress = {
+      cep: activePickupAddress.cep.trim(),
+      logradouro: activePickupAddress.logradouro.trim(),
+      numero: activePickupAddress.numero.trim(),
+      complemento: activePickupAddress.complemento?.trim() || '',
+      bairro: activePickupAddress.bairro.trim(),
+      cidade: activePickupAddress.cidade.trim(),
+      estado: activePickupAddress.estado.trim().toUpperCase()
+    };
+
     const donationPayload = {
       title: newTitle.trim(),
       category: newCategory,
@@ -2065,10 +2128,12 @@ export default function App() {
       aiSuggestedCredits: suggestedCredits > 0 ? suggestedCredits : donationCredits,
       location: newLocation.trim() || getProfileLocation() || '',
       userLocation: getProfileLocation() || undefined,
+      pickupAddress,
       condition: newCondition,
       size: APPAREL_CATEGORIES.includes(newCategory) && newSize ? newSize : undefined,
       image: finalImageUrl,
       imageUrl: finalImageUrl,
+      images: donationImages,
       description: newDescription.trim() || 'Item doado recentemente na comunidade em ótimo estado.',
       isFeatured: newIsFeatured,
       isLargeItem,
@@ -3568,11 +3633,46 @@ export default function App() {
                   {/* Large Product Photo with Overlay Actions */}
                 <div className="relative h-80 sm:h-96 w-full bg-slate-100 overflow-hidden shrink-0">
                   <img
-                    src={selectedItemForDetails.imageUrl}
+                    src={detailsPhotos[detailsPhotoIndex] || selectedItemForDetails.imageUrl}
                     alt={selectedItemForDetails.title}
                     className="w-full h-full object-contain cursor-zoom-in"
                     onClick={() => setIsImageZoomed(true)}
                   />
+                  {detailsPhotos.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDetailsPhotoIndex((prev) => (prev - 1 + detailsPhotos.length) % detailsPhotos.length)
+                        }
+                        className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/85 p-2 text-slate-700 shadow-md transition-all hover:bg-white active:scale-90"
+                        title="Foto anterior"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDetailsPhotoIndex((prev) => (prev + 1) % detailsPhotos.length)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/85 p-2 text-slate-700 shadow-md transition-all hover:bg-white active:scale-90"
+                        title="Próxima foto"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                      <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5">
+                        {detailsPhotos.map((photo, index) => (
+                          <button
+                            key={`${photo}-${index}`}
+                            type="button"
+                            onClick={() => setDetailsPhotoIndex(index)}
+                            className={`h-1.5 rounded-full transition-all ${
+                              index === detailsPhotoIndex ? 'w-5 bg-white' : 'w-1.5 bg-white/60'
+                            }`}
+                            title={`Foto ${index + 1}`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
                   <div className="absolute right-3 bottom-14 rounded-full bg-black/45 p-2 text-white pointer-events-none">
                     <Search className="w-4 h-4" aria-hidden="true" />
                   </div>
@@ -4076,7 +4176,7 @@ export default function App() {
                 <X className="w-6 h-6" />
               </button>
               <img
-                src={selectedItemForDetails.imageUrl}
+                src={detailsPhotos[detailsPhotoIndex] || selectedItemForDetails.imageUrl}
                 alt={selectedItemForDetails.title}
                 className="max-h-[85vh] max-w-full object-contain rounded-lg"
                 onClick={(event) => event.stopPropagation()}
@@ -5174,38 +5274,117 @@ export default function App() {
                           </div>
                         )}
 
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Bairro / Localização *
+                        <div ref={locationFieldRef} className="space-y-2">
+                          <label className="block text-[11px] font-bold text-slate-700">
+                            Endereço de retirada do item *
                           </label>
-                          <div className="relative">
+
+                          <label className="flex items-start gap-2 p-3 rounded-xl border border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-700 cursor-pointer">
                             <input
-                              type="text"
-                              ref={locationInputRef}
-                              value={newLocation}
-                              onChange={(e) => {
-                                setNewLocation(e.target.value);
-                                if (e.target.value.trim()) clearDonationError('location');
+                              type="checkbox"
+                              checked={useProfileAddress}
+                              onChange={(event) => {
+                                setUseProfileAddress(event.target.checked);
+                                clearDonationError('location');
                               }}
-                              placeholder="Ex: Pinheiros, SP"
-                              className={`w-full px-3 py-2 pr-10 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 border ${
-                                donationErrors.location
-                                  ? ERROR_FIELD_CLASS
-                                  : 'bg-slate-50 border-slate-200 focus:bg-white focus:ring-[#14A76C]/40'
-                              }`}
+                              className="mt-0.5 accent-[#14A76C]"
                             />
-                            <button
-                              type="button"
-                              onClick={handleUseGps}
-                              disabled={isLocatingGps}
-                              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-[#14A76C] hover:bg-emerald-50 disabled:opacity-60 transition-all"
-                              title="Usar minha localização atual"
-                            >
-                              <LocateFixed className={`w-4 h-4 ${isLocatingGps ? 'animate-spin' : ''}`} />
-                            </button>
-                          </div>
+                            <span>Retirar no meu endereço residencial cadastrado</span>
+                          </label>
+
+                          {useProfileAddress ? (
+                            isAddressComplete(user?.address ?? EMPTY_ADDRESS) ? (
+                              <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-[11px] text-slate-700">
+                                <p className="font-bold">{user?.address?.bairro}, {user?.address?.cidade} - {user?.address?.estado}</p>
+                                <p className="text-slate-500">CEP {user?.address?.cep}</p>
+                              </div>
+                            ) : (
+                              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-[11px] font-semibold text-amber-900">
+                                Seu endereço residencial está incompleto. Complete-o em "Editar Perfil" ou desmarque a opção acima para informar outro endereço.
+                              </div>
+                            )
+                          ) : (
+                            <div className="space-y-2">
+                              <div>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  ref={locationInputRef}
+                                  value={donationAddress.cep}
+                                  onChange={(e) => void handleDonationCepChange(e.target.value)}
+                                  placeholder="CEP do local do item (00000-000)"
+                                  maxLength={9}
+                                  className={`w-full px-3 py-2 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 border ${
+                                    donationErrors.location
+                                      ? ERROR_FIELD_CLASS
+                                      : 'bg-slate-50 border-slate-200 focus:bg-white focus:ring-[#14A76C]/40'
+                                  }`}
+                                />
+                                {isDonationCepLoading && (
+                                  <p className="mt-1 text-[10px] font-semibold text-slate-400">Buscando endereço...</p>
+                                )}
+                                {donationCepError && (
+                                  <p className="mt-1 text-[10px] font-semibold text-red-600">{donationCepError}</p>
+                                )}
+                              </div>
+
+                              <input
+                                type="text"
+                                value={donationAddress.logradouro}
+                                onChange={(e) => updateDonationAddress('logradouro', e.target.value)}
+                                placeholder="Rua / Avenida"
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                              />
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <input
+                                  type="text"
+                                  value={donationAddress.numero}
+                                  onChange={(e) => updateDonationAddress('numero', e.target.value)}
+                                  placeholder="Número"
+                                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                                />
+                                <input
+                                  type="text"
+                                  value={donationAddress.complemento || ''}
+                                  onChange={(e) => updateDonationAddress('complemento', e.target.value)}
+                                  placeholder="Complemento (opcional)"
+                                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                                />
+                              </div>
+
+                              <input
+                                type="text"
+                                value={donationAddress.bairro}
+                                onChange={(e) => updateDonationAddress('bairro', e.target.value)}
+                                placeholder="Bairro"
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                              />
+
+                              <div className="grid grid-cols-[1fr_80px] gap-2">
+                                <input
+                                  type="text"
+                                  value={donationAddress.cidade}
+                                  onChange={(e) => updateDonationAddress('cidade', e.target.value)}
+                                  placeholder="Cidade"
+                                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                                />
+                                <input
+                                  type="text"
+                                  value={donationAddress.estado}
+                                  onChange={(e) => updateDonationAddress('estado', e.target.value.toUpperCase())}
+                                  placeholder="UF"
+                                  maxLength={2}
+                                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium uppercase focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                                />
+                              </div>
+                            </div>
+                          )}
+
                           {donationErrors.location && (
-                            <p className="mt-1 text-[10px] font-semibold text-red-600">A localização do item é obrigatória</p>
+                            <p className="text-[10px] font-semibold text-red-600">
+                              Informe o endereço completo de retirada (CEP, rua, número, bairro, cidade e UF)
+                            </p>
                           )}
                         </div>
 
