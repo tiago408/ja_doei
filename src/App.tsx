@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import {
   Heart,
   Search,
@@ -1141,6 +1142,31 @@ export default function App() {
 
   // Trava única do scroll do body: evita que o cleanup de um modal restaure o "hidden" de outro
   const isAnyOverlayOpen = Boolean(selectedItemForDetails || baguncaDonor || isCaixinhaModalOpen || isDodoBoxInfoModalOpen);
+
+  // Drag-to-scroll do carrossel de banners (mouse no desktop; toque usa o scroll nativo)
+  const bannerCarouselRef = useRef<HTMLDivElement>(null);
+  const bannerDragState = useRef({ isDragging: false, startX: 0, startScrollLeft: 0 });
+
+  const handleBannerDragStart = (e: ReactMouseEvent<HTMLDivElement>) => {
+    const carousel = bannerCarouselRef.current;
+    if (!carousel) return;
+    bannerDragState.current = {
+      isDragging: true,
+      startX: e.clientX,
+      startScrollLeft: carousel.scrollLeft
+    };
+  };
+
+  const handleBannerDragMove = (e: ReactMouseEvent<HTMLDivElement>) => {
+    const carousel = bannerCarouselRef.current;
+    if (!carousel || !bannerDragState.current.isDragging) return;
+    e.preventDefault();
+    carousel.scrollLeft = bannerDragState.current.startScrollLeft - (e.clientX - bannerDragState.current.startX);
+  };
+
+  const handleBannerDragEnd = () => {
+    bannerDragState.current.isDragging = false;
+  };
 
   useEffect(() => {
     document.body.style.overflow = isAnyOverlayOpen ? 'hidden' : '';
@@ -2736,7 +2762,14 @@ export default function App() {
 
               {/* PROMOTIONAL BANNERS CAROUSEL */}
               <div className="mt-3.5 px-4">
-                <div className="flex gap-3.5 overflow-x-auto no-scrollbar snap-x snap-mandatory py-1 -mx-4 px-4">
+                <div
+                  ref={bannerCarouselRef}
+                  onMouseDown={handleBannerDragStart}
+                  onMouseMove={handleBannerDragMove}
+                  onMouseUp={handleBannerDragEnd}
+                  onMouseLeave={handleBannerDragEnd}
+                  className="flex gap-3.5 overflow-x-auto no-scrollbar snap-x snap-mandatory py-1 touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing"
+                >
                   {/* Card 1: Caixinha do Dodô 📦 */}
                   <div className="snap-center shrink-0 w-[88%] sm:w-[320px] rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[165px] p-4 group border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50 transition-all active:scale-[0.98]">
                     {/* Illustration */}
@@ -2838,7 +2871,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 -mx-4 px-4">
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 touch-pan-x touch-pan-y">
                   {CATEGORIES.map((category) => {
                     const isSelected = selectedCategory === category;
                     return (
