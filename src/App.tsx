@@ -85,6 +85,7 @@ import {
 } from './constants/donations';
 import { GoogleIcon } from './components/icons/GoogleIcon';
 import { calculateShipping } from './services/melhorEnvio';
+import { DodoBoxInfoModal } from './components/DodoBoxInfoModal';
 
 // Em modo de teste o recebimento pode ser confirmado sem a atualização da transportadora
 const IS_TEST_MODE = true;
@@ -1129,6 +1130,7 @@ export default function App() {
   // Premium & Store (Quartinho da Bagunça) State
   const [isPremium, setIsPremium] = useState<boolean>(false);
   const [isPremiumModalOpen, setIsPremiumModalOpen] = useState<boolean>(false);
+  const [isDodoBoxInfoModalOpen, setIsDodoBoxInfoModalOpen] = useState<boolean>(false);
   const [baguncaDonor, setBaguncaDonor] = useState<{
     userId?: string;
     name: string;
@@ -1138,7 +1140,7 @@ export default function App() {
   } | null>(null);
 
   // Trava única do scroll do body: evita que o cleanup de um modal restaure o "hidden" de outro
-  const isAnyOverlayOpen = Boolean(selectedItemForDetails || baguncaDonor || isCaixinhaModalOpen);
+  const isAnyOverlayOpen = Boolean(selectedItemForDetails || baguncaDonor || isCaixinhaModalOpen || isDodoBoxInfoModalOpen);
 
   useEffect(() => {
     document.body.style.overflow = isAnyOverlayOpen ? 'hidden' : '';
@@ -2735,147 +2737,86 @@ export default function App() {
               {/* PROMOTIONAL BANNERS CAROUSEL */}
               <div className="mt-3.5 px-4">
                 <div className="flex gap-3.5 overflow-x-auto no-scrollbar snap-x snap-mandatory py-1 -mx-4 px-4">
-                  {/* Banner 1: Especial Volta às Aulas 🎒 */}
-                  <div 
-                    onClick={() => {
-                      setSelectedCategory('Livros & Mídia');
-                      setSearchQuery('');
-                    }}
-                    className="snap-center shrink-0 w-[88%] sm:w-[320px] rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[165px] p-4 text-white group cursor-pointer border-0 transition-all active:scale-[0.98]"
-                  >
-                    {/* Background Image */}
-                    <img 
-                      src="https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=800&q=80"
-                      alt="Volta às Aulas"
-                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  {/* Card 1: Caixinha do Dodô 📦 */}
+                  <div className="snap-center shrink-0 w-[88%] sm:w-[320px] rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[165px] p-4 group border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50 transition-all active:scale-[0.98]">
+                    {/* Illustration */}
+                    <img
+                      src="/dodo-box.jpeg"
+                      alt="Dodô segurando uma caixa de papelão"
+                      className="pointer-events-none absolute right-0 top-0 h-full w-[46%] object-cover object-center mix-blend-multiply group-hover:scale-105 transition-transform duration-500"
                     />
-                    {/* Dark Gradient Overlay for perfect text legibility */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent" />
 
-                    {/* Banner Content */}
-                    <div className="relative z-10 space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-black uppercase tracking-wider bg-[#FF8243] text-white px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1">
-                          🎒 Campanha Social
-                        </span>
-                      </div>
-                      <h3 className="text-sm font-extrabold text-white tracking-tight leading-tight drop-shadow-sm pt-0.5">
-                        Volta às Aulas para Todos!
+                    {/* Card Content */}
+                    <div className="relative z-10 space-y-1 w-[57%]">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-[#FF8243] text-white px-2.5 py-0.5 rounded-full shadow-xs">
+                        <Coins className="w-3 h-3" />
+                        Dica de Economia
+                      </span>
+                      <h3 className="text-sm font-extrabold text-slate-800 tracking-tight leading-tight pt-0.5">
+                        Conheça a Caixinha do Dodô!
                       </h3>
-                      <p className="text-[11px] font-medium text-slate-200 leading-snug line-clamp-2 drop-shadow-xs">
-                        Desapegue de mochilas, estojos e livros ou ajude quem precisa.
+                      <p className="text-[11px] font-medium text-slate-600 leading-snug">
+                        Resgate múltiplos itens do mesmo doador e pague um único frete.
                       </p>
                     </div>
 
-                    <div className="relative z-10 mt-2 flex items-center justify-between pt-1 border-t border-white/10">
-                      <span className="text-[10px] font-bold text-orange-200">Doe ou Resgate</span>
+                    <div className="relative z-10 mt-2 pt-1">
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedCategory('Livros & Mídia');
-                          setSearchQuery('');
-                        }}
+                        onClick={() => setIsDodoBoxInfoModalOpen(true)}
                         className="bg-[#14A76C] hover:bg-[#118b5a] active:scale-95 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md transition-all flex items-center gap-1"
                       >
-                        <span>Ver itens escolares</span>
+                        <span>Entender como funciona</span>
                         <ChevronRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
 
-                  {/* Banner 2: Clube Já Doei Premium 💎 */}
-                  <div 
-                    onClick={() => setIsPremiumModalOpen(true)}
-                    className="snap-center shrink-0 w-[88%] sm:w-[320px] rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[165px] p-4 text-white group cursor-pointer border-0 transition-all active:scale-[0.98]"
-                  >
-                    {/* Background Image */}
-                    <img 
-                      src="https://images.unsplash.com/photo-1563013544-824ae1b704d3?auto=format&fit=crop&w=800&q=80"
-                      alt="Clube Já Doei Premium"
-                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  {/* Card 2: Tudo Gratuito 🧡 */}
+                  <div className="snap-center shrink-0 w-[88%] sm:w-[320px] rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-center min-h-[165px] p-4 group border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-amber-50 transition-all active:scale-[0.98]">
+                    {/* Illustration */}
+                    <img
+                      src="/dodo-heart.jpeg"
+                      alt="Dodô abraçando um coração"
+                      className="pointer-events-none absolute right-0 top-0 h-full w-[46%] object-cover object-center mix-blend-multiply group-hover:scale-105 transition-transform duration-500"
                     />
-                    {/* Dark Gradient Overlay for perfect text legibility */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-purple-950/50 to-transparent" />
 
-                    {/* Banner Content */}
-                    <div className="relative z-10 space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-400 via-purple-500 to-indigo-500 text-white px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1">
-                          <Sparkles className="w-3 h-3 text-amber-300 fill-amber-300" />
-                          Clube Premium
-                        </span>
-                      </div>
-                      <h3 className="text-sm font-extrabold text-white tracking-tight leading-tight drop-shadow-sm pt-0.5">
-                        Sua conta rende mais!
+                    {/* Card Content */}
+                    <div className="relative z-10 space-y-1 w-[57%]">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-[#14A76C] text-white px-2.5 py-0.5 rounded-full shadow-xs">
+                        <Gift className="w-3 h-3" />
+                        Tudo Gratuito
+                      </span>
+                      <h3 className="text-sm font-extrabold text-slate-800 tracking-tight leading-tight pt-0.5">
+                        Doar e Resgatar é Simples
                       </h3>
-                      <p className="text-[11px] font-medium text-slate-200 leading-snug line-clamp-2 drop-shadow-xs">
-                        Até 40% de complemento em R$ + Acesso antecipado aos melhores desapegos.
+                      <p className="text-[11px] font-medium text-slate-600 leading-snug">
+                        Os itens são 100% gratuitos. Você só contribui com o custo de envio.
                       </p>
-                    </div>
-
-                    <div className="relative z-10 mt-2 flex items-center justify-between pt-1 border-t border-white/10">
-                      <span className="text-[10px] font-bold text-amber-300">Economia no frete</span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsPremiumModalOpen(true);
-                        }}
-                        className="bg-[#14A76C] hover:bg-[#118b5a] active:scale-95 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md transition-all flex items-center gap-1"
-                      >
-                        <span>Assinar por R$ 19,90</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   </div>
 
-                  {/* Banner 3: Roupas & Moda Consciente 🧥 */}
-                  <div 
-                    onClick={() => {
-                      setSelectedCategory('Vestuário');
-                      setSearchQuery('');
-                    }}
-                    className="snap-center shrink-0 w-[88%] sm:w-[320px] rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[165px] p-4 text-white group cursor-pointer border-0 transition-all active:scale-[0.98]"
-                  >
-                    {/* Background Image */}
-                    <img 
-                      src="https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?auto=format&fit=crop&w=800&q=80"
-                      alt="Roupas & Moda Consciente"
-                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  {/* Card 3: Faça o Bem 📸 */}
+                  <div className="snap-center shrink-0 w-[88%] sm:w-[320px] rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-center min-h-[165px] p-4 group border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-yellow-50 transition-all active:scale-[0.98]">
+                    {/* Illustration */}
+                    <img
+                      src="/dodo-photo.jpeg"
+                      alt="Dodô tirando foto com o celular"
+                      className="pointer-events-none absolute right-0 top-0 h-full w-[46%] object-cover object-center mix-blend-multiply group-hover:scale-105 transition-transform duration-500"
                     />
-                    {/* Dark Gradient Overlay for perfect text legibility */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-emerald-950/45 to-transparent" />
 
-                    {/* Banner Content */}
-                    <div className="relative z-10 space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-600/90 text-white px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1 backdrop-blur-xs">
-                          🌱 Sustentabilidade
-                        </span>
-                      </div>
-                      <h3 className="text-sm font-extrabold text-white tracking-tight leading-tight drop-shadow-sm pt-0.5">
-                        Renove seu Armário
+                    {/* Card Content */}
+                    <div className="relative z-10 space-y-1 w-[57%]">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white px-2.5 py-0.5 rounded-full shadow-xs">
+                        <Camera className="w-3 h-3" />
+                        Faça o Bem
+                      </span>
+                      <h3 className="text-sm font-extrabold text-slate-800 tracking-tight leading-tight pt-0.5">
+                        Tem Algo sem Uso em Casa?
                       </h3>
-                      <p className="text-[11px] font-medium text-slate-200 leading-snug line-clamp-2 drop-shadow-xs">
-                        Milhares de roupas e calçados disponíveis para resgate.
+                      <p className="text-[11px] font-medium text-slate-600 leading-snug">
+                        Tire fotos claras, publique em 1 minuto e ajude alguém.
                       </p>
-                    </div>
-
-                    <div className="relative z-10 mt-2 flex items-center justify-between pt-1 border-t border-white/10">
-                      <span className="text-[10px] font-bold text-emerald-300">Moda Circular</span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedCategory('Vestuário');
-                          setSearchQuery('');
-                        }}
-                        className="bg-white/90 hover:bg-white active:scale-95 text-slate-900 text-xs font-bold px-3 py-1.5 rounded-full shadow-md transition-all flex items-center gap-1"
-                      >
-                        <span>Explorar Moda</span>
-                        <ChevronRight className="w-3.5 h-3.5 text-slate-900" />
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -6395,6 +6336,12 @@ export default function App() {
             </div>
           )}
         </AnimatePresence>
+
+        {/* MODAL: COMO FUNCIONA A CAIXINHA DO DODÔ */}
+        <DodoBoxInfoModal
+          isOpen={isDodoBoxInfoModalOpen}
+          onClose={() => setIsDodoBoxInfoModalOpen(false)}
+        />
 
         {/* MODAL 7: CLUBE JÁ DOEI PREMIUM SUBSCRIPTION */}
         <AnimatePresence>
