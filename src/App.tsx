@@ -2834,7 +2834,7 @@ export default function App() {
                   onMouseMove={handleBannerDragMove}
                   onMouseUp={handleBannerDragEnd}
                   onMouseLeave={handleBannerDragEnd}
-                  className="flex overflow-x-auto snap-x snap-proximity scrollbar-none no-scrollbar gap-4 px-4 cursor-grab active:cursor-grabbing"
+                  className="flex overflow-x-auto snap-x snap-proximity scrollbar-none no-scrollbar gap-4 px-4 py-3 cursor-grab active:cursor-grabbing"
                   style={{
                     WebkitOverflowScrolling: 'touch',
                     touchAction: 'pan-x',
@@ -2842,7 +2842,7 @@ export default function App() {
                   }}
                 >
                   {/* Card 1: Caixinha do Dodô 📦 */}
-                  <div className="w-[85vw] max-w-[320px] sm:w-[360px] sm:max-w-[360px] snap-center shrink-0 select-none rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[165px] p-4 group border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50 transition-all active:scale-[0.98]">
+                  <div className="w-[85vw] max-w-[320px] sm:w-[360px] sm:max-w-[360px] snap-center shrink-0 select-none rounded-3xl overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.06)] relative flex flex-col justify-between min-h-[165px] p-4 group border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50 transition-all active:scale-[0.98]">
                     {/* Illustration */}
                     <img
                       src="/dodo-box.jpeg"
@@ -2877,7 +2877,7 @@ export default function App() {
                   </div>
 
                   {/* Card 2: Tudo Gratuito 🧡 */}
-                  <div className="w-[85vw] max-w-[320px] sm:w-[360px] sm:max-w-[360px] snap-center shrink-0 select-none rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-center min-h-[165px] p-4 group border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-amber-50 transition-all active:scale-[0.98]">
+                  <div className="w-[85vw] max-w-[320px] sm:w-[360px] sm:max-w-[360px] snap-center shrink-0 select-none rounded-3xl overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.06)] relative flex flex-col justify-center min-h-[165px] p-4 group border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-amber-50 transition-all active:scale-[0.98]">
                     {/* Illustration */}
                     <img
                       src="/dodo-heart.jpeg"
@@ -2901,7 +2901,7 @@ export default function App() {
                   </div>
 
                   {/* Card 3: Faça o Bem 📸 */}
-                  <div className="w-[85vw] max-w-[320px] sm:w-[360px] sm:max-w-[360px] snap-center shrink-0 select-none rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-center min-h-[165px] p-4 group border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-yellow-50 transition-all active:scale-[0.98]">
+                  <div className="w-[85vw] max-w-[320px] sm:w-[360px] sm:max-w-[360px] snap-center shrink-0 select-none rounded-3xl overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.06)] relative flex flex-col justify-center min-h-[165px] p-4 group border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-yellow-50 transition-all active:scale-[0.98]">
                     {/* Illustration */}
                     <img
                       src="/dodo-photo.jpeg"
