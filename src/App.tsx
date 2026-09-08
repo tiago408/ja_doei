@@ -2834,15 +2834,20 @@ export default function App() {
                   onMouseMove={handleBannerDragMove}
                   onMouseUp={handleBannerDragEnd}
                   onMouseLeave={handleBannerDragEnd}
-                  className="flex overflow-x-auto snap-x snap-mandatory scrollbar-none no-scrollbar gap-4 px-4 touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing"
+                  className="flex overflow-x-auto snap-x snap-proximity scrollbar-none no-scrollbar gap-4 px-4 cursor-grab active:cursor-grabbing"
+                  style={{
+                    WebkitOverflowScrolling: 'touch',
+                    touchAction: 'pan-x',
+                    scrollSnapType: 'x proximity',
+                  }}
                 >
                   {/* Card 1: Caixinha do Dodô 📦 */}
-                  <div className="min-w-[85vw] max-w-[85vw] sm:min-w-[360px] sm:max-w-[360px] snap-center shrink-0 rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[165px] p-4 group border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50 transition-all active:scale-[0.98]">
+                  <div className="w-[85vw] max-w-[320px] sm:w-[360px] sm:max-w-[360px] snap-center shrink-0 select-none rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[165px] p-4 group border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50 transition-all active:scale-[0.98]">
                     {/* Illustration */}
                     <img
                       src="/dodo-box.jpeg"
                       alt="Dodô segurando uma caixa de papelão"
-                      className="pointer-events-none absolute right-0 top-0 h-full w-[46%] object-cover object-center mix-blend-multiply group-hover:scale-105 transition-transform duration-500"
+                      className="pointer-events-none select-none absolute right-0 top-0 h-full w-[46%] object-cover object-center mix-blend-multiply group-hover:scale-105 transition-transform duration-500"
                     />
 
                     {/* Card Content */}
@@ -2872,12 +2877,12 @@ export default function App() {
                   </div>
 
                   {/* Card 2: Tudo Gratuito 🧡 */}
-                  <div className="min-w-[85vw] max-w-[85vw] sm:min-w-[360px] sm:max-w-[360px] snap-center shrink-0 rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-center min-h-[165px] p-4 group border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-amber-50 transition-all active:scale-[0.98]">
+                  <div className="w-[85vw] max-w-[320px] sm:w-[360px] sm:max-w-[360px] snap-center shrink-0 select-none rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-center min-h-[165px] p-4 group border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-amber-50 transition-all active:scale-[0.98]">
                     {/* Illustration */}
                     <img
                       src="/dodo-heart.jpeg"
                       alt="Dodô abraçando um coração"
-                      className="pointer-events-none absolute right-0 top-0 h-full w-[46%] object-cover object-center mix-blend-multiply group-hover:scale-105 transition-transform duration-500"
+                      className="pointer-events-none select-none absolute right-0 top-0 h-full w-[46%] object-cover object-center mix-blend-multiply group-hover:scale-105 transition-transform duration-500"
                     />
 
                     {/* Card Content */}
@@ -2896,12 +2901,12 @@ export default function App() {
                   </div>
 
                   {/* Card 3: Faça o Bem 📸 */}
-                  <div className="min-w-[85vw] max-w-[85vw] sm:min-w-[360px] sm:max-w-[360px] snap-center shrink-0 rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-center min-h-[165px] p-4 group border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-yellow-50 transition-all active:scale-[0.98]">
+                  <div className="w-[85vw] max-w-[320px] sm:w-[360px] sm:max-w-[360px] snap-center shrink-0 select-none rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-center min-h-[165px] p-4 group border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-yellow-50 transition-all active:scale-[0.98]">
                     {/* Illustration */}
                     <img
                       src="/dodo-photo.jpeg"
                       alt="Dodô tirando foto com o celular"
-                      className="pointer-events-none absolute right-0 top-0 h-full w-[46%] object-cover object-center mix-blend-multiply group-hover:scale-105 transition-transform duration-500"
+                      className="pointer-events-none select-none absolute right-0 top-0 h-full w-[46%] object-cover object-center mix-blend-multiply group-hover:scale-105 transition-transform duration-500"
                     />
 
                     {/* Card Content */}
