@@ -40,12 +40,14 @@ import {
   Inbox,
   Pencil,
   Trash2,
-  Flag
+  Flag,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   collection,
   addDoc,
+  getDocs,
   onSnapshot,
   query,
   where,
@@ -1166,6 +1168,49 @@ export default function App() {
 
   const handleBannerDragEnd = () => {
     bannerDragState.current.isDragging = false;
+  };
+
+  // Pull-to-refresh: busca explícita das doações no Firestore (o onSnapshot segue ativo para tempo real)
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [pullDistance, setPullDistance] = useState<number>(0);
+  const pullStartYRef = useRef<number | null>(null);
+  const PULL_REFRESH_THRESHOLD = 80;
+
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await getDocs(collection(db, 'donations'));
+    } catch (error) {
+      console.error('Erro ao atualizar doações no pull-to-refresh:', error);
+    } finally {
+      // Pequeno atraso para o indicador de refresh ser perceptível
+      setTimeout(() => setIsRefreshing(false), 600);
+    }
+  };
+
+  const handlePullStart = (event: React.TouchEvent) => {
+    if (mainScrollRef.current?.scrollTop === 0 && !isRefreshing) {
+      pullStartYRef.current = event.touches[0].clientY;
+    }
+  };
+
+  const handlePullMove = (event: React.TouchEvent) => {
+    if (pullStartYRef.current === null) return;
+    const delta = event.touches[0].clientY - pullStartYRef.current;
+    setPullDistance(Math.max(0, Math.min(delta * 0.5, 110)));
+  };
+
+  const handlePullEnd = (event: React.TouchEvent) => {
+    if (pullStartYRef.current === null) return;
+    // Usa o changedTouches do touchend (mais confiável que o estado pullDistance, que pode estar stale)
+    const endY = event.changedTouches[0]?.clientY ?? pullStartYRef.current;
+    const finalDelta = Math.max(0, (endY - pullStartYRef.current) * 0.5);
+    if (finalDelta >= PULL_REFRESH_THRESHOLD) {
+      handleRefresh();
+    }
+    pullStartYRef.current = null;
+    setPullDistance(0);
   };
 
   useEffect(() => {
@@ -2664,7 +2709,28 @@ export default function App() {
         </AnimatePresence>
 
         {/* Scrollable Main Area */}
-        <main ref={mainScrollRef} className="flex-1 overflow-y-auto no-scrollbar flex flex-col pb-24">
+        <main
+          ref={mainScrollRef}
+          onTouchStart={handlePullStart}
+          onTouchMove={handlePullMove}
+          onTouchEnd={handlePullEnd}
+          className="flex-1 overflow-y-auto no-scrollbar flex flex-col pb-24"
+        >
+          {/* INDICADOR DE PULL-TO-REFRESH */}
+          {(pullDistance > 0 || isRefreshing) && (
+            <div
+              className="flex justify-center items-center overflow-hidden shrink-0 transition-[height] duration-150"
+              style={{ height: isRefreshing ? 44 : pullDistance }}
+            >
+              <RefreshCw
+                className={`w-5 h-5 text-[#14A76C] ${isRefreshing ? 'animate-spin' : ''}`}
+                style={{
+                  transform: isRefreshing ? undefined : `rotate(${pullDistance * 3}deg)`,
+                  opacity: isRefreshing ? 1 : Math.min(pullDistance / PULL_REFRESH_THRESHOLD, 1)
+                }}
+              />
+            </div>
+          )}
           
           {/* HEADER (Fixed Top Design in Forest Green #14A76C) */}
           <header className="bg-[#14A76C] rounded-b-2xl shadow-md p-4 pt-safe text-white shrink-0">
@@ -2768,10 +2834,10 @@ export default function App() {
                   onMouseMove={handleBannerDragMove}
                   onMouseUp={handleBannerDragEnd}
                   onMouseLeave={handleBannerDragEnd}
-                  className="flex gap-3.5 overflow-x-auto no-scrollbar snap-x snap-mandatory py-1 touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing"
+                  className="flex overflow-x-auto snap-x snap-mandatory scrollbar-none no-scrollbar gap-4 px-4 touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing"
                 >
                   {/* Card 1: Caixinha do Dodô 📦 */}
-                  <div className="snap-center shrink-0 w-[88%] sm:w-[320px] rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[165px] p-4 group border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50 transition-all active:scale-[0.98]">
+                  <div className="min-w-[85vw] max-w-[85vw] sm:min-w-[360px] sm:max-w-[360px] snap-center shrink-0 rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[165px] p-4 group border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50 transition-all active:scale-[0.98]">
                     {/* Illustration */}
                     <img
                       src="/dodo-box.jpeg"
@@ -2806,7 +2872,7 @@ export default function App() {
                   </div>
 
                   {/* Card 2: Tudo Gratuito 🧡 */}
-                  <div className="snap-center shrink-0 w-[88%] sm:w-[320px] rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-center min-h-[165px] p-4 group border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-amber-50 transition-all active:scale-[0.98]">
+                  <div className="min-w-[85vw] max-w-[85vw] sm:min-w-[360px] sm:max-w-[360px] snap-center shrink-0 rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-center min-h-[165px] p-4 group border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-amber-50 transition-all active:scale-[0.98]">
                     {/* Illustration */}
                     <img
                       src="/dodo-heart.jpeg"
@@ -2830,7 +2896,7 @@ export default function App() {
                   </div>
 
                   {/* Card 3: Faça o Bem 📸 */}
-                  <div className="snap-center shrink-0 w-[88%] sm:w-[320px] rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-center min-h-[165px] p-4 group border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-yellow-50 transition-all active:scale-[0.98]">
+                  <div className="min-w-[85vw] max-w-[85vw] sm:min-w-[360px] sm:max-w-[360px] snap-center shrink-0 rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-center min-h-[165px] p-4 group border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-yellow-50 transition-all active:scale-[0.98]">
                     {/* Illustration */}
                     <img
                       src="/dodo-photo.jpeg"
@@ -3707,7 +3773,7 @@ export default function App() {
 
         {/* BOTTOM NAVIGATION BAR */}
         {!showSplash && (
-        <nav className="fixed bottom-0 left-0 right-0 z-50 w-full bg-white border-t border-slate-100 px-3 py-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
+        <nav className="fixed bottom-0 left-0 right-0 z-50 w-full bg-white/95 backdrop-blur-md border-t border-slate-100 px-3 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
           <div className="mx-auto flex max-w-md items-center justify-around">
             {/* Home */}
             <button
