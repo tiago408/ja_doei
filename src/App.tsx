@@ -64,7 +64,6 @@ import { ref, uploadBytes, uploadString, getDownloadURL } from 'firebase/storage
 import {
   signInWithPopup,
   GoogleAuthProvider,
-  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
@@ -89,6 +88,8 @@ import {
 import { GoogleIcon } from './components/icons/GoogleIcon';
 import { calculateShipping } from './services/melhorEnvio';
 import { DodoBoxInfoModal } from './components/DodoBoxInfoModal';
+import { SignUpModal } from './components/SignUpModal';
+import { EmailVerificationModal } from './components/EmailVerificationModal';
 
 // Em modo de teste o recebimento pode ser confirmado sem a atualização da transportadora
 const IS_TEST_MODE = true;
@@ -397,11 +398,10 @@ export default function App() {
     createdAt?: Date | null;
     address?: UserAddress;
   } | null>(null);
-  const [authName, setAuthName] = useState<string>('');
   const [authEmail, setAuthEmail] = useState<string>('');
-  const [authWhatsapp, setAuthWhatsapp] = useState<string>('');
   const [authPassword, setAuthPassword] = useState<string>('');
   const [isAuthSubmitting, setIsAuthSubmitting] = useState<boolean>(false);
+  const [isEmailVerificationModalOpen, setIsEmailVerificationModalOpen] = useState<boolean>(false);
   const isAdmin = Boolean(
     user?.email &&
     adminEmail &&
@@ -535,6 +535,8 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        // Garante que emailVerified reflita a confirmação feita em outra aba
+        await firebaseUser.reload().catch(() => undefined);
         const profileSnapshot = await getDoc(doc(db, 'users', firebaseUser.uid));
         const profile = profileSnapshot.exists() ? profileSnapshot.data() : {};
         const nextUser = {
@@ -625,6 +627,16 @@ export default function App() {
     return true;
   };
 
+  // Bloqueia resgates e doações enquanto o e-mail não for confirmado no Firebase Auth
+  const requireVerifiedEmail = () => {
+    if (!requireAuth()) return false;
+    if (auth.currentUser && !auth.currentUser.emailVerified) {
+      setIsEmailVerificationModalOpen(true);
+      return false;
+    }
+    return true;
+  };
+
   // Creates the users/{uid} Firestore document with the 150-credit test balance on first signup only
   const ensureUserDocument = async (uid: string, name: string, email: string, photoURL?: string | null) => {
     const userRef = doc(db, 'users', uid);
@@ -676,40 +688,6 @@ export default function App() {
     } catch (error) {
       console.error('Erro ao entrar:', error);
       showToast('E-mail ou senha inválidos.', 'error');
-    } finally {
-      setIsAuthSubmitting(false);
-    }
-  };
-
-  const handleEmailSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      setIsAuthSubmitting(true);
-      const credential = await createUserWithEmailAndPassword(auth, authEmail, authPassword);
-      const displayName = authName.trim();
-      if (displayName) {
-        await updateProfile(credential.user, { displayName });
-        setUser({
-          uid: credential.user.uid,
-          name: displayName,
-          email: credential.user.email || '',
-          photoURL: credential.user.photoURL
-        });
-      }
-      await ensureUserDocument(
-        credential.user.uid,
-        displayName || 'Usuário Já Doei',
-        credential.user.email || '',
-        credential.user.photoURL
-      );
-      setIsAuthOpen(false);
-      setAuthName('');
-      setAuthEmail('');
-      setAuthWhatsapp('');
-      setAuthPassword('');
-    } catch (error) {
-      console.error('Erro ao criar conta:', error);
-      showToast('Não foi possível criar sua conta. Verifique os dados e tente novamente.', 'error');
     } finally {
       setIsAuthSubmitting(false);
     }
@@ -2240,7 +2218,7 @@ export default function App() {
   const handleCreateDonation = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!requireAuth()) return;
+    if (!requireVerifiedEmail()) return;
 
     if (donateStep === 1) {
       const errors = validateDonateStep(1);
@@ -3809,7 +3787,7 @@ export default function App() {
             {/* CENTRAL FLOATING BUTTON: "+ Doar" */}
             <div className="relative -top-5 flex flex-col items-center">
               <button
-                onClick={() => { if (requireAuth()) { resetForm(); setIsDonateModalOpen(true); } }}
+                onClick={() => { if (requireVerifiedEmail()) { resetForm(); setIsDonateModalOpen(true); } }}
                 className="w-12 h-12 rounded-full bg-[#14A76C] hover:bg-[#108958] active:scale-95 text-white shadow-md flex items-center justify-center border-4 border-[#F5F0E1] transition-all group"
                 title="Doar um item"
               >
@@ -4249,7 +4227,7 @@ export default function App() {
                   })()}
                   <button
                     onClick={() => {
-                      if (!requireAuth()) return;
+                      if (!requireVerifiedEmail()) return;
                       const itemToRedeem = selectedItemForDetails;
                       setSelectedItemForDetails(null);
                       setSelectedItemForRedeem(itemToRedeem);
@@ -6156,7 +6134,7 @@ export default function App() {
                   <div
                     onClick={() => {
                       setIsEarnModalOpen(false);
-                      if (requireAuth()) { resetForm(); setIsDonateModalOpen(true); }
+                      if (requireVerifiedEmail()) { resetForm(); setIsDonateModalOpen(true); }
                     }}
                     className="p-3 rounded-xl border border-slate-200 hover:border-[#14A76C] bg-slate-50 hover:bg-emerald-50/50 cursor-pointer transition-all group"
                   >
@@ -7322,7 +7300,18 @@ export default function App() {
 
         {/* MODAL: LOGIN E CADASTRO */}
         <AnimatePresence>
-          {isAuthOpen && (
+          {isAuthOpen && authTab === 'signup' && (
+            <SignUpModal
+              logoSrc={simboloImg}
+              isBusy={isAuthSubmitting}
+              onClose={() => setIsAuthOpen(false)}
+              onSwitchToLogin={() => setAuthTab('login')}
+              onGoogleSignUp={handleGoogleLogin}
+              onSuccess={(message) => showToast(message, 'success')}
+              onError={(message) => showToast(message, 'error')}
+            />
+          )}
+          {isAuthOpen && authTab === 'login' && (
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
               <motion.div
                 initial={{ opacity: 0, y: 120 }}
@@ -7352,28 +7341,23 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setAuthTab('login')}
-                    className={`flex-1 py-2 rounded-full text-xs font-bold transition-all ${
-                      authTab === 'login' ? 'bg-[#14A76C] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                    }`}
+                    className="flex-1 py-2 rounded-full text-xs font-bold transition-all bg-[#14A76C] text-white shadow-sm"
                   >
                     Entrar
                   </button>
                   <button
                     type="button"
                     onClick={() => setAuthTab('signup')}
-                    className={`flex-1 py-2 rounded-full text-xs font-bold transition-all ${
-                      authTab === 'signup' ? 'bg-[#14A76C] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                    }`}
+                    className="flex-1 py-2 rounded-full text-xs font-bold transition-all text-slate-500 hover:text-slate-700"
                   >
                     Criar Conta
                   </button>
                 </div>
 
-                {authTab === 'login' ? (
-                  <form
-                    onSubmit={handleEmailLogin}
-                    className="space-y-3"
-                  >
+                <form
+                  onSubmit={handleEmailLogin}
+                  className="space-y-3"
+                >
                     <div>
                       <label className="text-[11px] font-semibold text-slate-600 block mb-1">Email</label>
                       <input
@@ -7420,84 +7404,20 @@ export default function App() {
                       <GoogleIcon className="w-4 h-4" />
                       <span>Continuar com Google</span>
                     </button>
-                  </form>
-                ) : (
-                  <form
-                    onSubmit={handleEmailSignup}
-                    className="space-y-3"
-                  >
-                    <div>
-                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">Nome completo</label>
-                      <input
-                        type="text"
-                        required
-                        value={authName}
-                        onChange={(e) => setAuthName(e.target.value)}
-                        placeholder="Seu nome"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#14A76C]"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">Email</label>
-                      <input
-                        type="email"
-                        required
-                        value={authEmail}
-                        onChange={(e) => setAuthEmail(e.target.value)}
-                        placeholder="seuemail@exemplo.com"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#14A76C]"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">WhatsApp</label>
-                      <input
-                        type="tel"
-                        required
-                        value={authWhatsapp}
-                        onChange={(e) => setAuthWhatsapp(e.target.value)}
-                        placeholder="(11) 91234-5678"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#14A76C]"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">Senha</label>
-                      <input
-                        type="password"
-                        required
-                        value={authPassword}
-                        onChange={(e) => setAuthPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#14A76C]"
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={isAuthSubmitting}
-                      className="w-full py-3 rounded-xl bg-[#14A76C] hover:bg-[#108958] active:scale-98 text-white text-xs font-bold shadow-md transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {isAuthSubmitting ? 'Criando conta...' : 'Cadastrar e Começar'}
-                    </button>
-
-                    <div className="flex items-center gap-3 py-1">
-                      <div className="flex-1 h-px bg-slate-200" />
-                      <span className="text-[10px] font-semibold text-slate-400 uppercase">ou</span>
-                      <div className="flex-1 h-px bg-slate-200" />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleGoogleLogin}
-                      disabled={isAuthSubmitting}
-                      className="w-full py-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-bold shadow-2xs transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      <GoogleIcon className="w-4 h-4" />
-                      <span>Cadastrar com Google</span>
-                    </button>
-                  </form>
-                )}
+                </form>
               </motion.div>
             </div>
+          )}
+        </AnimatePresence>
+
+        {/* MODAL: CONFIRMAÇÃO DE E-MAIL */}
+        <AnimatePresence>
+          {isEmailVerificationModalOpen && (
+            <EmailVerificationModal
+              email={user?.email}
+              onClose={() => setIsEmailVerificationModalOpen(false)}
+              onFeedback={(message, type) => showToast(message, type)}
+            />
           )}
         </AnimatePresence>
 
