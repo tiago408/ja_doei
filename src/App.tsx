@@ -4282,7 +4282,7 @@ export default function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.96 }}
                 onSubmit={handleSaveDonationEdit}
-                className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl"
+                className="w-[92vw] max-w-md max-h-[85vh] overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl"
               >
                 <div className="mb-4 flex items-center justify-between">
                   <div>
@@ -4455,7 +4455,7 @@ export default function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.96 }}
                 onSubmit={handleSendReport}
-                className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl"
+                className="w-[92vw] max-w-md max-h-[85vh] overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl"
               >
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <div>
@@ -5883,7 +5883,7 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.94, y: 16 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.94, y: 16 }}
-                className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+                className="w-[92vw] max-w-md max-h-[85vh] overflow-y-auto rounded-3xl bg-white shadow-2xl"
               >
                 <div className="bg-[#14A76C] px-5 pb-4 pt-5 text-center">
                   <img src={dodoMascoteImg} alt="Dodo Mascote" className="h-24 w-auto object-contain mx-auto mb-2" />
@@ -6002,7 +6002,7 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className="w-full sm:max-w-md max-h-[80vh] bg-white rounded-2xl p-5 shadow-2xl flex flex-col gap-3 border border-slate-200 overflow-hidden"
+                className="w-[92vw] max-w-md max-h-[85vh] bg-white rounded-2xl p-5 shadow-2xl flex flex-col gap-3 border border-slate-200 overflow-hidden"
               >
                 <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 shrink-0">
                   <div className="flex items-center gap-2">
@@ -6123,7 +6123,7 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className="w-full sm:max-w-md bg-white rounded-2xl p-5 shadow-2xl flex flex-col gap-4 border border-slate-200"
+                className="w-[92vw] max-w-md max-h-[85vh] overflow-y-auto bg-white rounded-2xl p-5 shadow-2xl flex flex-col gap-4 border border-slate-200"
               >
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                   <div className="flex items-center gap-2">
@@ -6455,7 +6455,7 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="w-full sm:max-w-md bg-white rounded-2xl shadow-2xl max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden"
+                className="w-[92vw] max-w-md bg-white rounded-2xl shadow-2xl max-h-[85vh] flex flex-col border border-slate-200 overflow-hidden"
               >
                 {/* Header */}
                 <div className="p-4 border-b border-slate-100 shrink-0 bg-white z-10 flex items-center justify-between">
@@ -7152,7 +7152,7 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-2xl p-5 shadow-2xl flex flex-col gap-4 border border-slate-200"
+                className="w-[92vw] max-w-md max-h-[85vh] overflow-y-auto bg-white rounded-2xl p-5 shadow-2xl flex flex-col gap-4 border border-slate-200"
               >
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                   <h3 className="text-sm font-bold text-slate-800">Editar Perfil</h3>
@@ -7509,7 +7509,7 @@ export default function App() {
                 initial={{ opacity: 0, y: 100, scale: 0.96 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 100, scale: 0.96 }}
-                className="relative w-full sm:max-w-md bg-[#F5F0E1] rounded-3xl shadow-2xl border border-slate-200/80 overflow-hidden"
+                className="relative w-[92vw] max-w-md max-h-[85vh] overflow-y-auto bg-[#F5F0E1] rounded-3xl shadow-2xl border border-slate-200/80"
               >
                 <button
                   type="button"

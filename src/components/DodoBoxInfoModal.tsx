@@ -51,26 +51,26 @@ export function DodoBoxInfoModal({ isOpen, onClose }: DodoBoxInfoModalProps) {
             exit={{ opacity: 0, scale: 0.95, y: 16 }}
             transition={{ type: 'spring', stiffness: 320, damping: 28 }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full sm:max-w-md bg-white rounded-3xl shadow-2xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200"
+            className="w-[92vw] max-w-md max-h-[85vh] overflow-y-auto rounded-3xl bg-white shadow-2xl flex flex-col border border-slate-200"
             role="dialog"
             aria-modal="true"
             aria-label="Como funciona a Caixinha do Dodô?"
           >
             {/* Hero Image */}
-            <div className="relative shrink-0 h-44 bg-gradient-to-br from-emerald-50 via-white to-orange-50 border-b border-emerald-100/60">
+            <div className="relative pt-12 pb-4 px-4 flex justify-center items-center bg-amber-50/50 rounded-t-3xl border-b border-emerald-100/60">
               <img
                 src="/dodo-box.jpeg"
                 alt="Dodô segurando uma caixa de papelão"
-                className="h-full w-full object-contain mix-blend-multiply"
+                className="max-h-44 w-auto object-contain shrink-0 mix-blend-multiply"
               />
-              <span className="absolute top-3 left-3 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-[#FF8243] text-white px-2.5 py-1 rounded-full shadow-xs">
+              <span className="absolute top-4 left-4 z-10 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-[#FF8243] text-white px-2.5 py-1 rounded-full shadow-xs">
                 <Box className="w-3 h-3" />
                 Dica de Economia
               </span>
               <button
                 type="button"
                 onClick={onClose}
-                className="absolute top-3 right-3 p-1.5 rounded-full bg-white/90 hover:bg-white text-slate-500 hover:text-slate-700 shadow-sm transition-all"
+                className="absolute top-4 right-4 z-10 bg-white/80 backdrop-blur-sm p-2 rounded-full shadow-sm text-slate-500 hover:text-slate-700 transition-all"
                 title="Fechar"
               >
                 <X className="w-4 h-4" />
