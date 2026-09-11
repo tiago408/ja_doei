@@ -397,6 +397,7 @@ export default function App() {
     location?: string;
     createdAt?: Date | null;
     address?: UserAddress;
+    memberLevel?: string;
   } | null>(null);
   const [authEmail, setAuthEmail] = useState<string>('');
   const [authPassword, setAuthPassword] = useState<string>('');
@@ -547,6 +548,7 @@ export default function App() {
           city: profile.city,
           location: profile.location,
           address: readUserAddress(profile),
+          memberLevel: typeof profile.memberLevel === 'string' ? profile.memberLevel : 'Membro Pioneiro',
           createdAt: profile.createdAt?.toDate?.() ?? (firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime) : null)
         };
         setUser(nextUser);
@@ -646,6 +648,7 @@ export default function App() {
         name,
         email,
         photoURL: photoURL || null,
+        memberLevel: 'Membro Pioneiro',
         credits: 150,
         createdAt: serverTimestamp()
       });
@@ -3190,7 +3193,7 @@ export default function App() {
                           ? 'bg-amber-100 text-amber-900 border-amber-300' 
                           : 'bg-emerald-100 text-emerald-800 border-emerald-200'
                       }`}>
-                        {isPremium ? '👑 Assinante Premium' : 'Membro Ouro 🌟'}
+                        {isPremium ? '👑 Assinante Premium' : user?.memberLevel || 'Membro Pioneiro'}
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 font-medium">

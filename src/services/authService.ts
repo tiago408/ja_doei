@@ -46,6 +46,7 @@ export const signUpWithEmail = async ({ name, email, password, whatsapp, address
       email: credential.user.email || email.trim(),
       photoURL: credential.user.photoURL || null,
       whatsapp: whatsapp.trim(),
+      memberLevel: 'Membro Pioneiro',
       ...normalizedAddress,
       // Campos legados usados pelo feed e pelo cálculo de frete
       city: normalizedAddress.cidade,

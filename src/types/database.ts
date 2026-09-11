@@ -19,6 +19,7 @@ export interface UserDocument {
   address?: string;
   city?: string;
   state?: string;
+  memberLevel?: string;
   zipCode?: string;
   cep?: string;
   logradouro?: string;
