@@ -1,30 +1,21 @@
 {
-  "name": "ja-doei",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "name": "functions",
+  "description": "Cloud Functions for Firebase",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "oxlint",
-    "preview": "vite preview"
+    "lint": "eslint .",
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
-    "firebase": "^12.17.1",
-    "lucide-react": "^1.31.0",
-    "motion": "^13.1.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "firebase-admin": "^14.3.0",
+    "firebase-functions": "^7.3.2"
   },
-  "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
-    "@types/node": "^24.13.3",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.4",
-    "oxlint": "^1.75.0",
-    "typescript": "~6.0.2",
-    "vite": "^8.2.0"
-  }
+  "private": true
 }
