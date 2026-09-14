@@ -947,6 +947,8 @@ export default function App() {
   const [cepInput, setCepInput] = useState<string>('');
   const [isCepCalculated, setIsCepCalculated] = useState<boolean>(false);
   const [isCalculatingCep, setIsCalculatingCep] = useState<boolean>(false);
+  // Controla se o campo de CEP editável está aberto (fechado quando o CEP do perfil já foi aplicado)
+  const [isChangingCep, setIsChangingCep] = useState<boolean>(false);
   const [selectedFreightId, setSelectedFreightId] = useState<string>('ja_doei_express');
   const [meShippingOptions, setMeShippingOptions] = useState<FreightOption[]>([]);
 
@@ -1772,8 +1774,20 @@ export default function App() {
     setDetailsPhotoIndex(0);
     setSelectedItemForDetails(item);
     setSelectedFreightId(item.isLargeItem ? 'lalamove_partner' : 'ja_doei_express');
-    setIsCepCalculated(true);
     setMeShippingOptions([]);
+
+    // Usa o CEP já cadastrado no perfil como endereço padrão de entrega e cota o frete automaticamente
+    const profileCepDigits = (user?.address?.cep || '').replace(/\D/g, '');
+    if (profileCepDigits.length === 8) {
+      setCepInput(formatCep(profileCepDigits));
+      setIsChangingCep(false);
+      setIsCepCalculated(true);
+      void quoteFreightForItems([item], profileCepDigits);
+    } else {
+      setCepInput('');
+      setIsChangingCep(true);
+      setIsCepCalculated(false);
+    }
   };
 
   const handleSendReport = async (event: React.FormEvent) => {
@@ -1960,6 +1974,7 @@ export default function App() {
 
     const succeeded = await quoteFreightForItems(itemsToQuote, cepDigits);
     if (succeeded) {
+      setIsChangingCep(false);
       showToast(`🚚 Frete calculado com sucesso para o CEP ${cepInput}!`, 'success');
     } else {
       showToast('Não foi possível calcular o frete agora. Tente novamente.', 'error');
@@ -4072,31 +4087,49 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* CEP Input Row */}
-                    <form onSubmit={handleCalculateFreight} className="mb-3 flex items-center gap-2">
-                      <div className="relative flex-1">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                        <input
-                          type="text"
-                          value={cepInput}
-                          onChange={(e) => setCepInput(e.target.value)}
-                          placeholder="CEP (Ex: 01310-100)"
-                          className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
-                        />
+                    {/* CEP Row: resumo com o CEP do perfil já aplicado, ou formulário editável */}
+                    {!isChangingCep && cepInput.replace(/\D/g, '').length === 8 ? (
+                      <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <MapPin className="w-3.5 h-3.5 text-[#14A76C] shrink-0" />
+                          <span className="truncate text-xs font-semibold text-slate-700">
+                            Entregar no CEP {cepInput}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsChangingCep(true)}
+                          className="text-[10px] font-bold text-[#14A76C] hover:underline shrink-0"
+                        >
+                          Entregar em outro endereço
+                        </button>
                       </div>
-                      <button
-                        type="submit"
-                        disabled={isCalculatingCep}
-                        className="px-3.5 py-1.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-xs active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
-                      >
-                        {isCalculatingCep ? (
-                          <span className="animate-spin text-xs">🌀</span>
-                        ) : (
-                          <Calculator className="w-3.5 h-3.5" />
-                        )}
-                        <span>{isCalculatingCep ? 'Calculando...' : 'Calcular Frete'}</span>
-                      </button>
-                    </form>
+                    ) : (
+                      <form onSubmit={handleCalculateFreight} className="mb-3 flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                          <input
+                            type="text"
+                            value={cepInput}
+                            onChange={(e) => setCepInput(formatCep(e.target.value))}
+                            placeholder="CEP (Ex: 01310-100)"
+                            className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={isCalculatingCep}
+                          className="px-3.5 py-1.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-xs active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
+                        >
+                          {isCalculatingCep ? (
+                            <span className="animate-spin text-xs">🌀</span>
+                          ) : (
+                            <Calculator className="w-3.5 h-3.5" />
+                          )}
+                          <span>{isCalculatingCep ? 'Calculando...' : 'Calcular Frete'}</span>
+                        </button>
+                      </form>
+                    )}
 
                     {isCalculatingCep && (
                       <p className="mb-3 -mt-2 text-[10px] font-semibold text-[#14A76C] flex items-center gap-1.5">
@@ -4235,7 +4268,8 @@ export default function App() {
                       setSelectedItemForDetails(null);
                       setSelectedItemForRedeem(itemToRedeem);
                     }}
-                    className="w-full py-3 rounded-2xl bg-[#14A76C] hover:bg-[#108958] active:scale-98 text-white text-xs font-bold shadow-md flex items-center justify-center gap-2 transition-all"
+                    disabled={cepInput.replace(/\D/g, '').length !== 8}
+                    className="w-full py-3 rounded-2xl bg-[#14A76C] hover:bg-[#108958] active:scale-98 text-white text-xs font-bold shadow-md flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
                   >
                     <span>Avançar para Pagamento</span>
                     <Coins className="w-4 h-4 text-emerald-200" />
