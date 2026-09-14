@@ -87,6 +87,7 @@ import {
 } from './constants/donations';
 import { GoogleIcon } from './components/icons/GoogleIcon';
 import { calculateShipping } from './services/melhorEnvio';
+import { registerPushNotifications, listenForForegroundMessages } from './services/pushNotificationService';
 import { DodoBoxInfoModal } from './components/DodoBoxInfoModal';
 import { SignUpModal } from './components/SignUpModal';
 import { EmailVerificationModal } from './components/EmailVerificationModal';
@@ -552,6 +553,10 @@ export default function App() {
           createdAt: profile.createdAt?.toDate?.() ?? (firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime) : null)
         };
         setUser(nextUser);
+        // Solicita permissão de notificação e salva o FCM token no perfil logo após o login
+        registerPushNotifications(firebaseUser.uid).catch((error) => {
+          console.error('Erro ao configurar notificações push:', error);
+        });
       } else {
         setUser(null);
       }
@@ -719,11 +724,28 @@ export default function App() {
     }
 
     setIsNotificationsModalOpen(false);
+    navigateToNotificationTarget({
+      type: notification.type,
+      chatId: notification.chatId,
+      senderId: notification.senderId,
+      senderName: notification.senderName,
+      senderAvatar: notification.senderAvatar,
+      donationId: notification.donationId || notification.itemId
+    });
+  };
 
-    if ((notification.type === 'chat' || notification.type === 'chat_message') && notification.chatId && notification.senderId) {
-      const donationId = notification.donationId || notification.itemId;
-      const relatedItem = items.find((item) => item.id === donationId) || {
-        id: donationId || notification.chatId,
+  // Direciona o usuário para o chat (push/notificação em background) ou para o perfil (padrão)
+  const navigateToNotificationTarget = (data: {
+    type?: string;
+    chatId?: string;
+    senderId?: string;
+    senderName?: string;
+    senderAvatar?: string;
+    donationId?: string;
+  }) => {
+    if ((data.type === 'chat' || data.type === 'chat_message') && data.chatId && data.senderId) {
+      const relatedItem = items.find((item) => item.id === data.donationId) || {
+        id: data.donationId || data.chatId,
         title: 'Doação',
         category: '',
         credits: 0,
@@ -732,16 +754,74 @@ export default function App() {
         createdAt: ''
       };
       handleStartChat(relatedItem, {
-        partnerId: notification.senderId,
-        partnerName: notification.senderName || 'Usuário',
-        partnerAvatar: notification.senderAvatar,
-        chatId: notification.chatId
+        partnerId: data.senderId,
+        partnerName: data.senderName || 'Usuário',
+        partnerAvatar: data.senderAvatar,
+        chatId: data.chatId
       });
       return;
     }
 
     setActiveTab('profile');
   };
+
+  // Recebimento em primeiro plano (foreground): exibe um toast e permite navegar ao clicar
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const unsubscribe = listenForForegroundMessages((payload) => {
+      const data = (payload.data || {}) as Record<string, string>;
+      const title = payload.notification?.title || data.title || 'Nova notificação';
+      const body = payload.notification?.body || data.body || '';
+
+      showToast(body ? `${title}: ${body}` : title, 'info');
+
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const systemNotification = new Notification(title, { body, icon: '/favicon.svg' });
+        systemNotification.onclick = () => {
+          window.focus();
+          navigateToNotificationTarget(data);
+          systemNotification.close();
+        };
+      }
+    });
+
+    return unsubscribe;
+  }, [user, items]);
+
+  // Recebimento em background/quit state: o Service Worker envia os dados ao focar uma aba já aberta
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return undefined;
+
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'NOTIFICATION_CLICK') {
+        navigateToNotificationTarget(event.data.data || {});
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+  }, [items]);
+
+  // App aberto a partir de uma notificação (SW abriu uma nova janela com os dados na URL)
+  useEffect(() => {
+    if (!user) return;
+
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('type') && !params.has('chatId')) return;
+
+    navigateToNotificationTarget({
+      type: params.get('type') || undefined,
+      chatId: params.get('chatId') || undefined,
+      senderId: params.get('senderId') || undefined,
+      senderName: params.get('senderName') || undefined,
+      senderAvatar: params.get('senderAvatar') || undefined,
+      donationId: params.get('donationId') || undefined
+    });
+
+    window.history.replaceState(null, '', window.location.pathname);
+  }, [user]);
+
 
   const handleMarkAllNotificationsRead = async () => {
     const unreadNotifications = notifications.filter((notification) => !notification.read);
