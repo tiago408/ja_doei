@@ -554,9 +554,16 @@ export default function App() {
         };
         setUser(nextUser);
         // iOS/Safari só permite pedir permissão a partir de um gesto do usuário (ex.: um clique),
-        // por isso aqui apenas verificamos se devemos exibir o banner "Ativar notificações"
-        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-          setShowPushPrompt(true);
+        // então só mostramos o banner quando ainda não há uma decisão. Se já foi concedida antes,
+        // não há prompt a exibir: só precisamos (re)gravar o token, já que ele pode ter mudado.
+        if (typeof Notification !== 'undefined') {
+          if (Notification.permission === 'default') {
+            setShowPushPrompt(true);
+          } else if (Notification.permission === 'granted') {
+            registerPushNotifications(firebaseUser.uid).catch((error) => {
+              console.error('Erro ao renovar o token de notificações push:', error);
+            });
+          }
         }
       } else {
         setUser(null);
@@ -1585,11 +1592,19 @@ export default function App() {
   const handleEnablePushNotifications = async () => {
     setShowPushPrompt(false);
     if (!user?.uid) return;
-    const token = await registerPushNotifications(user.uid);
-    if (token) {
-      showToast('Notificações ativadas com sucesso!', 'success');
-    } else if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
-      showToast('Notificações bloqueadas. Ative nas configurações do navegador.', 'error');
+    try {
+      const token = await registerPushNotifications(user.uid);
+      if (token) {
+        showToast('Notificações ativadas com sucesso!', 'success');
+      } else if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+        showToast('Notificações bloqueadas. Ative nas configurações do navegador.', 'error');
+      } else {
+        showToast('Não foi possível ativar as notificações neste navegador.', 'error');
+      }
+    } catch (error) {
+      console.error('Erro ao ativar notificações push:', error);
+      const message = error instanceof Error ? error.message : 'Erro desconhecido';
+      showToast(`Falha ao ativar notificações: ${message}`, 'error');
     }
   };
 

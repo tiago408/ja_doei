@@ -38,7 +38,7 @@ export const registerPushNotifications = async (userId: string): Promise<string 
     return token || null;
   } catch (error) {
     console.error('Erro ao registrar notificações push:', error);
-    return null;
+    throw error;
   }
 };
 
