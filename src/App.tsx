@@ -553,10 +553,11 @@ export default function App() {
           createdAt: profile.createdAt?.toDate?.() ?? (firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime) : null)
         };
         setUser(nextUser);
-        // Solicita permissão de notificação e salva o FCM token no perfil logo após o login
-        registerPushNotifications(firebaseUser.uid).catch((error) => {
-          console.error('Erro ao configurar notificações push:', error);
-        });
+        // iOS/Safari só permite pedir permissão a partir de um gesto do usuário (ex.: um clique),
+        // por isso aqui apenas verificamos se devemos exibir o banner "Ativar notificações"
+        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+          setShowPushPrompt(true);
+        }
       } else {
         setUser(null);
       }
@@ -1576,6 +1577,20 @@ export default function App() {
     setTimeout(() => {
       setToastMessage(null);
     }, 3800);
+  };
+
+  // Banner "Ativar notificações": Safari/iOS só aceita requestPermission() a partir de um toque real
+  const [showPushPrompt, setShowPushPrompt] = useState<boolean>(false);
+
+  const handleEnablePushNotifications = async () => {
+    setShowPushPrompt(false);
+    if (!user?.uid) return;
+    const token = await registerPushNotifications(user.uid);
+    if (token) {
+      showToast('Notificações ativadas com sucesso!', 'success');
+    } else if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+      showToast('Notificações bloqueadas. Ative nas configurações do navegador.', 'error');
+    }
   };
 
   const getProfileLocation = () => user?.city?.trim() || user?.location?.trim() || 'Cotia, SP';
@@ -2776,6 +2791,35 @@ export default function App() {
               <span className="flex-1 leading-relaxed">{toastMessage.text}</span>
               <button
                 onClick={() => setToastMessage(null)}
+                className="text-white/60 hover:text-white p-0.5"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Banner para ativar notificações push (requer toque do usuário no iOS/Safari) */}
+        <AnimatePresence>
+          {showPushPrompt && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.9 }}
+              className="absolute top-16 left-4 right-4 z-50 p-3.5 rounded-2xl shadow-xl flex items-start gap-3 border text-xs font-medium backdrop-blur-md bg-slate-900/90 border-slate-700 text-white"
+            >
+              <Bell className="w-4 h-4 text-[#14A76C] shrink-0 mt-0.5" />
+              <span className="flex-1 leading-relaxed">
+                Ative as notificações para saber na hora sobre mensagens e novidades dos seus desapegos.
+              </span>
+              <button
+                onClick={() => void handleEnablePushNotifications()}
+                className="shrink-0 rounded-full bg-[#14A76C] px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white"
+              >
+                Ativar
+              </button>
+              <button
+                onClick={() => setShowPushPrompt(false)}
                 className="text-white/60 hover:text-white p-0.5"
               >
                 <X className="w-3.5 h-3.5" />
