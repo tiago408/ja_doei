@@ -15,14 +15,14 @@ export const registerPushNotifications = async (userId: string): Promise<string 
   const supported = await isSupported().catch(() => false);
   if (!supported) return null;
 
-  if (!VAPID_KEY) {
-    console.warn('VITE_FIREBASE_VAPID_KEY não configurada. Push notifications desativadas.');
-    return null;
-  }
-
   try {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return null;
+
+    if (!VAPID_KEY) {
+      console.warn('VITE_FIREBASE_VAPID_KEY não configurada. Push notifications desativadas.');
+      return null;
+    }
 
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     const messaging = getMessaging(getApp());
