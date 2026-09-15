@@ -22,7 +22,8 @@ messaging.onBackgroundMessage((payload) => {
 
   self.registration.showNotification(title || 'Já Doei', {
     body: body || '',
-    icon: '/favicon.svg',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
     data
   });
 });
