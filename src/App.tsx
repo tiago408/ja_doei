@@ -91,6 +91,8 @@ import { registerPushNotifications, listenForForegroundMessages } from './servic
 import { DodoBoxInfoModal } from './components/DodoBoxInfoModal';
 import { SignUpModal } from './components/SignUpModal';
 import { EmailVerificationModal } from './components/EmailVerificationModal';
+import { useNavigate } from 'react-router-dom';
+import { checkUserIsAdmin } from './services/adminService';
 
 // Em modo de teste o recebimento pode ser confirmado sem a atualização da transportadora
 const IS_TEST_MODE = true;
@@ -409,6 +411,9 @@ export default function App() {
     adminEmail &&
     user.email.trim().toLowerCase() === adminEmail
   );
+  // Fonte da verdade para o Painel Admin: role === 'admin' em users/{uid} no Firestore
+  const [isFirestoreAdmin, setIsFirestoreAdmin] = useState<boolean>(false);
+  const navigate = useNavigate();
   const favoriteStorageKey = `@jadoei:favorites_${user?.uid || 'guest'}`;
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const loadedFavoriteKeyRef = useRef<string | null>(null);
@@ -512,6 +517,25 @@ export default function App() {
 
     return () => unsubscribe();
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setIsFirestoreAdmin(false);
+      return;
+    }
+    let isCancelled = false;
+    checkUserIsAdmin(user.uid)
+      .then((result) => {
+        if (!isCancelled) setIsFirestoreAdmin(result);
+      })
+      .catch((error) => {
+        console.error('Erro ao verificar role de administrador:', error);
+        if (!isCancelled) setIsFirestoreAdmin(false);
+      });
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.uid]);
 
   // Edit Profile State
   const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
@@ -3397,15 +3421,15 @@ export default function App() {
                 </div>
               )}
 
-              {isAdmin && (
+              {isFirestoreAdmin && (
                 <button
                   type="button"
-                  onClick={() => setIsReportsAdminOpen(true)}
+                  onClick={() => navigate('/admin')}
                   className="w-full rounded-2xl border-2 border-amber-300 bg-amber-50 p-3.5 text-left shadow-sm transition-colors hover:bg-amber-100"
                 >
-                  <span className="block text-sm font-extrabold text-amber-900">🛡️ Painel de Moderação (Admin)</span>
+                  <span className="block text-sm font-extrabold text-amber-900">🛡️ Painel Administrativo</span>
                   <span className="mt-1 block text-[10px] font-semibold text-amber-800">
-                    {adminReports.length} denúncia{adminReports.length === 1 ? '' : 's'} pendente{adminReports.length === 1 ? '' : 's'}
+                    Moderação de denúncias e outras ações administrativas
                   </span>
                 </button>
               )}
