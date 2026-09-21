@@ -285,6 +285,17 @@ export default function App() {
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'home' | 'search' | 'favorites' | 'profile'>('home');
+
+  // Permite voltar direto para uma aba específica (ex: vindo do Painel Admin via /?tab=profile)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedTab = params.get('tab');
+    if (requestedTab === 'home' || requestedTab === 'search' || requestedTab === 'favorites' || requestedTab === 'profile') {
+      setActiveTab(requestedTab);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
   const mainScrollRef = useRef<HTMLElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const swipeStartXRef = useRef<number | null>(null);

@@ -20,6 +20,24 @@ const REPORTS_COLLECTION = 'reports';
 const DONATIONS_COLLECTION = 'donations';
 const USERS_COLLECTION = 'users';
 
+export interface AdminDonationSummary {
+  id: string;
+  title: string;
+  imageUrl: string | null;
+  category: string | null;
+  credits: number | null;
+  status: string | null;
+  donorName: string | null;
+}
+
+export interface AdminUserSummary {
+  id: string;
+  name: string | null;
+  email: string | null;
+  photoURL: string | null;
+  banned: boolean;
+}
+
 const mapReportDoc = (id: string, data: Record<string, unknown>): AdminReport => ({
   id,
   donationId: (data.donationId as string) || '',
@@ -51,6 +69,38 @@ export const checkUserIsAdmin = async (uid: string): Promise<boolean> => {
   const userSnap = await getDoc(doc(db, USERS_COLLECTION, uid));
   if (!userSnap.exists()) return false;
   return userSnap.data().role === 'admin';
+};
+
+// Busca dados do item denunciado para exibir contexto completo no card de moderação
+export const fetchDonationSummary = async (donationId: string): Promise<AdminDonationSummary | null> => {
+  if (!donationId) return null;
+  const donationSnap = await getDoc(doc(db, DONATIONS_COLLECTION, donationId));
+  if (!donationSnap.exists()) return null;
+  const data = donationSnap.data();
+  return {
+    id: donationSnap.id,
+    title: data.title || 'Anúncio sem título',
+    imageUrl: data.imageUrl || data.image || null,
+    category: data.category || null,
+    credits: typeof data.credits === 'number' ? data.credits : null,
+    status: data.status || null,
+    donorName: data.donorName || data.userName || null
+  };
+};
+
+// Busca dados do usuário denunciado para exibir contexto completo no card de moderação
+export const fetchUserSummary = async (userId: string): Promise<AdminUserSummary | null> => {
+  if (!userId) return null;
+  const userSnap = await getDoc(doc(db, USERS_COLLECTION, userId));
+  if (!userSnap.exists()) return null;
+  const data = userSnap.data();
+  return {
+    id: userSnap.id,
+    name: data.name || data.displayName || null,
+    email: data.email || null,
+    photoURL: data.photoURL || null,
+    banned: data.banned === true
+  };
 };
 
 // Ação "Excluir Item": remove a doação denunciada e marca a denúncia como resolvida
