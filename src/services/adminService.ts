@@ -13,7 +13,7 @@ import {
   where,
   type Unsubscribe
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db } from '../firebase';
 import type { AdminReport } from '../types/donation';
 
 const REPORTS_COLLECTION = 'reports';
