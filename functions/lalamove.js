@@ -41,7 +41,15 @@ class LalamoveRequestError extends Error {
   }
 }
 
-// Assinatura HMAC-SHA256 exigida pela API da Lalamove (header Authorization: hmac {key}:{timestamp}:{signature})
+// Resolve as credenciais a partir da Secret Manager, com fallback para variáveis de ambiente
+// (LALAMOVE_API_KEY/LALAMOVE_API_SECRET, aceitando também LALAMOVE_SECRET como alias legado).
+function resolveLalamoveCredentials() {
+  const apiKey = LALAMOVE_API_KEY.value() || process.env.LALAMOVE_API_KEY;
+  const apiSecret = LALAMOVE_API_SECRET.value() || process.env.LALAMOVE_API_SECRET || process.env.LALAMOVE_SECRET;
+  return { apiKey, apiSecret };
+}
+
+// Assinatura HMAC-SHA256 exigida pela API da Lalamove (header Authorization: HMAC {key}:{timestamp}:{signature})
 function signLalamoveRequest({ method, path, body, apiSecret }) {
   const timestamp = Date.now().toString();
   const rawBody = body ? JSON.stringify(body) : "";
@@ -56,7 +64,7 @@ async function callLalamove({ method, path, body, apiKey, apiSecret }) {
   const response = await fetch(`${LALAMOVE_BASE_URL}${path}`, {
     method,
     headers: {
-      Authorization: `hmac ${apiKey}:${timestamp}:${signature}`,
+      Authorization: `HMAC ${apiKey}:${timestamp}:${signature}`,
       "Content-Type": "application/json",
       Accept: "application/json",
       Market: LALAMOVE_MARKET
@@ -143,12 +151,13 @@ exports.quoteLalamove = onRequest({ cors: true, secrets: [LALAMOVE_API_KEY, LALA
   };
 
   try {
+    const { apiKey, apiSecret } = resolveLalamoveCredentials();
     const result = await callLalamove({
       method: "POST",
       path: "/v3/quotations",
       body,
-      apiKey: LALAMOVE_API_KEY.value(),
-      apiSecret: LALAMOVE_API_SECRET.value()
+      apiKey,
+      apiSecret
     });
 
     const quotation = result?.data;
@@ -197,12 +206,13 @@ exports.createLalamoveOrder = onCall({ secrets: [LALAMOVE_API_KEY, LALAMOVE_API_
   };
 
   try {
+    const { apiKey, apiSecret } = resolveLalamoveCredentials();
     const result = await callLalamove({
       method: "POST",
       path: "/v3/orders",
       body,
-      apiKey: LALAMOVE_API_KEY.value(),
-      apiSecret: LALAMOVE_API_SECRET.value()
+      apiKey,
+      apiSecret
     });
 
     return {
