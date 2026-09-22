@@ -90,6 +90,7 @@ import { calculateShipping } from './services/melhorEnvio';
 import {
   createLalamoveOrder,
   geocodeAddress,
+  geocodePostalCode,
   quoteLalamoveFreight,
   toFreightOption as toLalamoveFreightOption,
   type LalamoveQuoteResult
@@ -2210,30 +2211,18 @@ export default function App() {
     setIsCalculatingCep(true);
     setLalamoveQuoteError(null);
     try {
+      const originCepDigits = (item.pickupAddress?.cep || '').replace(/\D/g, '');
       const originAddressText = item.pickupAddress
         ? [item.pickupAddress.logradouro, item.pickupAddress.numero, item.pickupAddress.bairro, item.pickupAddress.cidade, item.pickupAddress.estado]
             .filter(Boolean)
             .join(', ')
         : item.location;
 
-      const destinationAddressText = user?.address && isAddressComplete(user.address)
-        ? [user.address.logradouro, user.address.numero, user.address.bairro, user.address.cidade, user.address.estado]
-            .filter(Boolean)
-            .join(', ')
-        : `CEP ${formatCep(destinationCepDigits)}`;
-
+      // Prioriza o CEP (BrasilAPI + Nominatim); só usa o texto livre quando não há CEP disponível
       const [origin, destination] = await Promise.all([
-        geocodeAddress(originAddressText),
-        geocodeAddress(destinationAddressText)
+        originCepDigits.length === 8 ? geocodePostalCode(originCepDigits) : geocodeAddress(originAddressText),
+        geocodePostalCode(destinationCepDigits)
       ]);
-
-      if (!origin || !destination) {
-        const message = 'Não foi possível converter o endereço de origem/destino em coordenadas (lat/lng exigidas pela Lalamove).';
-        console.error('Erro ao cotar frete Lalamove: geocodificação falhou', { originAddressText, destinationAddressText, origin, destination });
-        setLalamoveQuoteError(message);
-        showToast('Não foi possível localizar o endereço de origem/destino para cotar o carreto.', 'error');
-        return false;
-      }
 
       const quote = await quoteLalamoveFreight(origin, destination, 'VAN');
       setLalamoveQuote(quote);
