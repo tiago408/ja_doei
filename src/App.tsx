@@ -425,6 +425,8 @@ export default function App() {
   // Fonte da verdade para o Painel Admin: role === 'admin' em users/{uid} no Firestore
   const [isFirestoreAdmin, setIsFirestoreAdmin] = useState<boolean>(false);
   const navigate = useNavigate();
+  // Marca que o item/perfil aberto veio de um deep-link do Painel Admin, para voltar pra lá ao fechar
+  const [cameFromAdminDeepLink, setCameFromAdminDeepLink] = useState<boolean>(false);
   const favoriteStorageKey = `@jadoei:favorites_${user?.uid || 'guest'}`;
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const loadedFavoriteKeyRef = useRef<string | null>(null);
@@ -872,6 +874,8 @@ export default function App() {
     const viewUserId = params.get('viewUserId');
     if (!viewItemId && !viewUserId) return;
 
+    if (params.get('from') === 'admin') setCameFromAdminDeepLink(true);
+
     if (viewItemId) {
       const matchedItem = items.find((item) => item.id === viewItemId);
       if (!matchedItem) return; // aguarda os itens carregarem do Firestore
@@ -1287,6 +1291,17 @@ export default function App() {
 
   // Trava única do scroll do body: evita que o cleanup de um modal restaure o "hidden" de outro
   const isAnyOverlayOpen = Boolean(selectedItemForDetails || baguncaDonor || isCaixinhaModalOpen || isDodoBoxInfoModalOpen);
+
+  // Ao fechar o item/perfil aberto via deep-link do Admin, volta automaticamente para /admin
+  const wasAdminDeepLinkModalOpenRef = useRef<boolean>(false);
+  useEffect(() => {
+    const isModalOpenNow = selectedItemForDetails !== null || baguncaDonor !== null;
+    if (cameFromAdminDeepLink && wasAdminDeepLinkModalOpenRef.current && !isModalOpenNow) {
+      setCameFromAdminDeepLink(false);
+      navigate('/admin');
+    }
+    wasAdminDeepLinkModalOpenRef.current = isModalOpenNow;
+  }, [selectedItemForDetails, baguncaDonor, cameFromAdminDeepLink, navigate]);
 
   // Drag-to-scroll do carrossel de banners (mouse no desktop; toque usa o scroll nativo)
   const bannerCarouselRef = useRef<HTMLDivElement>(null);

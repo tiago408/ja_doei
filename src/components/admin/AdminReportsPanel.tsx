@@ -136,7 +136,7 @@ export function AdminReportsPanel() {
                 <button
                   type="button"
                   disabled={!report.donationId}
-                  onClick={() => navigate(`/?viewItemId=${report.donationId}`)}
+                  onClick={() => navigate(`/?viewItemId=${report.donationId}&from=admin`)}
                   className="mt-3 flex w-full items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-left transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-200">
@@ -165,7 +165,7 @@ export function AdminReportsPanel() {
                 <button
                   type="button"
                   disabled={!report.reportedUserId}
-                  onClick={() => navigate(`/?viewUserId=${report.reportedUserId}`)}
+                  onClick={() => navigate(`/?viewUserId=${report.reportedUserId}&from=admin`)}
                   className="mt-2 flex w-full items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-left transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-200">
