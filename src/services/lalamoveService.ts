@@ -1,6 +1,6 @@
 // Cliente para as Cloud Functions da Lalamove (cotação e criação de corrida para itens grandes).
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app, auth } from '../firebase';
+import { app } from '../firebase';
 import type { FreightOption } from '../types/donation';
 
 const functionsClient = getFunctions(app, 'us-central1');
@@ -193,22 +193,13 @@ export async function quoteLalamoveFreight(
   if (cleanSender) payload.sender = cleanSender;
   if (cleanRecipient) payload.recipient = cleanRecipient;
 
-  // A function exige autenticação; o SDK faz isso sozinho, mas o fetch direto precisa do token manualmente.
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
-    console.warn('Cotação Lalamove abortada: usuário não autenticado.');
-    throw new Error('É necessário estar autenticado para cotar o frete.');
-  }
-  // Força o refresh para evitar enviar um token expirado/próximo de expirar.
-  const idToken = await currentUser.getIdToken(true);
-
+  // Endpoint público (sem checagem de login no backend); nenhum token é necessário aqui.
   let response: Response;
   try {
     response = await fetch(QUOTE_LALAMOVE_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${idToken}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({ data: payload })
     });
