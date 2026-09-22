@@ -1,9 +1,13 @@
 // Cliente para as Cloud Functions da Lalamove (cotação e criação de corrida para itens grandes).
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app } from '../firebase';
+import { app, auth } from '../firebase';
 import type { FreightOption } from '../types/donation';
 
 const functionsClient = getFunctions(app, 'us-central1');
+
+// URL do Cloud Run usada diretamente via fetch para `quoteLalamove`, contornando travas
+// internas do SDK `httpsCallable` que impediam a requisição de sequer sair do cliente.
+const QUOTE_LALAMOVE_URL = 'https://quotelalamove-l7j7hv4zra-uc.a.run.app';
 
 export type LalamoveVehicleType = 'MOTORCYCLE' | 'CAR' | 'VAN' | 'TRUCK';
 
@@ -179,11 +183,6 @@ export async function quoteLalamoveFreight(
   sender?: LalamoveOrderContact,
   recipient?: LalamoveOrderContact
 ): Promise<LalamoveQuoteResult> {
-  const callQuote = httpsCallable<
-    QuoteLalamovePayload,
-    LalamoveQuoteResult
-  >(functionsClient, 'quoteLalamove');
-
   const payload: QuoteLalamovePayload = {
     origin: cleanCoordinates(origin),
     destination: cleanCoordinates(destination),
@@ -194,13 +193,36 @@ export async function quoteLalamoveFreight(
   if (cleanSender) payload.sender = cleanSender;
   if (cleanRecipient) payload.recipient = cleanRecipient;
 
+  // A function exige autenticação; o SDK faz isso sozinho, mas o fetch direto precisa do token manualmente.
+  if (!auth.currentUser) {
+    throw new Error('É necessário estar autenticado para cotar o frete.');
+  }
+  const idToken = await auth.currentUser.getIdToken();
+
+  let response: Response;
   try {
-    const response = await callQuote(payload);
-    return response.data;
+    response = await fetch(QUOTE_LALAMOVE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ data: payload })
+    });
   } catch (err) {
-    console.error('Erro detalhado cliente:', err);
+    console.error('Erro Lalamove HTTP:', err);
     throw err;
   }
+
+  if (!response.ok) {
+    const err = await response.text();
+    console.error('Erro Lalamove HTTP:', err);
+    throw new Error(`Falha ao cotar frete Lalamove (HTTP ${response.status}): ${err}`);
+  }
+
+  // Protocolo callable HTTP do Firebase: sucesso vem em `{ result: ... }`.
+  const json = await response.json();
+  return json.result as LalamoveQuoteResult;
 }
 
 // Chama a Cloud Function `createLalamoveOrder`, disparada assim que o pagamento do frete é confirmado
