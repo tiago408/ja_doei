@@ -1125,6 +1125,9 @@ export default function App() {
   // Cotação real da Lalamove (itens grandes) e estado de carregamento da chamada à Cloud Function
   const [lalamoveQuote, setLalamoveQuote] = useState<LalamoveQuoteResult | null>(null);
   const [isQuotingLalamove, setIsQuotingLalamove] = useState<boolean>(false);
+  const [lalamoveQuoteError, setLalamoveQuoteError] = useState<string | null>(null);
+  // Evita re-tentar a mesma combinação item+CEP em loop; é resetado ao abrir outro item ou trocar o CEP
+  const lastLalamoveQuoteAttemptRef = useRef<string | null>(null);
 
   // Caixinha do Dodô: itens agrupados por doador, cada grupo vira uma caixa/etiqueta independente
   const [caixinha, setCaixinha] = useState<DonationItem[]>([]);
@@ -1978,6 +1981,13 @@ export default function App() {
     return combinedOptions.find((f) => f.id === selectedFreightId) || FREIGHT_OPTIONS.find((f) => f.id === selectedFreightId) || combinedOptions[0];
   }, [selectedFreightId, meShippingOptions, lalamoveQuote]);
 
+  // O doador não pode cotar/pagar o frete do próprio item grande
+  const isDonorViewingSelectedLargeItem = useMemo(() => Boolean(
+    selectedItemForDetails?.isLargeItem &&
+    user?.uid &&
+    selectedItemForDetails.userId === user.uid
+  ), [selectedItemForDetails, user?.uid]);
+
   // Open Product Details
   const handleOpenDetails = (item: DonationItem) => {
     setIsImageZoomed(false);
@@ -1986,6 +1996,8 @@ export default function App() {
     setSelectedFreightId(item.isLargeItem ? 'lalamove_partner' : 'ja_doei_express');
     setMeShippingOptions([]);
     setLalamoveQuote(null);
+    setLalamoveQuoteError(null);
+    lastLalamoveQuoteAttemptRef.current = null;
 
     // Usa o CEP já cadastrado no perfil como endereço padrão de entrega e cota o frete automaticamente
     const profileCepDigits = (user?.address?.cep || '').replace(/\D/g, '');
@@ -1993,9 +2005,8 @@ export default function App() {
       setCepInput(formatCep(profileCepDigits));
       setIsChangingCep(false);
       setIsCepCalculated(true);
-      if (item.isLargeItem) {
-        void handleQuoteLalamoveFreight(item, profileCepDigits);
-      } else {
+      // Itens grandes: a cotação Lalamove dispara automaticamente pelo useEffect abaixo (evita duplicar a chamada)
+      if (!item.isLargeItem) {
         void quoteFreightForItems([item], profileCepDigits);
       }
     } else {
@@ -2004,6 +2015,23 @@ export default function App() {
       setIsCepCalculated(false);
     }
   };
+
+  // Dispara a cotação da Lalamove assim que o item grande é aberto e o CEP do recebedor está disponível.
+  // Não roda para o próprio doador (ele não deve cotar/pagar o frete do próprio item).
+  useEffect(() => {
+    if (!selectedItemForDetails?.isLargeItem) return;
+    if (user?.uid && user.uid === selectedItemForDetails.userId) return;
+    if (lalamoveQuote || isQuotingLalamove) return;
+
+    const destinationCepDigits = cepInput.replace(/\D/g, '');
+    if (destinationCepDigits.length !== 8) return;
+
+    const attemptKey = `${selectedItemForDetails.id}:${destinationCepDigits}`;
+    if (lastLalamoveQuoteAttemptRef.current === attemptKey) return;
+    lastLalamoveQuoteAttemptRef.current = attemptKey;
+
+    void handleQuoteLalamoveFreight(selectedItemForDetails, destinationCepDigits);
+  }, [selectedItemForDetails, cepInput, user?.uid, lalamoveQuote, isQuotingLalamove]);
 
   const handleSendReport = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -2180,6 +2208,7 @@ export default function App() {
   const handleQuoteLalamoveFreight = async (item: DonationItem, destinationCepDigits: string) => {
     setIsQuotingLalamove(true);
     setIsCalculatingCep(true);
+    setLalamoveQuoteError(null);
     try {
       const originAddressText = item.pickupAddress
         ? [item.pickupAddress.logradouro, item.pickupAddress.numero, item.pickupAddress.bairro, item.pickupAddress.cidade, item.pickupAddress.estado]
@@ -2199,6 +2228,9 @@ export default function App() {
       ]);
 
       if (!origin || !destination) {
+        const message = 'Não foi possível converter o endereço de origem/destino em coordenadas (lat/lng exigidas pela Lalamove).';
+        console.error('Erro ao cotar frete Lalamove: geocodificação falhou', { originAddressText, destinationAddressText, origin, destination });
+        setLalamoveQuoteError(message);
         showToast('Não foi possível localizar o endereço de origem/destino para cotar o carreto.', 'error');
         return false;
       }
@@ -2209,6 +2241,7 @@ export default function App() {
       return true;
     } catch (error) {
       console.error('Erro ao cotar frete Lalamove:', error);
+      setLalamoveQuoteError(error instanceof Error ? error.message : 'Erro desconhecido ao cotar o carreto.');
       showToast('Não foi possível cotar o carreto com a Lalamove agora. Tente novamente.', 'error');
       return false;
     } finally {
@@ -4394,16 +4427,43 @@ export default function App() {
                         Opções de Frete / Logística
                       </h3>
                       {(selectedItemForDetails.isLargeItem || meShippingOptions.length > 0) && currentSelectedFreight && (
-                        <span className="text-[10px] font-bold text-[#14A76C] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                          {currentSelectedFreight.id === 'lalamove_partner'
-                            ? (lalamoveQuote ? `R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}` : 'Aguardando cotação')
-                            : currentSelectedFreight.price === 0
-                            ? 'Grátis'
-                            : `R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}`}
-                        </span>
+                        isDonorViewingSelectedLargeItem ? (
+                          <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                            Seu item publicado
+                          </span>
+                        ) : currentSelectedFreight.id === 'lalamove_partner' && !lalamoveQuote && !isQuotingLalamove ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const destinationCepDigits = cepInput.replace(/\D/g, '');
+                              if (destinationCepDigits.length === 8) {
+                                void handleQuoteLalamoveFreight(selectedItemForDetails, destinationCepDigits);
+                              } else {
+                                setIsChangingCep(true);
+                              }
+                            }}
+                            className="text-[10px] font-bold text-white bg-[#14A76C] hover:bg-[#108958] px-2 py-0.5 rounded-full transition-colors"
+                          >
+                            Calcular Frete
+                          </button>
+                        ) : (
+                          <span className="text-[10px] font-bold text-[#14A76C] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            {currentSelectedFreight.id === 'lalamove_partner'
+                              ? (isQuotingLalamove ? 'Cotando...' : `R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}`)
+                              : currentSelectedFreight.price === 0
+                              ? 'Grátis'
+                              : `R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}`}
+                          </span>
+                        )
                       )}
                     </div>
 
+                    {isDonorViewingSelectedLargeItem ? (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-center text-[11px] font-semibold text-slate-500">
+                        Seu item publicado — você não pode cotar ou pagar o frete do seu próprio item.
+                      </div>
+                    ) : (
+                    <>
                     {/* CEP Row: resumo com o CEP do perfil já aplicado, ou formulário editável */}
                     {!isChangingCep && cepInput.replace(/\D/g, '').length === 8 ? (
                       <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
@@ -4508,20 +4568,46 @@ export default function App() {
                                     </span>
                                   </div>
                                 </div>
-                                <span className={`max-w-[42%] shrink-0 truncate rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-right text-xs font-bold ${opt.id === 'lalamove_partner' ? 'text-amber-700' : 'text-slate-900'}`}>
-                                  {opt.id === 'lalamove_partner'
-                                    ? (lalamoveQuote ? `R$ ${opt.price.toFixed(2).replace('.', ',')}` : (isQuotingLalamove ? 'Cotando...' : 'Aguardando cotação'))
-                                    : `R$ ${opt.price.toFixed(2).replace('.', ',')}`}
-                                </span>
+                                {opt.id === 'lalamove_partner' && !lalamoveQuote && !isQuotingLalamove ? (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      const destinationCepDigits = cepInput.replace(/\D/g, '');
+                                      if (destinationCepDigits.length === 8) {
+                                        void handleQuoteLalamoveFreight(selectedItemForDetails, destinationCepDigits);
+                                      } else {
+                                        setIsChangingCep(true);
+                                      }
+                                    }}
+                                    className="max-w-[42%] shrink-0 truncate rounded-md bg-[#14A76C] px-2 py-0.5 text-right text-xs font-bold text-white hover:bg-[#108958] transition-colors"
+                                  >
+                                    Calcular Frete
+                                  </button>
+                                ) : (
+                                  <span className={`max-w-[42%] shrink-0 truncate rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-right text-xs font-bold ${opt.id === 'lalamove_partner' ? 'text-amber-700' : 'text-slate-900'}`}>
+                                    {opt.id === 'lalamove_partner'
+                                      ? (isQuotingLalamove ? 'Cotando...' : `R$ ${opt.price.toFixed(2).replace('.', ',')}`)
+                                      : `R$ ${opt.price.toFixed(2).replace('.', ',')}`}
+                                  </span>
+                                )}
                               </label>
                             ))}
                           </div>
                         </div>
 
+                        {lalamoveQuoteError && (
+                          <p className="text-[10px] font-semibold text-rose-600 leading-relaxed px-0.5">
+                            ⚠️ {lalamoveQuoteError}
+                          </p>
+                        )}
+
                         <p className="text-[10px] text-slate-400 leading-relaxed px-0.5">
                           A taxa de entrega e o serviço da plataforma (20% sobre o valor da transportadora) são pagos pelo recebedor no momento do resgate.
                         </p>
                       </div>
+                    )}
+                    </>
                     )}
                   </div>
                 </div>
