@@ -2,6 +2,7 @@
 // Cada ação é uma função isolada e sem estado de UI para que, no futuro,
 // uma Cloud Function (bot James) possa reaproveitar a mesma lógica/chamadas.
 import {
+  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -19,6 +20,7 @@ import type { AdminReport } from '../types/donation';
 const REPORTS_COLLECTION = 'reports';
 const DONATIONS_COLLECTION = 'donations';
 const USERS_COLLECTION = 'users';
+const NOTIFICATIONS_COLLECTION = 'notifications';
 
 export interface AdminDonationSummary {
   id: string;
@@ -103,11 +105,33 @@ export const fetchUserSummary = async (userId: string): Promise<AdminUserSummary
   };
 };
 
-// Ação "Excluir Item": remove a doação denunciada e marca a denúncia como resolvida
+// Ação "Excluir Item": avisa o dono do item, remove a doação denunciada e marca a denúncia como resolvida
 export const deleteReportedDonation = async (report: AdminReport): Promise<void> => {
   if (report.donationId) {
-    await deleteDoc(doc(db, DONATIONS_COLLECTION, report.donationId));
+    const donationRef = doc(db, DONATIONS_COLLECTION, report.donationId);
+    const donationSnap = await getDoc(donationRef);
+
+    if (donationSnap.exists()) {
+      const donationData = donationSnap.data();
+      const ownerUserId = (donationData.userId as string) || report.reportedUserId;
+      const itemTitle = (donationData.title as string) || report.donationTitle;
+
+      if (ownerUserId) {
+        await addDoc(collection(db, NOTIFICATIONS_COLLECTION), {
+          userId: ownerUserId,
+          title: 'Item Removido',
+          message: `Seu item "${itemTitle}" foi removido por não estar de acordo com as regras da plataforma.`,
+          type: 'item_removed',
+          donationId: report.donationId,
+          read: false,
+          createdAt: serverTimestamp()
+        });
+      }
+    }
+
+    await deleteDoc(donationRef);
   }
+
   await updateDoc(doc(db, REPORTS_COLLECTION, report.id), {
     status: 'resolved',
     resolution: 'item_deleted',
