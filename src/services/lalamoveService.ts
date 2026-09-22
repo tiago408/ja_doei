@@ -3,7 +3,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from '../firebase';
 import type { FreightOption } from '../types/donation';
 
-const functionsClient = getFunctions(app);
+const functionsClient = getFunctions(app, 'us-central1');
 
 export type LalamoveVehicleType = 'MOTORCYCLE' | 'CAR' | 'VAN' | 'TRUCK';
 
@@ -32,6 +32,20 @@ export interface LalamoveOrderResult {
   orderId: string | null;
   status: string | null;
   shareLink: string | null;
+}
+
+interface LalamoveCallableCoordinates {
+  lat: number;
+  lng: number;
+  address?: string;
+}
+
+interface QuoteLalamovePayload {
+  origin: LalamoveCallableCoordinates;
+  destination: LalamoveCallableCoordinates;
+  vehicleType: LalamoveVehicleType;
+  sender?: LalamoveOrderContact;
+  recipient?: LalamoveOrderContact;
 }
 
 interface BrasilApiCepResponse {
@@ -71,6 +85,22 @@ function resolveFallbackCoordinates(city?: string, state?: string): LalamoveCoor
   const normalizedState = (state || '').trim().toLowerCase();
   const fallback = FALLBACK_CITY_COORDINATES[`${normalizedCity}-${normalizedState}`] || DEFAULT_FALLBACK_COORDINATES;
   return { ...fallback, address: [city, state].filter(Boolean).join(', ') || 'São Paulo, SP (estimado)' };
+}
+
+function cleanCoordinates(coordinates: LalamoveCoordinates): LalamoveCallableCoordinates {
+  const payload: LalamoveCallableCoordinates = {
+    lat: Number(coordinates.lat),
+    lng: Number(coordinates.lng)
+  };
+  if (coordinates.address?.trim()) payload.address = coordinates.address.trim();
+  return payload;
+}
+
+function cleanContact(contact?: LalamoveOrderContact): LalamoveOrderContact | undefined {
+  const name = contact?.name?.trim();
+  const phone = contact?.phone?.trim();
+  if (!name || !phone) return undefined;
+  return { name, phone };
 }
 
 // Busca o endereço completo (rua, bairro, cidade, UF) a partir do CEP via BrasilAPI, gratuita e sem chave
@@ -150,18 +180,27 @@ export async function quoteLalamoveFreight(
   recipient?: LalamoveOrderContact
 ): Promise<LalamoveQuoteResult> {
   const callQuote = httpsCallable<
-    {
-      origin: LalamoveCoordinates;
-      destination: LalamoveCoordinates;
-      vehicleType: LalamoveVehicleType;
-      sender?: LalamoveOrderContact;
-      recipient?: LalamoveOrderContact;
-    },
+    QuoteLalamovePayload,
     LalamoveQuoteResult
   >(functionsClient, 'quoteLalamove');
 
-  const response = await callQuote({ origin, destination, vehicleType, sender, recipient });
-  return response.data;
+  const payload: QuoteLalamovePayload = {
+    origin: cleanCoordinates(origin),
+    destination: cleanCoordinates(destination),
+    vehicleType
+  };
+  const cleanSender = cleanContact(sender);
+  const cleanRecipient = cleanContact(recipient);
+  if (cleanSender) payload.sender = cleanSender;
+  if (cleanRecipient) payload.recipient = cleanRecipient;
+
+  try {
+    const response = await callQuote(payload);
+    return response.data;
+  } catch (err) {
+    console.error('Erro detalhado cliente:', err);
+    throw err;
+  }
 }
 
 // Chama a Cloud Function `createLalamoveOrder`, disparada assim que o pagamento do frete é confirmado
@@ -179,13 +218,18 @@ export async function createLalamoveOrder(
     LalamoveOrderResult
   >(functionsClient, 'createLalamoveOrder');
 
-  const response = await callCreateOrder({
-    quotationId: quote.quotationId,
-    stopIds: quote.stopIds,
-    sender,
-    recipient
-  });
-  return response.data;
+  try {
+    const response = await callCreateOrder({
+      quotationId: quote.quotationId,
+      stopIds: quote.stopIds.filter(Boolean),
+      sender: cleanContact(sender) || sender,
+      recipient: cleanContact(recipient) || recipient
+    });
+    return response.data;
+  } catch (err) {
+    console.error('Erro detalhado cliente:', err);
+    throw err;
+  }
 }
 
 // Converte a cotação da Lalamove no formato FreightOption já usado pela tela de checkout
