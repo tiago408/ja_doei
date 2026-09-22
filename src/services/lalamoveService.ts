@@ -42,13 +42,29 @@ interface BrasilApiCepResponse {
   street: string;
 }
 
-// Coordenadas centrais de fallback por cidade/UF, usadas quando a geocodificação não retorna nada
-// (garante que a Lalamove sempre receba lat/lng numéricos válidos, mesmo que aproximados)
+// Coordenadas centrais de fallback por cidade/UF, usadas quando a geocodificação falha ou demora
+// demais (garante que a Lalamove sempre receba lat/lng numéricos válidos, mesmo que aproximados)
 const FALLBACK_CITY_COORDINATES: Record<string, LalamoveCoordinates> = {
-  'cotia-sp': { lat: -23.6035, lng: -46.9188 },
+  'cotia-sp': { lat: -23.6039, lng: -46.9189 },
   'sao paulo-sp': { lat: -23.5505, lng: -46.6333 }
 };
 const DEFAULT_FALLBACK_COORDINATES = FALLBACK_CITY_COORDINATES['sao paulo-sp'];
+
+// Tempo máximo de espera por uma resposta de geocodificação antes de usar o fallback
+const GEOCODING_TIMEOUT_MS = 6000;
+
+async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), GEOCODING_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    console.error('Erro/timeout ao chamar', url, error);
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 function resolveFallbackCoordinates(city?: string, state?: string): LalamoveCoordinates {
   const normalizedCity = (city || '').trim().toLowerCase();
@@ -59,36 +75,35 @@ function resolveFallbackCoordinates(city?: string, state?: string): LalamoveCoor
 
 // Busca o endereço completo (rua, bairro, cidade, UF) a partir do CEP via BrasilAPI, gratuita e sem chave
 async function fetchAddressFromCep(cepDigits: string): Promise<BrasilApiCepResponse | null> {
+  const response = await fetchWithTimeout(`https://brasilapi.com.br/api/cep/v1/${cepDigits}`);
+  if (!response?.ok) return null;
   try {
-    const response = await fetch(`https://brasilapi.com.br/api/cep/v1/${cepDigits}`);
-    if (!response.ok) return null;
     return (await response.json()) as BrasilApiCepResponse;
   } catch (error) {
-    console.error('Erro ao consultar BrasilAPI CEP:', error);
+    console.error('Erro ao interpretar resposta da BrasilAPI CEP:', error);
     return null;
   }
 }
 
 // Geocodifica um endereço em texto via Nominatim/OpenStreetMap (gratuito, sem chave de API)
 async function geocodeWithNominatim(query: string): Promise<{ lat: number; lng: number } | null> {
-  try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(query)}`;
-    const response = await fetch(url, {
-      headers: {
-        Accept: 'application/json',
-        // Nota: navegadores bloqueiam a sobrescrita manual do header User-Agent por segurança;
-        // este valor só é aplicado quando a chamada roda em ambiente Node (ex: Cloud Function).
-        'User-Agent': 'JaDoeiApp/1.0 (contato@jadoei.app)'
-      }
-    });
-    if (!response.ok) return null;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(query)}`;
+  const response = await fetchWithTimeout(url, {
+    headers: {
+      Accept: 'application/json',
+      // Nota: navegadores bloqueiam a sobrescrita manual do header User-Agent por segurança;
+      // este valor só é aplicado quando a chamada roda em ambiente Node (ex: Cloud Function).
+      'User-Agent': 'JaDoeiApp/1.0 (contato@jadoei.app)'
+    }
+  });
+  if (!response?.ok) return null;
 
+  try {
     const results = (await response.json()) as Array<{ lat: string; lon: string }>;
     if (!results.length) return null;
-
     return { lat: Number(results[0].lat), lng: Number(results[0].lon) };
   } catch (error) {
-    console.error('Erro ao geocodificar via Nominatim:', error);
+    console.error('Erro ao interpretar resposta do Nominatim:', error);
     return null;
   }
 }

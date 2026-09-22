@@ -116,7 +116,8 @@ const EMPTY_ADDRESS: UserAddress = {
 };
 
 const readUserAddress = (profile: Record<string, unknown>): UserAddress => ({
-  cep: String(profile.cep ?? ''),
+  // Aceita tanto o campo novo ("cep") quanto o legado ("zipCode") salvo no perfil
+  cep: String(profile.cep ?? profile.zipCode ?? ''),
   logradouro: String(profile.logradouro ?? ''),
   numero: String(profile.numero ?? ''),
   complemento: String(profile.complemento ?? ''),
@@ -125,8 +126,8 @@ const readUserAddress = (profile: Record<string, unknown>): UserAddress => ({
   estado: String(profile.estado ?? profile.state ?? '')
 });
 
-const formatCep = (value: string) => {
-  const digits = value.replace(/\D/g, '').slice(0, 8);
+const formatCep = (value: string | null | undefined) => {
+  const digits = (value || '').replace(/\D/g, '').slice(0, 8);
   return digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
 };
 
@@ -2017,22 +2018,24 @@ export default function App() {
     }
   };
 
-  // Dispara a cotação da Lalamove assim que o item grande é aberto e o CEP do recebedor está disponível.
-  // Não roda para o próprio doador (ele não deve cotar/pagar o frete do próprio item).
+  // Dispara a cotação da Lalamove assim que o item grande é aberto, ou sempre que o CEP do recebedor
+  // mudar para um novo valor válido (8 dígitos). Não roda para o próprio doador (ele não deve
+  // cotar/pagar o frete do próprio item).
   useEffect(() => {
     if (!selectedItemForDetails?.isLargeItem) return;
     if (user?.uid && user.uid === selectedItemForDetails.userId) return;
-    if (lalamoveQuote || isQuotingLalamove) return;
+    if (isQuotingLalamove) return;
 
     const destinationCepDigits = cepInput.replace(/\D/g, '');
     if (destinationCepDigits.length !== 8) return;
 
+    // Usa apenas a chave (item+CEP) para decidir se já tentamos essa combinação — isso permite
+    // recotar automaticamente quando o usuário troca o CEP, mesmo já havendo uma cotação anterior
     const attemptKey = `${selectedItemForDetails.id}:${destinationCepDigits}`;
     if (lastLalamoveQuoteAttemptRef.current === attemptKey) return;
-    lastLalamoveQuoteAttemptRef.current = attemptKey;
 
     void handleQuoteLalamoveFreight(selectedItemForDetails, destinationCepDigits);
-  }, [selectedItemForDetails, cepInput, user?.uid, lalamoveQuote, isQuotingLalamove]);
+  }, [selectedItemForDetails, cepInput, user?.uid, isQuotingLalamove]);
 
   const handleSendReport = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -2207,9 +2210,12 @@ export default function App() {
 
   // Cota o frete de um item grande via Lalamove (Cloud Function quoteLalamove), geocodificando origem/destino
   const handleQuoteLalamoveFreight = async (item: DonationItem, destinationCepDigits: string) => {
+    // Marca esta combinação (item+CEP) como já tentada para o useEffect de auto-cotação não duplicar a chamada
+    lastLalamoveQuoteAttemptRef.current = `${item.id}:${destinationCepDigits}`;
     setIsQuotingLalamove(true);
     setIsCalculatingCep(true);
     setLalamoveQuoteError(null);
+    setLalamoveQuote(null);
     try {
       const originCepDigits = (item.pickupAddress?.cep || '').replace(/\D/g, '');
       const originAddressText = item.pickupAddress
