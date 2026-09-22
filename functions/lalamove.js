@@ -1,8 +1,9 @@
 // Integração com a API da Lalamove (ambiente Sandbox) para cotar e agendar o frete de itens grandes.
 // Docs de referência: https://developers.lalamove.com/ — confirme o schema exato (stops/item/priceBreakdown)
 // contra a versão atual da API antes de ir para produção, pois esses payloads podem mudar.
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
+const admin = require("firebase-admin");
 const crypto = require("crypto");
 
 const LALAMOVE_API_KEY = defineSecret("LALAMOVE_API_KEY");
@@ -79,14 +80,35 @@ function logAndRethrowAsHttpsError(error, fallbackMessage) {
 }
 
 // Callable: cota o frete de um item grande via API Sandbox da Lalamove e aplica a margem de 20%
-exports.quoteLalamove = onCall({ secrets: [LALAMOVE_API_KEY, LALAMOVE_API_SECRET] }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "É necessário estar autenticado para cotar o frete.");
+// Usa onRequest (não onCall) para permitir fetch direto do front-end com CORS liberado,
+// já que o SDK httpsCallable estava travando antes de disparar a requisição de rede.
+exports.quoteLalamove = onRequest({ cors: true, secrets: [LALAMOVE_API_KEY, LALAMOVE_API_SECRET] }, async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return;
   }
 
-  const { origin, destination, vehicleType, sender, recipient } = request.data || {};
+  const authHeader = req.get("Authorization") || "";
+  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!idToken) {
+    res.status(401).json({ error: { message: "É necessário estar autenticado para cotar o frete." } });
+    return;
+  }
+  try {
+    await admin.auth().verifyIdToken(idToken);
+  } catch (error) {
+    res.status(401).json({ error: { message: "Token de autenticação inválido ou expirado." } });
+    return;
+  }
+
+  const { origin, destination, vehicleType, sender, recipient } = req.body?.data || req.body || {};
   if (!origin?.lat || !origin?.lng || !destination?.lat || !destination?.lng) {
-    throw new HttpsError("invalid-argument", "Informe as coordenadas (lat/lng) de origem e destino.");
+    res.status(400).json({ error: { message: "Informe as coordenadas (lat/lng) de origem e destino." } });
+    return;
   }
 
   const serviceType = resolveServiceType(vehicleType);
@@ -133,17 +155,21 @@ exports.quoteLalamove = onCall({ secrets: [LALAMOVE_API_KEY, LALAMOVE_API_SECRET
     const lalamoveValue = Number(quotation?.priceBreakdown?.total ?? 0);
     const finalValue = Number((lalamoveValue * PLATFORM_MARKUP).toFixed(2));
 
-    return {
-      quotationId: quotation?.quotationId || null,
-      currency: quotation?.priceBreakdown?.currency || "BRL",
-      lalamoveValue,
-      finalValue,
-      serviceType,
-      expiresAt: quotation?.expiresAt || null,
-      stopIds: (quotation?.stops || []).map((stop) => stop.stopId)
-    };
+    res.status(200).json({
+      data: {
+        quotationId: quotation?.quotationId || null,
+        currency: quotation?.priceBreakdown?.currency || "BRL",
+        lalamoveValue,
+        finalValue,
+        serviceType,
+        expiresAt: quotation?.expiresAt || null,
+        stopIds: (quotation?.stops || []).map((stop) => stop.stopId)
+      }
+    });
   } catch (error) {
-    logAndRethrowAsHttpsError(error, "Não foi possível cotar o frete com a Lalamove no momento.");
+    const detail = error?.details || error?.message || "Erro desconhecido";
+    console.error("Lalamove API Error Detail:", detail);
+    res.status(500).json({ error: { message: "Não foi possível cotar o frete com a Lalamove no momento.", detail } });
   }
 });
 

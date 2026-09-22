@@ -1,0 +1,18 @@
+@import "tailwindcss";
+/* Esconde a barra de rolagem mantendo a rolagem ativa */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* iOS Safari zooms in on focus when a field's font-size is below 16px and doesn't zoom back out on blur */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
