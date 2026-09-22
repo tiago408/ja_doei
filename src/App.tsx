@@ -87,6 +87,13 @@ import {
 } from './constants/donations';
 import { GoogleIcon } from './components/icons/GoogleIcon';
 import { calculateShipping } from './services/melhorEnvio';
+import {
+  createLalamoveOrder,
+  geocodeAddress,
+  quoteLalamoveFreight,
+  toFreightOption as toLalamoveFreightOption,
+  type LalamoveQuoteResult
+} from './services/lalamoveService';
 import { registerPushNotifications, listenForForegroundMessages } from './services/pushNotificationService';
 import { DodoBoxInfoModal } from './components/DodoBoxInfoModal';
 import { SignUpModal } from './components/SignUpModal';
@@ -1115,6 +1122,9 @@ export default function App() {
   const [isChangingCep, setIsChangingCep] = useState<boolean>(false);
   const [selectedFreightId, setSelectedFreightId] = useState<string>('ja_doei_express');
   const [meShippingOptions, setMeShippingOptions] = useState<FreightOption[]>([]);
+  // Cotação real da Lalamove (itens grandes) e estado de carregamento da chamada à Cloud Function
+  const [lalamoveQuote, setLalamoveQuote] = useState<LalamoveQuoteResult | null>(null);
+  const [isQuotingLalamove, setIsQuotingLalamove] = useState<boolean>(false);
 
   // Caixinha do Dodô: itens agrupados por doador, cada grupo vira uma caixa/etiqueta independente
   const [caixinha, setCaixinha] = useState<DonationItem[]>([]);
@@ -1961,9 +1971,12 @@ export default function App() {
   };
 
   const currentSelectedFreight = useMemo(() => {
+    if (selectedFreightId === 'lalamove_partner' && lalamoveQuote) {
+      return toLalamoveFreightOption(lalamoveQuote);
+    }
     const combinedOptions = meShippingOptions.length > 0 ? meShippingOptions : FREIGHT_OPTIONS;
     return combinedOptions.find((f) => f.id === selectedFreightId) || FREIGHT_OPTIONS.find((f) => f.id === selectedFreightId) || combinedOptions[0];
-  }, [selectedFreightId, meShippingOptions]);
+  }, [selectedFreightId, meShippingOptions, lalamoveQuote]);
 
   // Open Product Details
   const handleOpenDetails = (item: DonationItem) => {
@@ -1972,6 +1985,7 @@ export default function App() {
     setSelectedItemForDetails(item);
     setSelectedFreightId(item.isLargeItem ? 'lalamove_partner' : 'ja_doei_express');
     setMeShippingOptions([]);
+    setLalamoveQuote(null);
 
     // Usa o CEP já cadastrado no perfil como endereço padrão de entrega e cota o frete automaticamente
     const profileCepDigits = (user?.address?.cep || '').replace(/\D/g, '');
@@ -1979,7 +1993,11 @@ export default function App() {
       setCepInput(formatCep(profileCepDigits));
       setIsChangingCep(false);
       setIsCepCalculated(true);
-      void quoteFreightForItems([item], profileCepDigits);
+      if (item.isLargeItem) {
+        void handleQuoteLalamoveFreight(item, profileCepDigits);
+      } else {
+        void quoteFreightForItems([item], profileCepDigits);
+      }
     } else {
       setCepInput('');
       setIsChangingCep(true);
@@ -2158,11 +2176,63 @@ export default function App() {
     }
   };
 
+  // Cota o frete de um item grande via Lalamove (Cloud Function quoteLalamove), geocodificando origem/destino
+  const handleQuoteLalamoveFreight = async (item: DonationItem, destinationCepDigits: string) => {
+    setIsQuotingLalamove(true);
+    setIsCalculatingCep(true);
+    try {
+      const originAddressText = item.pickupAddress
+        ? [item.pickupAddress.logradouro, item.pickupAddress.numero, item.pickupAddress.bairro, item.pickupAddress.cidade, item.pickupAddress.estado]
+            .filter(Boolean)
+            .join(', ')
+        : item.location;
+
+      const destinationAddressText = user?.address && isAddressComplete(user.address)
+        ? [user.address.logradouro, user.address.numero, user.address.bairro, user.address.cidade, user.address.estado]
+            .filter(Boolean)
+            .join(', ')
+        : `CEP ${formatCep(destinationCepDigits)}`;
+
+      const [origin, destination] = await Promise.all([
+        geocodeAddress(originAddressText),
+        geocodeAddress(destinationAddressText)
+      ]);
+
+      if (!origin || !destination) {
+        showToast('Não foi possível localizar o endereço de origem/destino para cotar o carreto.', 'error');
+        return false;
+      }
+
+      const quote = await quoteLalamoveFreight(origin, destination, 'VAN');
+      setLalamoveQuote(quote);
+      setIsCepCalculated(true);
+      return true;
+    } catch (error) {
+      console.error('Erro ao cotar frete Lalamove:', error);
+      showToast('Não foi possível cotar o carreto com a Lalamove agora. Tente novamente.', 'error');
+      return false;
+    } finally {
+      setIsQuotingLalamove(false);
+      setIsCalculatingCep(false);
+    }
+  };
+
   const handleCalculateFreight = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const cepDigits = cepInput.replace(/\D/g, '');
     if (cepDigits.length !== 8) {
       showToast('Por favor, informe um CEP válido (8 dígitos) para calcular o frete.', 'error');
+      return;
+    }
+
+    if (selectedItemForDetails?.isLargeItem) {
+      const succeeded = await handleQuoteLalamoveFreight(selectedItemForDetails, cepDigits);
+      if (succeeded) {
+        setIsChangingCep(false);
+        showToast('🚛 Carreto cotado com sucesso via Lalamove!', 'success');
+      } else {
+        showToast('Não foi possível cotar o carreto agora. Tente novamente.', 'error');
+      }
       return;
     }
 
@@ -2673,6 +2743,11 @@ export default function App() {
   const handleConfirmRedeem = async () => {
     if (!selectedItemForRedeem || !user) return;
 
+    if (selectedItemForRedeem.isLargeItem && !lalamoveQuote?.quotationId) {
+      showToast('Cote o carreto com a Lalamove antes de confirmar o resgate deste item.', 'error');
+      return;
+    }
+
     const itemsToRedeem = checkoutItems.length ? checkoutItems : [selectedItemForRedeem];
     const itemCredits = itemsToRedeem.reduce((total, item) => total + item.credits, 0);
     const donorId = selectedItemForRedeem.userId;
@@ -2718,6 +2793,22 @@ export default function App() {
         createdAt: serverTimestamp(),
         read: false
       });
+
+      // Frete do carreto confirmado: dispara a Cloud Function que cria a corrida na Lalamove
+      if (selectedItemForRedeem.isLargeItem && lalamoveQuote?.quotationId) {
+        try {
+          const donorSnap = await getDoc(doc(db, 'users', donorId));
+          const donorData = donorSnap.data();
+          await createLalamoveOrder(
+            lalamoveQuote,
+            { name: donorData?.name || selectedItemForRedeem.donorName || 'Doador Já Doei', phone: donorData?.whatsapp || '' },
+            { name: user.name, phone: userSnap.data()?.whatsapp || '' }
+          );
+        } catch (error) {
+          console.error('Erro ao criar corrida na Lalamove:', error);
+          showToast('Resgate confirmado, mas não foi possível agendar o carreto automaticamente. Combine a retirada pelo chat.', 'error');
+        }
+      }
 
       const redeemedIds = new Set(itemsToRedeem.map((item) => item.id));
 
@@ -4305,7 +4396,7 @@ export default function App() {
                       {(selectedItemForDetails.isLargeItem || meShippingOptions.length > 0) && currentSelectedFreight && (
                         <span className="text-[10px] font-bold text-[#14A76C] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                           {currentSelectedFreight.id === 'lalamove_partner'
-                            ? 'Transporte Utilitário / Carreto'
+                            ? (lalamoveQuote ? `R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}` : 'Aguardando cotação')
                             : currentSelectedFreight.price === 0
                             ? 'Grátis'
                             : `R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}`}
@@ -4352,7 +4443,11 @@ export default function App() {
                           ) : (
                             <Calculator className="w-3.5 h-3.5" />
                           )}
-                          <span>{isCalculatingCep ? 'Calculando...' : 'Calcular Frete'}</span>
+                          <span>
+                            {selectedItemForDetails.isLargeItem
+                              ? (isCalculatingCep ? 'Cotando...' : 'Cotar Carreto')
+                              : (isCalculatingCep ? 'Calculando...' : 'Calcular Frete')}
+                          </span>
                         </button>
                       </form>
                     )}
@@ -4374,7 +4469,7 @@ export default function App() {
                           </span>
                           <div className="space-y-1.5">
                             {(selectedItemForDetails.isLargeItem
-                              ? FREIGHT_OPTIONS.filter((f) => f.id === 'lalamove_partner')
+                              ? [lalamoveQuote ? toLalamoveFreightOption(lalamoveQuote) : FREIGHT_OPTIONS.find((f) => f.id === 'lalamove_partner')!]
                               : meShippingOptions
                             ).map((opt) => (
                               <label
@@ -4408,14 +4503,14 @@ export default function App() {
                                     </div>
                                     <span className="text-[10px] text-slate-500 block">
                                       {opt.id === 'lalamove_partner'
-                                        ? 'Cotação em tempo real baseada na distância e modelo do veículo (Fiorino, Pick-up ou Caminhão)'
+                                        ? (lalamoveQuote ? 'Retirada agendada via chat com o doador' : 'Informe o CEP e cote o carreto para ver o valor')
                                         : `(${opt.deliveryTime})`}
                                     </span>
                                   </div>
                                 </div>
                                 <span className={`max-w-[42%] shrink-0 truncate rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-right text-xs font-bold ${opt.id === 'lalamove_partner' ? 'text-amber-700' : 'text-slate-900'}`}>
                                   {opt.id === 'lalamove_partner'
-                                    ? 'Transporte Utilitário / Carreto'
+                                    ? (lalamoveQuote ? `R$ ${opt.price.toFixed(2).replace('.', ',')}` : (isQuotingLalamove ? 'Cotando...' : 'Aguardando cotação'))
                                     : `R$ ${opt.price.toFixed(2).replace('.', ',')}`}
                                 </span>
                               </label>
@@ -4915,7 +5010,7 @@ export default function App() {
                               </span>
                               <span className="text-[10px] text-slate-600 block">
                                 {currentSelectedFreight.id === 'lalamove_partner'
-                                  ? 'Cotação em tempo real'
+                                  ? `Retirada agendada via chat • R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}`
                                   : `${currentSelectedFreight.deliveryTime} • ${currentSelectedFreight.price === 0
                                   ? 'Grátis'
                                   : `R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}`}`}
@@ -4941,9 +5036,7 @@ export default function App() {
                             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                               <span>Pagamento do Frete</span>
                               <span className="text-[10px] font-extrabold text-[#FF8243] bg-[#FF8243]/10 px-2 py-0.5 rounded-full">
-                                {currentSelectedFreight.id === 'lalamove_partner'
-                                  ? 'Frete externo'
-                                  : `R$ ${currentSelectedFreight.price.toFixed(2).replace('.', ',')}`}
+                                R$ {currentSelectedFreight.price.toFixed(2).replace('.', ',')}
                               </span>
                             </span>
                           </div>
