@@ -145,14 +145,22 @@ export async function geocodeAddress(addressText: string): Promise<LalamoveCoord
 export async function quoteLalamoveFreight(
   origin: LalamoveCoordinates,
   destination: LalamoveCoordinates,
-  vehicleType: LalamoveVehicleType = 'VAN'
+  vehicleType: LalamoveVehicleType = 'VAN',
+  sender?: LalamoveOrderContact,
+  recipient?: LalamoveOrderContact
 ): Promise<LalamoveQuoteResult> {
   const callQuote = httpsCallable<
-    { origin: LalamoveCoordinates; destination: LalamoveCoordinates; vehicleType: LalamoveVehicleType },
+    {
+      origin: LalamoveCoordinates;
+      destination: LalamoveCoordinates;
+      vehicleType: LalamoveVehicleType;
+      sender?: LalamoveOrderContact;
+      recipient?: LalamoveOrderContact;
+    },
     LalamoveQuoteResult
   >(functionsClient, 'quoteLalamove');
 
-  const response = await callQuote({ origin, destination, vehicleType });
+  const response = await callQuote({ origin, destination, vehicleType, sender, recipient });
   return response.data;
 }
 
