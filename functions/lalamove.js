@@ -3,7 +3,6 @@
 // contra a versão atual da API antes de ir para produção, pois esses payloads podem mudar.
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
-const admin = require("firebase-admin");
 const crypto = require("crypto");
 
 const LALAMOVE_API_KEY = defineSecret("LALAMOVE_API_KEY");
@@ -90,6 +89,7 @@ function logAndRethrowAsHttpsError(error, fallbackMessage) {
 // Callable: cota o frete de um item grande via API Sandbox da Lalamove e aplica a margem de 20%
 // Usa onRequest (não onCall) para permitir fetch direto do front-end com CORS liberado,
 // já que o SDK httpsCallable estava travando antes de disparar a requisição de rede.
+// Endpoint público (sem checagem de login) — considere adicionar App Check/rate limiting.
 exports.quoteLalamove = onRequest({ cors: true, secrets: [LALAMOVE_API_KEY, LALAMOVE_API_SECRET] }, async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -97,19 +97,6 @@ exports.quoteLalamove = onRequest({ cors: true, secrets: [LALAMOVE_API_KEY, LALA
 
   if (req.method === "OPTIONS") {
     res.status(204).send("");
-    return;
-  }
-
-  const authHeader = req.get("Authorization") || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) {
-    res.status(401).json({ error: { message: "É necessário estar autenticado para cotar o frete." } });
-    return;
-  }
-  try {
-    await admin.auth().verifyIdToken(idToken);
-  } catch (error) {
-    res.status(401).json({ error: { message: "Token de autenticação inválido ou expirado." } });
     return;
   }
 
