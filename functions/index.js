@@ -3,6 +3,10 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
+const lalamove = require("./lalamove");
+exports.quoteLalamove = lalamove.quoteLalamove;
+exports.createLalamoveOrder = lalamove.createLalamoveOrder;
+
 // Envia a notificação push (FCM) para o destinatário sempre que um doc é criado em /notifications
 exports.onNotificationCreate = functions.firestore
   .document("notifications/{notificationId}")

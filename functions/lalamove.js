@@ -1,0 +1,191 @@
+// Integração com a API da Lalamove (ambiente Sandbox) para cotar e agendar o frete de itens grandes.
+// Docs de referência: https://developers.lalamove.com/ — confirme o schema exato (stops/item/priceBreakdown)
+// contra a versão atual da API antes de ir para produção, pois esses payloads podem mudar.
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
+const crypto = require("crypto");
+
+const LALAMOVE_API_KEY = defineSecret("LALAMOVE_API_KEY");
+const LALAMOVE_API_SECRET = defineSecret("LALAMOVE_API_SECRET");
+
+const LALAMOVE_MARKET = process.env.LALAMOVE_MARKET || "BR";
+// Sandbox: https://rest.sandbox.lalamove.com | Produção: https://rest.lalamove.com
+const LALAMOVE_BASE_URL = process.env.LALAMOVE_BASE_URL || "https://rest.sandbox.lalamove.com";
+
+// Margem de 20% aplicada pela plataforma sobre o valor retornado pela Lalamove
+const PLATFORM_MARKUP = 1.20;
+
+// Tipos de veículo aceitos para itens de grande porte (móveis/eletrodomésticos)
+const ALLOWED_VEHICLE_TYPES = ["MOTORCYCLE", "CAR", "VAN", "TRUCK", "LALAGO"];
+
+function resolveServiceType(vehicleType) {
+  const normalized = String(vehicleType || "").toUpperCase();
+  return ALLOWED_VEHICLE_TYPES.includes(normalized) ? normalized : "VAN";
+}
+
+// Formata o telefone no padrão internacional exigido pela Lalamove (ex: +5511981998847)
+function toInternationalPhone(phone) {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("55")) return `+${digits}`;
+  return `+55${digits}`;
+}
+
+// Erro que carrega o corpo de resposta da Lalamove para poder ser logado/repassado com detalhe
+class LalamoveRequestError extends Error {
+  constructor(message, details) {
+    super(message);
+    this.name = "LalamoveRequestError";
+    this.details = details;
+  }
+}
+
+// Assinatura HMAC-SHA256 exigida pela API da Lalamove (header Authorization: hmac {key}:{timestamp}:{signature})
+function signLalamoveRequest({ method, path, body, apiSecret }) {
+  const timestamp = Date.now().toString();
+  const rawBody = body ? JSON.stringify(body) : "";
+  const rawSignature = `${timestamp}\r\n${method}\r\n${path}\r\n\r\n${rawBody}`;
+  const signature = crypto.createHmac("sha256", apiSecret).update(rawSignature).digest("hex");
+  return { timestamp, signature };
+}
+
+async function callLalamove({ method, path, body, apiKey, apiSecret }) {
+  const { timestamp, signature } = signLalamoveRequest({ method, path, body, apiSecret });
+
+  const response = await fetch(`${LALAMOVE_BASE_URL}${path}`, {
+    method,
+    headers: {
+      Authorization: `hmac ${apiKey}:${timestamp}:${signature}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Market: LALAMOVE_MARKET
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new LalamoveRequestError(`Lalamove respondeu HTTP ${response.status}`, payload);
+  }
+  return payload;
+}
+
+// Loga o detalhe exato do erro (corpo de resposta da Lalamove quando disponível) nos Firebase Logs
+// e propaga esse mesmo detalhe no HttpsError para facilitar o debug pelo cliente/console
+function logAndRethrowAsHttpsError(error, fallbackMessage) {
+  const detail = error?.details || error?.message || "Erro desconhecido";
+  console.error("Lalamove API Error Detail:", detail);
+  throw new HttpsError("internal", fallbackMessage, detail);
+}
+
+// Callable: cota o frete de um item grande via API Sandbox da Lalamove e aplica a margem de 20%
+exports.quoteLalamove = onCall({ secrets: [LALAMOVE_API_KEY, LALAMOVE_API_SECRET] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "É necessário estar autenticado para cotar o frete.");
+  }
+
+  const { origin, destination, vehicleType, sender, recipient } = request.data || {};
+  if (!origin?.lat || !origin?.lng || !destination?.lat || !destination?.lng) {
+    throw new HttpsError("invalid-argument", "Informe as coordenadas (lat/lng) de origem e destino.");
+  }
+
+  const serviceType = resolveServiceType(vehicleType);
+  const body = {
+    data: {
+      serviceType,
+      language: "pt_BR",
+      stops: [
+        {
+          // lat/lng como número float — a Lalamove rejeita strings aqui
+          coordinates: { lat: Number(origin.lat), lng: Number(origin.lng) },
+          address: origin.address || ""
+        },
+        {
+          coordinates: { lat: Number(destination.lat), lng: Number(destination.lng) },
+          address: destination.address || ""
+        }
+      ],
+      item: {
+        quantity: "1",
+        weight: "LESS_THAN_300_KG",
+        categories: ["FURNITURE"],
+        handlingInstructions: []
+      },
+      ...(sender?.phone
+        ? { sender: { stopId: "0", name: sender.name || "Doador Já Doei", phone: toInternationalPhone(sender.phone) } }
+        : {}),
+      ...(recipient?.phone
+        ? { recipients: [{ stopId: "1", name: recipient.name || "Recebedor Já Doei", phone: toInternationalPhone(recipient.phone) }] }
+        : {})
+    }
+  };
+
+  try {
+    const result = await callLalamove({
+      method: "POST",
+      path: "/v3/quotations",
+      body,
+      apiKey: LALAMOVE_API_KEY.value(),
+      apiSecret: LALAMOVE_API_SECRET.value()
+    });
+
+    const quotation = result?.data;
+    const lalamoveValue = Number(quotation?.priceBreakdown?.total ?? 0);
+    const finalValue = Number((lalamoveValue * PLATFORM_MARKUP).toFixed(2));
+
+    return {
+      quotationId: quotation?.quotationId || null,
+      currency: quotation?.priceBreakdown?.currency || "BRL",
+      lalamoveValue,
+      finalValue,
+      serviceType,
+      expiresAt: quotation?.expiresAt || null,
+      stopIds: (quotation?.stops || []).map((stop) => stop.stopId)
+    };
+  } catch (error) {
+    logAndRethrowAsHttpsError(error, "Não foi possível cotar o frete com a Lalamove no momento.");
+  }
+});
+
+// Callable: cria a corrida na Lalamove assim que o pagamento do frete for confirmado no app
+exports.createLalamoveOrder = onCall({ secrets: [LALAMOVE_API_KEY, LALAMOVE_API_SECRET] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "É necessário estar autenticado para criar a corrida.");
+  }
+
+  const { quotationId, stopIds, sender, recipient } = request.data || {};
+  if (!quotationId) {
+    throw new HttpsError("invalid-argument", "quotationId é obrigatório (retornado por quoteLalamove).");
+  }
+  if (!sender?.name || !sender?.phone || !recipient?.name || !recipient?.phone) {
+    throw new HttpsError("invalid-argument", "Dados de contato do remetente e do destinatário são obrigatórios.");
+  }
+
+  const [senderStopId, recipientStopId] = Array.isArray(stopIds) ? stopIds : [];
+  const body = {
+    data: {
+      quotationId,
+      sender: { stopId: senderStopId, name: sender.name, phone: toInternationalPhone(sender.phone) },
+      recipients: [{ stopId: recipientStopId, name: recipient.name, phone: toInternationalPhone(recipient.phone) }]
+    }
+  };
+
+  try {
+    const result = await callLalamove({
+      method: "POST",
+      path: "/v3/orders",
+      body,
+      apiKey: LALAMOVE_API_KEY.value(),
+      apiSecret: LALAMOVE_API_SECRET.value()
+    });
+
+    return {
+      orderId: result?.data?.orderId || null,
+      status: result?.data?.status || null,
+      shareLink: result?.data?.shareLink || null
+    };
+  } catch (error) {
+    logAndRethrowAsHttpsError(error, "Não foi possível criar a corrida na Lalamove no momento.");
+  }
+});
+
