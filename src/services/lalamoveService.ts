@@ -194,10 +194,13 @@ export async function quoteLalamoveFreight(
   if (cleanRecipient) payload.recipient = cleanRecipient;
 
   // A function exige autenticação; o SDK faz isso sozinho, mas o fetch direto precisa do token manualmente.
-  if (!auth.currentUser) {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    console.warn('Cotação Lalamove abortada: usuário não autenticado.');
     throw new Error('É necessário estar autenticado para cotar o frete.');
   }
-  const idToken = await auth.currentUser.getIdToken();
+  // Força o refresh para evitar enviar um token expirado/próximo de expirar.
+  const idToken = await currentUser.getIdToken(true);
 
   let response: Response;
   try {
