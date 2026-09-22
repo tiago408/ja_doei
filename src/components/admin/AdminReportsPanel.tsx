@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Ban, EyeOff, Package, ShieldCheck, Trash2, UserRound } from 'lucide-react';
+import { ArrowLeft, Ban, ChevronRight, EyeOff, Package, ShieldCheck, Trash2, UserRound } from 'lucide-react';
 import type { AdminReport } from '../../types/donation';
 import {
   banReportedUser,
@@ -132,8 +132,13 @@ export function AdminReportsPanel() {
                   Denunciado por: <strong>{report.reporterName}</strong>
                 </p>
 
-                {/* Contexto do item denunciado */}
-                <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-2.5">
+                {/* Contexto do item denunciado — clicável para abrir o item no app */}
+                <button
+                  type="button"
+                  disabled={!report.donationId}
+                  onClick={() => navigate(`/?viewItemId=${report.donationId}`)}
+                  className="mt-3 flex w-full items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-left transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-200">
                     {donation?.imageUrl ? (
                       <img src={donation.imageUrl} alt={donation.title} className="h-full w-full object-cover" />
@@ -153,10 +158,16 @@ export function AdminReportsPanel() {
                       )}
                     </p>
                   </div>
-                </div>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                </button>
 
-                {/* Contexto do usuário denunciado */}
-                <div className="mt-2 flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-2.5">
+                {/* Contexto do usuário denunciado — clicável para abrir o perfil (Quartinho da Bagunça) no app */}
+                <button
+                  type="button"
+                  disabled={!report.reportedUserId}
+                  onClick={() => navigate(`/?viewUserId=${report.reportedUserId}`)}
+                  className="mt-2 flex w-full items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-left transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-200">
                     {reportedUser?.photoURL ? (
                       <img src={reportedUser.photoURL} alt={reportedUser.name || 'Usuário'} className="h-full w-full object-cover" />
@@ -177,7 +188,8 @@ export function AdminReportsPanel() {
                       {reportedUser?.email || `ID: ${report.reportedUserId || 'desconhecido'}`}
                     </p>
                   </div>
-                </div>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                </button>
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button

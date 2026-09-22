@@ -865,6 +865,43 @@ export default function App() {
     window.history.replaceState(null, '', window.location.pathname);
   }, [user]);
 
+  // Deep-link vindo do Painel Admin: abre direto o item (?viewItemId=) ou o perfil do doador (?viewUserId=)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const viewItemId = params.get('viewItemId');
+    const viewUserId = params.get('viewUserId');
+    if (!viewItemId && !viewUserId) return;
+
+    if (viewItemId) {
+      const matchedItem = items.find((item) => item.id === viewItemId);
+      if (!matchedItem) return; // aguarda os itens carregarem do Firestore
+      setSelectedItemForDetails(matchedItem);
+      window.history.replaceState(null, '', window.location.pathname);
+      return;
+    }
+
+    if (viewUserId) {
+      (async () => {
+        try {
+          const userSnap = await getDoc(doc(db, 'users', viewUserId));
+          const data = userSnap.exists() ? (userSnap.data() as Record<string, unknown>) : null;
+          const cidade = String(data?.cidade || data?.city || '');
+          const estado = String(data?.estado || data?.state || '');
+          handleOpenBagunca(
+            String(data?.name || data?.displayName || 'Usuário não encontrado'),
+            data?.photoURL ? String(data.photoURL) : undefined,
+            cidade ? `${cidade}${estado ? ` - ${estado}` : ''}` : undefined,
+            viewUserId
+          );
+        } catch (error) {
+          console.error('Erro ao carregar perfil do usuário denunciado:', error);
+        } finally {
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+      })();
+    }
+  }, [items]);
+
 
   const handleMarkAllNotificationsRead = async () => {
     const unreadNotifications = notifications.filter((notification) => !notification.read);
