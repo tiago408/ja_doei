@@ -220,9 +220,9 @@ export async function quoteLalamoveFreight(
     throw new Error(`Falha ao cotar frete Lalamove (HTTP ${response.status}): ${err}`);
   }
 
-  // Protocolo callable HTTP do Firebase: sucesso vem em `{ result: ... }`.
+  // Protocolo do onRequest custom: sucesso vem envelopado em `{ data: ... }`.
   const json = await response.json();
-  return json.result as LalamoveQuoteResult;
+  return json.data as LalamoveQuoteResult;
 }
 
 // Chama a Cloud Function `createLalamoveOrder`, disparada assim que o pagamento do frete é confirmado
