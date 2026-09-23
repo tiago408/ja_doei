@@ -166,9 +166,9 @@ exports.quoteLalamove = onRequest({ cors: true, secrets: [LALAMOVE_API_KEY, LALA
       }
     });
   } catch (error) {
-    const detail = error?.details || error?.message || "Erro desconhecido";
-    console.error("Lalamove API Error Detail:", detail);
-    res.status(500).json({ error: { message: "Não foi possível cotar o frete com a Lalamove no momento.", detail } });
+    const lalamoveErrorBody = error?.details || error?.message || "Erro desconhecido";
+    console.error("LALAMOVE RESPONSE ERROR:", JSON.stringify(lalamoveErrorBody));
+    res.status(400).json({ error: lalamoveErrorBody });
   }
 });
 
