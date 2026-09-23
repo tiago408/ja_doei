@@ -33,10 +33,11 @@ function toInternationalPhone(phone) {
 
 // Erro que carrega o corpo de resposta da Lalamove para poder ser logado/repassado com detalhe
 class LalamoveRequestError extends Error {
-  constructor(message, details) {
+  constructor(message, status, details) {
     super(message);
     this.name = "LalamoveRequestError";
     this.details = details;
+    this.response = { status, data: details };
   }
 }
 
@@ -73,7 +74,7 @@ async function callLalamove({ method, path, body, apiKey, apiSecret }) {
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new LalamoveRequestError(`Lalamove respondeu HTTP ${response.status}`, payload);
+    throw new LalamoveRequestError(`Lalamove respondeu HTTP ${response.status}`, response.status, payload);
   }
   return payload;
 }
@@ -114,12 +115,11 @@ exports.quoteLalamove = onRequest({ cors: true, secrets: [LALAMOVE_API_KEY, LALA
       market: "BR_SPO",
       stops: [
         {
-          // lat/lng com 6 casas decimais — formato exigido pelo schema da API Sandbox v3
-          coordinates: { lat: Number(origin.lat).toFixed(6), lng: Number(origin.lng).toFixed(6) },
+          coordinates: { lat: String(Number(origin.lat)), lng: String(Number(origin.lng)) },
           address: origin.address || ""
         },
         {
-          coordinates: { lat: Number(destination.lat).toFixed(6), lng: Number(destination.lng).toFixed(6) },
+          coordinates: { lat: String(Number(destination.lat)), lng: String(Number(destination.lng)) },
           address: destination.address || ""
         }
       ],
@@ -160,6 +160,7 @@ exports.quoteLalamove = onRequest({ cors: true, secrets: [LALAMOVE_API_KEY, LALA
       }
     });
   } catch (error) {
+    console.log("Status retornado Lalamove:", error.response?.status, error.response?.data);
     const lalamoveErrorBody = error?.details || error?.message || "Erro desconhecido";
     console.error("LALAMOVE RESPONSE ERROR:", JSON.stringify(lalamoveErrorBody));
     res.status(400).json({ error: lalamoveErrorBody });
