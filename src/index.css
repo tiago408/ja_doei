@@ -34,6 +34,15 @@ input[type="radio"] {
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: manipulation;
+  isolation: isolate;
+}
+
+.chat-container::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-color: #ffffff;
 }
 
 .chat-messages {
