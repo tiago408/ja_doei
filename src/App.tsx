@@ -1416,6 +1416,62 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<Array<{ id: string; senderId: string; text: string; timestamp: Date | null; read: boolean }>>([]);
   const [isSendingChatMessage, setIsSendingChatMessage] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (!chatModalItem) return;
+
+    const root = document.documentElement;
+    const body = document.body;
+    const visualViewport = window.visualViewport;
+    const scrollY = window.scrollY;
+    const previousBodyStyle = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow
+    };
+
+    const syncChatViewport = () => {
+      const viewportHeight = visualViewport?.height || window.innerHeight;
+      const viewportTop = visualViewport?.offsetTop || 0;
+      root.style.setProperty('--chat-viewport-height', `${viewportHeight}px`);
+      root.style.setProperty('--chat-viewport-top', `${viewportTop}px`);
+      window.requestAnimationFrame(() => window.scrollTo(0, 0));
+    };
+
+    body.classList.add('chat-locked');
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    syncChatViewport();
+
+    visualViewport?.addEventListener('resize', syncChatViewport);
+    visualViewport?.addEventListener('scroll', syncChatViewport);
+    window.addEventListener('resize', syncChatViewport);
+    window.addEventListener('orientationchange', syncChatViewport);
+
+    return () => {
+      visualViewport?.removeEventListener('resize', syncChatViewport);
+      visualViewport?.removeEventListener('scroll', syncChatViewport);
+      window.removeEventListener('resize', syncChatViewport);
+      window.removeEventListener('orientationchange', syncChatViewport);
+      body.classList.remove('chat-locked');
+      body.style.position = previousBodyStyle.position;
+      body.style.top = previousBodyStyle.top;
+      body.style.left = previousBodyStyle.left;
+      body.style.right = previousBodyStyle.right;
+      body.style.width = previousBodyStyle.width;
+      body.style.overflow = previousBodyStyle.overflow;
+      root.style.removeProperty('--chat-viewport-height');
+      root.style.removeProperty('--chat-viewport-top');
+      window.scrollTo(0, scrollY);
+    };
+  }, [chatModalItem]);
+
   // Help Center & Chat IA state
   interface SuccessRedeemData {
     item: DonationItem;
@@ -5666,7 +5722,10 @@ export default function App() {
                     type="text"
                     value={chatInputText}
                     onChange={(e) => setChatInputText(e.target.value)}
-                    onBlur={() => window.scrollTo(0, 0)}
+                    onBlur={() => {
+                      window.scrollTo(0, 0);
+                      window.requestAnimationFrame(() => window.scrollTo(0, 0));
+                    }}
                     placeholder="Escreva uma mensagem..."
                     className="w-auto min-w-0 flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                   />
