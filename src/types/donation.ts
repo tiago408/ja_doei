@@ -25,6 +25,17 @@ export interface DonationItem {
   userLocation?: string;
   isLargeItem?: boolean;
   size?: string;
+  trackingUrl?: string;
+  rescueOrder?: {
+    pickupDate?: string;
+    pickupTimeWindow?: string;
+    hasExtraHelper?: boolean;
+    extraHelperFee?: number;
+    freightPrice?: number;
+    totalFreightPrice?: number;
+    paymentMethod?: string;
+    trackingUrl?: string;
+  };
 }
 
 export interface FreightOption {

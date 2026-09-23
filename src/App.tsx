@@ -278,6 +278,8 @@ export default function App() {
             receiverId: data.receiverId || null,
             userLocation: data.userLocation || data.location || undefined,
             isLargeItem: data.isLargeItem === true,
+            trackingUrl: data.trackingUrl || data.rescueOrder?.trackingUrl || undefined,
+            rescueOrder: data.rescueOrder || undefined,
             isFavorite: false,
             isRedeemed: ['reserved', 'completed'].includes(data.status || 'available')
           }
@@ -1406,6 +1408,63 @@ export default function App() {
       document.body.style.overflow = '';
     };
   }, [isAnyOverlayOpen]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const visualViewport = window.visualViewport;
+
+    const setVisualHeight = () => {
+      const nextHeight = visualViewport?.height || window.innerHeight;
+      root.style.setProperty('--app-visual-height', `${nextHeight}px`);
+    };
+
+    const restoreVisualHeight = () => {
+      document.body.classList.remove('keyboard-active');
+      root.style.setProperty('--app-visual-height', '100dvh');
+      window.scrollTo({ top: window.scrollY, behavior: 'smooth' });
+    };
+
+    const isFocusableField = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      const tagName = target.tagName.toLowerCase();
+      return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
+    };
+
+    const handleFocusIn = (event: FocusEvent) => {
+      if (!isFocusableField(event.target)) return;
+      document.body.classList.add('keyboard-active');
+      setVisualHeight();
+      window.setTimeout(() => {
+        if (event.target instanceof HTMLElement) {
+          event.target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+        }
+      }, 120);
+    };
+
+    const handleFocusOut = () => {
+      window.setTimeout(restoreVisualHeight, 120);
+    };
+
+    const handleViewportResize = () => {
+      if (document.body.classList.contains('keyboard-active')) {
+        setVisualHeight();
+      }
+    };
+
+    document.addEventListener('focusin', handleFocusIn);
+    document.addEventListener('focusout', handleFocusOut);
+    visualViewport?.addEventListener('resize', handleViewportResize);
+    visualViewport?.addEventListener('scroll', handleViewportResize);
+
+    return () => {
+      document.removeEventListener('focusin', handleFocusIn);
+      document.removeEventListener('focusout', handleFocusOut);
+      visualViewport?.removeEventListener('resize', handleViewportResize);
+      visualViewport?.removeEventListener('scroll', handleViewportResize);
+      document.body.classList.remove('keyboard-active');
+      root.style.setProperty('--app-visual-height', '100dvh');
+    };
+  }, []);
 
   const [chatModalItem, setChatModalItem] = useState<DonationItem | null>(null);
   const [chatPartner, setChatPartner] = useState<{ id: string; name: string; avatar?: string } | null>(null);
@@ -2779,13 +2838,6 @@ export default function App() {
     }
   };
 
-  const handleCallLalamove = (item: DonationItem) => {
-    const lalamoveUrl = new URL('https://www.lalamove.com/pt-br/');
-    lalamoveUrl.searchParams.set('pickupAddress', item.location);
-    lalamoveUrl.searchParams.set('item', item.title);
-    window.open(lalamoveUrl.toString(), '_blank', 'noopener,noreferrer');
-  };
-
   const handleOpenCheckoutChat = () => {
     if (!selectedItemForRedeem) return;
     handleStartChat(selectedItemForRedeem);
@@ -3008,7 +3060,7 @@ export default function App() {
     <div className="min-h-screen w-full overflow-x-hidden bg-[#e2ded0] flex justify-center items-start sm:py-4 text-slate-800 antialiased select-none">
       
       {/* Container Principal (Responsivo) */}
-      <div className="w-full max-w-md bg-[#F5F0E1] min-h-screen sm:min-h-[844px] sm:rounded-[32px] sm:shadow-2xl overflow-hidden flex flex-col relative">
+      <div className="w-full max-w-md bg-[#F5F0E1] min-h-[100dvh] sm:min-h-[844px] sm:rounded-[32px] sm:shadow-2xl overflow-hidden flex flex-col relative transition-[min-height] duration-200">
         
         {/* SPLASH SCREEN (Tela de Abertura) */}
         <AnimatePresence>
@@ -3932,14 +3984,25 @@ export default function App() {
                           </div>
                         )}
 
-                        {item.isLargeItem && user?.uid === item.receiverId && (
-                          <button
-                            type="button"
-                            onClick={() => handleCallLalamove(item)}
-                            className="w-full px-2 py-2 rounded-md bg-[#14A76C] hover:bg-[#108958] text-white text-[10px] font-bold transition-colors"
+                        {item.isLargeItem && user?.uid === item.receiverId && item.rescueOrder?.pickupDate && item.rescueOrder?.pickupTimeWindow && (
+                          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-[10px] text-emerald-800">
+                            <p className="font-extrabold">Coleta agendada via Carreto</p>
+                            <p className="mt-0.5 leading-snug">
+                              {item.rescueOrder.pickupDate} ({item.rescueOrder.pickupTimeWindow})
+                              {item.rescueOrder.hasExtraHelper ? ' · Ajudante extra incluso' : ''}
+                            </p>
+                          </div>
+                        )}
+
+                        {item.isLargeItem && user?.uid === item.receiverId && item.trackingUrl && (
+                          <a
+                            href={item.trackingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full px-2 py-2 rounded-md bg-[#14A76C] hover:bg-[#108958] text-white text-[10px] font-bold transition-colors text-center"
                           >
-                            Chamar Carreto / Utilitário
-                          </button>
+                            Acompanhar Motorista em Rota
+                          </a>
                         )}
 
                         {item.status === 'reserved' && user?.uid === item.userId && (
@@ -5016,12 +5079,12 @@ export default function App() {
         {/* MODAL 2: CONFIRMAÇÃO DE RESGATE (FLUXO FINAL) */}
         <AnimatePresence>
           {selectedItemForRedeem && (
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs keyboard-modal">
               <motion.div
                 initial={{ opacity: 0, y: 120 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 120 }}
-                className="w-full sm:max-w-md bg-white rounded-t-[32px] sm:rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border-0"
+                className="w-full sm:max-w-md bg-white rounded-t-[32px] sm:rounded-3xl shadow-2xl flex flex-col max-h-[90dvh] overflow-hidden border-0 keyboard-panel"
               >
                 {/* Fixed Header Bar */}
                 <div className="p-4 pb-3 border-b border-slate-100 shrink-0 bg-white z-10 flex flex-col gap-2.5">
@@ -5181,8 +5244,8 @@ export default function App() {
                             <Clock className="w-4 h-4 text-[#14A76C] shrink-0" />
                           </div>
 
-                          <div className="grid grid-cols-2 gap-2">
-                            <label className="text-[10px] font-bold text-slate-600 space-y-1">
+                          <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+                            <label className="w-full sm:flex-1 sm:min-w-0 text-[10px] font-bold text-slate-600 space-y-1">
                               <span>Data de Coleta</span>
                               <input
                                 type="date"
@@ -5193,7 +5256,7 @@ export default function App() {
                               />
                             </label>
 
-                            <label className="text-[10px] font-bold text-slate-600 space-y-1">
+                            <label className="w-full sm:flex-1 sm:min-w-0 text-[10px] font-bold text-slate-600 space-y-1">
                               <span>Janela de Horário</span>
                               <select
                                 value={pickupTimeWindow}
@@ -5564,12 +5627,12 @@ export default function App() {
         {/* MODAL 3: CONVERSAR COM DOADOR (SIMULATION CHAT) */}
         <AnimatePresence>
           {chatModalItem && (
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-2 bg-slate-900/60 backdrop-blur-xs">
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-2 bg-slate-900/60 backdrop-blur-xs keyboard-modal">
               <motion.div
                 initial={{ opacity: 0, y: 120 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 120 }}
-                className="w-full sm:max-w-md bg-white rounded-t-[32px] sm:rounded-3xl p-4 shadow-2xl h-[75vh] flex flex-col border-0"
+                className="w-full sm:max-w-md bg-white rounded-t-[32px] sm:rounded-3xl p-4 shadow-2xl h-[75dvh] max-h-[75dvh] flex flex-col border-0 keyboard-panel"
               >
                 {/* Chat Header */}
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -7672,13 +7735,18 @@ export default function App() {
 
                 {/* Status / Próximos Passos Banner */}
                 {(() => {
+                  const isLalamoveFreight = /lalamove|carreto|utilit/i.test(successRedeemData.freightName || successRedeemData.carrierName || '');
                   return (
                     <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200 my-3 flex items-center gap-3">
                       <div className="bg-emerald-500 text-white p-2 rounded-xl text-lg">📦</div>
                       <div>
-                        <p className="text-xs font-bold text-emerald-900">Status: Envio Padrão / Coleta Agendada</p>
+                        <p className="text-xs font-bold text-emerald-900">
+                          {isLalamoveFreight ? 'Status: Coleta Agendada via Carreto' : 'Status: Envio Padrão / Coleta Agendada'}
+                        </p>
                         <p className="text-xs text-emerald-700 mt-1 leading-relaxed">
-                          O doador foi notificado e tem até 48h para embalar e agendar a entrega do item.
+                          {isLalamoveFreight
+                            ? `Coleta confirmada com o doador para o dia ${successRedeemData.pickupDate} (${successRedeemData.pickupTimeWindow}). O motorista fará a retirada no local.`
+                            : 'O doador foi notificado e tem até 48h para embalar e agendar a entrega do item.'}
                         </p>
                       </div>
                     </div>
