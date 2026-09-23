@@ -22,6 +22,7 @@ export interface LalamoveQuoteResult {
   currency: string;
   lalamoveValue: number;
   finalValue: number;
+  isSimulated?: boolean;
   serviceType: string;
   expiresAt: string | null;
   stopIds: string[];

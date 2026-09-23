@@ -1291,6 +1291,19 @@ export default function App() {
   const [cardExpiry, setCardExpiry] = useState<string>('12/28');
   const [cardCvv, setCardCvv] = useState<string>('892');
   const [isInsuranceSelected, setIsInsuranceSelected] = useState<boolean>(false);
+  const [pickupDate, setPickupDate] = useState<string>('');
+  const [pickupTimeWindow, setPickupTimeWindow] = useState<string>('');
+  const [hasAlignedPickupInChat, setHasAlignedPickupInChat] = useState<boolean>(false);
+  const [hasExtraHelper, setHasExtraHelper] = useState<boolean>(false);
+
+  const todayInputValue = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  useEffect(() => {
+    setPickupDate('');
+    setPickupTimeWindow('');
+    setHasAlignedPickupInChat(false);
+    setHasExtraHelper(false);
+  }, [selectedItemForRedeem?.id]);
 
   // Premium & Store (Quartinho da Bagunça) State
   const [isPremium, setIsPremium] = useState<boolean>(false);
@@ -1407,6 +1420,10 @@ export default function App() {
     orderNumber: string;
     creditsUsed: number;
     freightPrice: number;
+    pickupDate: string;
+    pickupTimeWindow: string;
+    hasExtraHelper: boolean;
+    extraHelperFee: number;
     cashComplement: number;
     insuranceFee: number;
     totalCashPaid: number;
@@ -2278,7 +2295,8 @@ export default function App() {
 
   // Copy PIX Code
   const handleCopyPixCode = () => {
-    const pixKey = `00020126580014BR.GOV.BCB.PIX0136jadoei-frete-pagamento-20265204000053039865405${currentSelectedFreight.price.toFixed(2)}5802BR`;
+    const checkoutFreightAmount = currentSelectedFreight.price + (hasExtraHelper ? 15.00 : 0) + (isInsuranceSelected ? 3.90 : 0);
+    const pixKey = `00020126580014BR.GOV.BCB.PIX0136jadoei-frete-pagamento-20265204000053039865405${checkoutFreightAmount.toFixed(2)}5802BR`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(pixKey);
     }
@@ -2768,17 +2786,30 @@ export default function App() {
     window.open(lalamoveUrl.toString(), '_blank', 'noopener,noreferrer');
   };
 
+  const handleOpenCheckoutChat = () => {
+    if (!selectedItemForRedeem) return;
+    handleStartChat(selectedItemForRedeem);
+  };
+
   const handleConfirmRedeem = async () => {
     if (!selectedItemForRedeem || !user) return;
 
-    if (selectedItemForRedeem.isLargeItem && !lalamoveQuote?.quotationId) {
+    const isLalamoveFallbackQuote = selectedItemForRedeem.isLargeItem && lalamoveQuote?.isSimulated;
+    if (selectedItemForRedeem.isLargeItem && !lalamoveQuote?.quotationId && !isLalamoveFallbackQuote) {
       showToast('Cote o carreto com a Lalamove antes de confirmar o resgate deste item.', 'error');
+      return;
+    }
+
+    if (!pickupDate || !pickupTimeWindow || !hasAlignedPickupInChat) {
+      showToast('Escolha a data, a janela de coleta e confirme o alinhamento com o doador no chat.', 'error');
       return;
     }
 
     const itemsToRedeem = checkoutItems.length ? checkoutItems : [selectedItemForRedeem];
     const itemCredits = itemsToRedeem.reduce((total, item) => total + item.credits, 0);
     const donorId = selectedItemForRedeem.userId;
+    const extraHelperFee = hasExtraHelper ? 15.00 : 0;
+    const freightPriceWithHelper = currentSelectedFreight.price + extraHelperFee;
 
     if (!donorId) {
       showToast('Não foi possível identificar o doador deste item.', 'error');
@@ -2808,6 +2839,16 @@ export default function App() {
           updateDoc(doc(db, 'donations', item.id), {
             status: 'reserved',
             receiverId: user.uid,
+            rescueOrder: {
+              pickupDate,
+              pickupTimeWindow,
+              hasExtraHelper,
+              extraHelperFee,
+              freightPrice: currentSelectedFreight.price,
+              totalFreightPrice: freightPriceWithHelper,
+              paymentMethod,
+              updatedAt: serverTimestamp()
+            },
           })
         )
       );
@@ -2849,6 +2890,15 @@ export default function App() {
                 isRedeemed: true,
                 status: 'reserved',
                 receiverId: user.uid,
+                rescueOrder: {
+                  pickupDate,
+                  pickupTimeWindow,
+                  hasExtraHelper,
+                  extraHelperFee,
+                  freightPrice: currentSelectedFreight.price,
+                  totalFreightPrice: freightPriceWithHelper,
+                  paymentMethod
+                },
               }
             : item
         )
@@ -2865,10 +2915,14 @@ export default function App() {
         item: redeemedItem,
         orderNumber,
         creditsUsed: itemCredits,
-        freightPrice: currentSelectedFreight.price,
+        freightPrice: freightPriceWithHelper,
+        pickupDate,
+        pickupTimeWindow,
+        hasExtraHelper,
+        extraHelperFee,
         cashComplement: 0,
         insuranceFee: isInsuranceSelected ? 3.90 : 0,
-        totalCashPaid: isInsuranceSelected ? currentSelectedFreight.price + 3.90 : currentSelectedFreight.price,
+        totalCashPaid: isInsuranceSelected ? freightPriceWithHelper + 3.90 : freightPriceWithHelper,
         deliveryType: 'standard',
         carrierName: currentSelectedFreight.carrierName || currentSelectedFreight.name,
         freightType: currentSelectedFreight.type,
@@ -5034,8 +5088,10 @@ export default function App() {
                   const creditsUsed = Math.max(0, Math.min(safeItemCredits, itemCost));
                   const cashComplement = (itemCost - creditsUsed) * 1.00;
                   const freightFee = currentSelectedFreight.price;
+                  const extraHelperFee = hasExtraHelper ? 15.00 : 0;
                   const insuranceFee = isInsuranceSelected ? 3.90 : 0;
-                  const totalCashToPay = cashComplement + freightFee + insuranceFee;
+                  const totalCashToPay = cashComplement + freightFee + extraHelperFee + insuranceFee;
+                  const canConfirmCheckout = Boolean(pickupDate && pickupTimeWindow && hasAlignedPickupInChat);
 
                   return (
                     <>
@@ -5111,13 +5167,105 @@ export default function App() {
                           </button>
                         </div>
 
+                        {/* Agendamento da coleta */}
+                        <div className="p-3 bg-white rounded-2xl border border-slate-200 space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <span className="text-[9px] text-slate-500 font-extrabold uppercase tracking-wider block">
+                                Agendamento da Coleta
+                              </span>
+                              <p className="text-xs font-bold text-slate-800">
+                                Combine a retirada com o doador antes do pagamento
+                              </p>
+                            </div>
+                            <Clock className="w-4 h-4 text-[#14A76C] shrink-0" />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="text-[10px] font-bold text-slate-600 space-y-1">
+                              <span>Data de Coleta</span>
+                              <input
+                                type="date"
+                                min={todayInputValue}
+                                value={pickupDate}
+                                onChange={(e) => setPickupDate(e.target.value)}
+                                className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/30"
+                              />
+                            </label>
+
+                            <label className="text-[10px] font-bold text-slate-600 space-y-1">
+                              <span>Janela de Horário</span>
+                              <select
+                                value={pickupTimeWindow}
+                                onChange={(e) => setPickupTimeWindow(e.target.value)}
+                                className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/30"
+                              >
+                                <option value="">Selecionar</option>
+                                <option value="08:00 - 12:00">08:00 - 12:00</option>
+                                <option value="12:00 - 16:00">12:00 - 16:00</option>
+                                <option value="16:00 - 20:00">16:00 - 20:00</option>
+                              </select>
+                            </label>
+                          </div>
+
+                          <div className="flex items-start gap-2.5 rounded-xl bg-slate-50 border border-slate-200 p-2.5">
+                            <input
+                              type="checkbox"
+                              checked={hasAlignedPickupInChat}
+                              onChange={(e) => setHasAlignedPickupInChat(e.target.checked)}
+                              className="mt-0.5 accent-[#14A76C] w-4 h-4 cursor-pointer shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <label className="text-xs font-bold text-slate-800 leading-snug block">
+                                Já alinhei o dia e horário de coleta com o doador no Chat
+                              </label>
+                              <button
+                                type="button"
+                                onClick={handleOpenCheckoutChat}
+                                className="mt-1 text-[10px] font-extrabold text-[#14A76C] hover:underline inline-flex items-center gap-1"
+                              >
+                                <MessageCircle className="w-3 h-3" />
+                                <span>Abrir Chat</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Opcional de ajudante extra */}
+                        <div
+                          onClick={() => setHasExtraHelper(!hasExtraHelper)}
+                          className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                            hasExtraHelper
+                              ? 'bg-emerald-50 border-[#14A76C] shadow-2xs'
+                              : 'bg-slate-50 border-slate-200 hover:bg-slate-100/70'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={hasExtraHelper}
+                            onChange={(e) => setHasExtraHelper(e.target.checked)}
+                            className="mt-0.5 accent-[#14A76C] w-4 h-4 cursor-pointer"
+                          />
+                          <div className="text-xs">
+                            <span className="font-extrabold text-slate-800 flex items-center gap-1">
+                              <span>Incluir Ajudante Extra para carregar</span>
+                              <span className="text-[#14A76C] bg-emerald-100 px-1.5 py-0.2 rounded text-[10px] font-black">
+                                + R$ 15,00
+                              </span>
+                            </span>
+                            <p className="text-[10px] text-slate-500 mt-0.5">
+                              Recomendado para móveis, eletros ou itens que precisam de apoio no carregamento.
+                            </p>
+                          </div>
+                        </div>
+
                         {/* Pagamento do Frete (Simulação) */}
                         <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                               <span>Pagamento do Frete</span>
                               <span className="text-[10px] font-extrabold text-[#FF8243] bg-[#FF8243]/10 px-2 py-0.5 rounded-full">
-                                R$ {currentSelectedFreight.price.toFixed(2).replace('.', ',')}
+                                R$ {(freightFee + extraHelperFee).toFixed(2).replace('.', ',')}
                               </span>
                             </span>
                           </div>
@@ -5327,6 +5475,13 @@ export default function App() {
                             </span>
                           </div>
 
+                          {hasExtraHelper && (
+                            <div className="flex justify-between items-center text-emerald-800 font-semibold">
+                              <span className="text-left pr-2">Ajudante Extra Lalamove:</span>
+                              <span className="text-right shrink-0 font-bold">R$ 15,00</span>
+                            </div>
+                          )}
+
                           {isInsuranceSelected && (
                             <div className="flex justify-between items-center text-emerald-800 font-semibold">
                               <span className="text-left pr-2">Proteção Seguro (Troca Segura):</span>
@@ -5389,7 +5544,8 @@ export default function App() {
                             <button
                               type="button"
                               onClick={handleConfirmRedeem}
-                              className="flex-1 sm:flex-none px-5 py-3 rounded-2xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                              disabled={!canConfirmCheckout}
+                              className="flex-1 sm:flex-none px-5 py-3 rounded-2xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#14A76C] disabled:active:scale-100"
                             >
                               <Check className="w-4 h-4" />
                               <span>Confirmar Resgate (R$ {totalCashToPay.toFixed(2).replace('.', ',')})</span>
