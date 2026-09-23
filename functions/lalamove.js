@@ -123,12 +123,6 @@ exports.quoteLalamove = onRequest({ cors: true, secrets: [LALAMOVE_API_KEY, LALA
           address: destination.address || ""
         }
       ],
-      item: {
-        quantity: "1",
-        weight: "LESS_THAN_300_KG",
-        categories: ["FURNITURE"],
-        handlingInstructions: []
-      },
       ...(sender?.phone
         ? { sender: { stopId: "0", name: sender.name || "Doador Já Doei", phone: toInternationalPhone(sender.phone) } }
         : {}),
