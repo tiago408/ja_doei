@@ -8,20 +8,11 @@ const crypto = require("crypto");
 const LALAMOVE_API_KEY = defineSecret("LALAMOVE_API_KEY");
 const LALAMOVE_API_SECRET = defineSecret("LALAMOVE_API_SECRET");
 
-const LALAMOVE_MARKET = process.env.LALAMOVE_MARKET || "BR";
 // Sandbox: https://rest.sandbox.lalamove.com | Produção: https://rest.lalamove.com
 const LALAMOVE_BASE_URL = process.env.LALAMOVE_BASE_URL || "https://rest.sandbox.lalamove.com";
 
 // Margem de 20% aplicada pela plataforma sobre o valor retornado pela Lalamove
 const PLATFORM_MARKUP = 1.20;
-
-// Sandbox só aceita LALAGO ou VAN para cotação de itens grandes
-const ALLOWED_VEHICLE_TYPES = ["VAN", "LALAGO"];
-
-function resolveServiceType(vehicleType) {
-  const normalized = String(vehicleType || "").toUpperCase();
-  return ALLOWED_VEHICLE_TYPES.includes(normalized) ? normalized : "VAN";
-}
 
 // Formata o telefone no padrão internacional exigido pela Lalamove (ex: +5511981998847)
 function toInternationalPhone(phone) {
@@ -50,33 +41,32 @@ function resolveLalamoveCredentials() {
 }
 
 // Assinatura HMAC-SHA256 exigida pela API da Lalamove (header Authorization: HMAC {key}:{timestamp}:{signature})
-function signLalamoveRequest({ method, path, body, apiSecret }) {
+function signLalamoveRequest({ method, path, bodyStr, apiSecret }) {
   const timestamp = Date.now().toString();
-  const rawBody = body ? JSON.stringify(body) : "";
-  const rawSignature = `${timestamp}\r\n${method}\r\n${path}\r\n\r\n${rawBody}`;
+  const rawSignature = `${timestamp}\r\n${method}\r\n${path}\r\n\r\n${bodyStr}`;
   const signature = crypto.createHmac("sha256", apiSecret).update(rawSignature).digest("hex");
   return { timestamp, signature };
 }
 
-async function callLalamove({ method, path, body, apiKey, apiSecret }) {
-  const { timestamp, signature } = signLalamoveRequest({ method, path, body, apiSecret });
+async function callLalamove({ method, path, payload, apiKey, apiSecret }) {
+  const bodyStr = JSON.stringify(payload);
+  const { timestamp, signature } = signLalamoveRequest({ method, path, bodyStr, apiSecret });
 
   const response = await fetch(`${LALAMOVE_BASE_URL}${path}`, {
     method,
     headers: {
-      Authorization: `HMAC ${apiKey}:${timestamp}:${signature}`,
       "Content-Type": "application/json",
-      Accept: "application/json",
-      Market: LALAMOVE_MARKET
+      Authorization: `HMAC ${apiKey}:${timestamp}:${signature}`,
+      Market: "BR_SPO"
     },
-    body: body ? JSON.stringify(body) : undefined
+    body: bodyStr
   });
 
-  const payload = await response.json().catch(() => null);
+  const responsePayload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new LalamoveRequestError(`Lalamove respondeu HTTP ${response.status}`, response.status, payload);
+    throw new LalamoveRequestError(`Lalamove respondeu HTTP ${response.status}`, response.status, responsePayload);
   }
-  return payload;
+  return responsePayload;
 }
 
 // Loga o detalhe exato do erro (corpo de resposta da Lalamove quando disponível) nos Firebase Logs
@@ -101,45 +91,37 @@ exports.quoteLalamove = onRequest({ cors: true, secrets: [LALAMOVE_API_KEY, LALA
     return;
   }
 
-  const { origin, destination, vehicleType, sender, recipient } = req.body?.data || req.body || {};
+  const { origin, destination } = req.body?.data || req.body || {};
   if (!origin?.lat || !origin?.lng || !destination?.lat || !destination?.lng) {
     res.status(400).json({ error: { message: "Informe as coordenadas (lat/lng) de origem e destino." } });
     return;
   }
 
-  const serviceType = resolveServiceType(vehicleType);
-  const body = {
+  const payload = {
     data: {
-      serviceType,
+      serviceType: "LALAGO",
       language: "pt_BR",
-      market: "BR_SPO",
       stops: [
         {
-          coordinates: { lat: String(Number(origin.lat)), lng: String(Number(origin.lng)) },
-          address: origin.address || ""
+          coordinates: { lat: String(parseFloat(origin.lat)), lng: String(parseFloat(origin.lng)) },
+          address: origin.address || "Origem, SP"
         },
         {
-          coordinates: { lat: String(Number(destination.lat)), lng: String(Number(destination.lng)) },
-          address: destination.address || ""
+          coordinates: { lat: String(parseFloat(destination.lat)), lng: String(parseFloat(destination.lng)) },
+          address: destination.address || "Destino, SP"
         }
-      ],
-      ...(sender?.phone
-        ? { sender: { stopId: "0", name: sender.name || "Doador Já Doei", phone: toInternationalPhone(sender.phone) } }
-        : {}),
-      ...(recipient?.phone
-        ? { recipients: [{ stopId: "1", name: recipient.name || "Recebedor Já Doei", phone: toInternationalPhone(recipient.phone) }] }
-        : {})
+      ]
     }
   };
 
-  console.log("Payload Lalamove:", JSON.stringify(body));
+  console.log("Payload Lalamove:", JSON.stringify(payload));
 
   try {
     const { apiKey, apiSecret } = resolveLalamoveCredentials();
     const result = await callLalamove({
       method: "POST",
       path: "/v3/quotations",
-      body,
+      payload,
       apiKey,
       apiSecret
     });
@@ -154,12 +136,13 @@ exports.quoteLalamove = onRequest({ cors: true, secrets: [LALAMOVE_API_KEY, LALA
         currency: quotation?.priceBreakdown?.currency || "BRL",
         lalamoveValue,
         finalValue,
-        serviceType,
+        serviceType: "LALAGO",
         expiresAt: quotation?.expiresAt || null,
         stopIds: (quotation?.stops || []).map((stop) => stop.stopId)
       }
     });
   } catch (error) {
+    console.error("LALAMOVE ERROR BODY:", error.response?.data);
     console.log("Status retornado Lalamove:", error.response?.status, error.response?.data);
     const lalamoveErrorBody = error?.details || error?.message || "Erro desconhecido";
     console.error("LALAMOVE RESPONSE ERROR:", JSON.stringify(lalamoveErrorBody));
@@ -182,7 +165,7 @@ exports.createLalamoveOrder = onCall({ secrets: [LALAMOVE_API_KEY, LALAMOVE_API_
   }
 
   const [senderStopId, recipientStopId] = Array.isArray(stopIds) ? stopIds : [];
-  const body = {
+  const payload = {
     data: {
       quotationId,
       sender: { stopId: senderStopId, name: sender.name, phone: toInternationalPhone(sender.phone) },
@@ -195,7 +178,7 @@ exports.createLalamoveOrder = onCall({ secrets: [LALAMOVE_API_KEY, LALAMOVE_API_
     const result = await callLalamove({
       method: "POST",
       path: "/v3/orders",
-      body,
+      payload,
       apiKey,
       apiSecret
     });
