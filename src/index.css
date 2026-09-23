@@ -19,6 +19,41 @@ input[type="radio"] {
   appearance: auto;
 }
 
+.chat-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+  z-index: 9999;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-bottom: 16px;
+}
+
+.chat-footer {
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  background-color: #ffffff;
+  padding: 8px 12px;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
 /* Esconde a barra de rolagem mantendo a rolagem ativa */
 .no-scrollbar::-webkit-scrollbar {
   display: none;

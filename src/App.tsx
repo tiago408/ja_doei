@@ -5570,7 +5570,7 @@ export default function App() {
         {/* TELA DE CHAT COM DOADOR */}
         <AnimatePresence>
           {chatModalItem && (
-            <div className="fixed left-0 top-0 z-[9999] flex h-[100dvh] w-[100vw] flex-col overflow-hidden bg-white">
+            <div className="chat-container">
               <motion.div
                 initial={{ opacity: 0, x: 40 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -5617,7 +5617,7 @@ export default function App() {
                 </div>
 
                 {/* Chat Messages */}
-                <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-3 space-y-2.5 bg-white [-webkit-overflow-scrolling:touch]">
+                <div className="chat-messages no-scrollbar px-4 py-3 space-y-2.5 bg-white">
                   {chatMessages.length === 0 ? (
                     <p className="text-[11px] text-slate-400 text-center py-6">
                       Envie uma mensagem para iniciar a conversa. O doador aparecerá aqui assim que responder.
@@ -5660,12 +5660,13 @@ export default function App() {
                 {/* Chat Input */}
                 <form
                   onSubmit={handleSendChatMessage}
-                  className="shrink-0 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-slate-100 flex items-center gap-2 bg-white"
+                  className="chat-footer border-t border-slate-100 flex items-center gap-2"
                 >
                   <input
                     type="text"
                     value={chatInputText}
                     onChange={(e) => setChatInputText(e.target.value)}
+                    onBlur={() => window.scrollTo(0, 0)}
                     placeholder="Escreva uma mensagem..."
                     className="w-auto min-w-0 flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/40"
                   />
