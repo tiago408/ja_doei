@@ -5195,7 +5195,7 @@ export default function App() {
                                 min={todayInputValue}
                                 value={pickupDate}
                                 onChange={(e) => setPickupDate(e.target.value)}
-                                className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/30"
+                                className="w-full max-w-full box-border px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/30"
                               />
                             </label>
 
@@ -5567,18 +5567,18 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {/* MODAL 3: CONVERSAR COM DOADOR (SIMULATION CHAT) */}
+        {/* TELA DE CHAT COM DOADOR */}
         <AnimatePresence>
           {chatModalItem && (
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-2 bg-slate-900/60 backdrop-blur-xs">
+            <div className="fixed inset-0 z-50 flex h-[100dvh] w-full bg-white">
               <motion.div
-                initial={{ opacity: 0, y: 120 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 120 }}
-                className="w-full sm:max-w-md bg-white rounded-t-[32px] sm:rounded-3xl p-4 shadow-2xl h-[75dvh] max-h-[75dvh] flex flex-col border-0"
+                initial={{ opacity: 0, x: 40 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 40 }}
+                className="flex h-[100dvh] w-full flex-col bg-white"
               >
                 {/* Chat Header */}
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-white">
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -5615,7 +5615,7 @@ export default function App() {
                 </div>
 
                 {/* Security Banner (fixed below header) */}
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 mx-4 my-2 text-[11px] text-amber-800 flex items-start gap-2">
+                <div className="shrink-0 bg-amber-50 border border-amber-200 rounded-xl p-2.5 mx-4 my-2 text-[11px] text-amber-800 flex items-start gap-2">
                   <span>⚠️</span>
                   <p>
                     <strong>Aviso de Segurança:</strong> Nunca compartilhe dados pessoais, telefone ou endereço. O Já Doei não realiza cobranças por fora e não se responsabiliza por combinados ou entregas feitas fora do aplicativo.
@@ -5623,7 +5623,7 @@ export default function App() {
                 </div>
 
                 {/* Chat Messages */}
-                <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-2.5 my-2">
+                <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-3 space-y-2.5 bg-white">
                   {chatMessages.length === 0 ? (
                     <p className="text-[11px] text-slate-400 text-center py-6">
                       Envie uma mensagem para iniciar a conversa. O doador aparecerá aqui assim que responder.
@@ -5666,7 +5666,7 @@ export default function App() {
                 {/* Chat Input */}
                 <form
                   onSubmit={handleSendChatMessage}
-                  className="pt-2 border-t border-slate-100 flex items-center gap-2"
+                  className="shrink-0 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-slate-100 flex items-center gap-2 bg-white"
                 >
                   <input
                     type="text"

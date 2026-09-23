@@ -4,6 +4,19 @@ input,
 select,
 textarea {
   font-size: 16px !important;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box !important;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  max-width: none;
+  -webkit-appearance: auto;
+  appearance: auto;
 }
 
 /* Esconde a barra de rolagem mantendo a rolagem ativa */
