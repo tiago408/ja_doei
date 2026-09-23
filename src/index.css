@@ -1,36 +1,9 @@
 @import "tailwindcss";
 
-:root {
-  --app-visual-height: 100dvh;
-}
-
-html,
-body,
-#root {
-  min-height: 100%;
-}
-
-@supports (height: 100dvh) {
-  html,
-  body,
-  #root {
-    min-height: 100dvh;
-  }
-}
-
-.keyboard-modal {
-  height: var(--app-visual-height, 100dvh);
-  min-height: var(--app-visual-height, 100dvh);
-  transition: height 180ms ease, min-height 180ms ease;
-}
-
-.keyboard-panel {
-  max-height: calc(var(--app-visual-height, 100dvh) - env(safe-area-inset-bottom));
-  transition: max-height 180ms ease;
-}
-
-body:not(.keyboard-active) {
-  --app-visual-height: 100dvh;
+input,
+select,
+textarea {
+  font-size: 16px !important;
 }
 
 /* Esconde a barra de rolagem mantendo a rolagem ativa */
@@ -40,13 +13,4 @@ body:not(.keyboard-active) {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
-}
-
-/* iOS Safari zooms in on focus when a field's font-size is below 16px and doesn't zoom back out on blur */
-@media (max-width: 767px) {
-  input,
-  select,
-  textarea {
-    font-size: 16px !important;
-  }
 }

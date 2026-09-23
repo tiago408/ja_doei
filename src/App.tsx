@@ -1409,63 +1409,6 @@ export default function App() {
     };
   }, [isAnyOverlayOpen]);
 
-  useEffect(() => {
-    const root = document.documentElement;
-    const visualViewport = window.visualViewport;
-
-    const setVisualHeight = () => {
-      const nextHeight = visualViewport?.height || window.innerHeight;
-      root.style.setProperty('--app-visual-height', `${nextHeight}px`);
-    };
-
-    const restoreVisualHeight = () => {
-      document.body.classList.remove('keyboard-active');
-      root.style.setProperty('--app-visual-height', '100dvh');
-      window.scrollTo({ top: window.scrollY, behavior: 'smooth' });
-    };
-
-    const isFocusableField = (target: EventTarget | null) => {
-      if (!(target instanceof HTMLElement)) return false;
-      const tagName = target.tagName.toLowerCase();
-      return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
-    };
-
-    const handleFocusIn = (event: FocusEvent) => {
-      if (!isFocusableField(event.target)) return;
-      document.body.classList.add('keyboard-active');
-      setVisualHeight();
-      window.setTimeout(() => {
-        if (event.target instanceof HTMLElement) {
-          event.target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
-        }
-      }, 120);
-    };
-
-    const handleFocusOut = () => {
-      window.setTimeout(restoreVisualHeight, 120);
-    };
-
-    const handleViewportResize = () => {
-      if (document.body.classList.contains('keyboard-active')) {
-        setVisualHeight();
-      }
-    };
-
-    document.addEventListener('focusin', handleFocusIn);
-    document.addEventListener('focusout', handleFocusOut);
-    visualViewport?.addEventListener('resize', handleViewportResize);
-    visualViewport?.addEventListener('scroll', handleViewportResize);
-
-    return () => {
-      document.removeEventListener('focusin', handleFocusIn);
-      document.removeEventListener('focusout', handleFocusOut);
-      visualViewport?.removeEventListener('resize', handleViewportResize);
-      visualViewport?.removeEventListener('scroll', handleViewportResize);
-      document.body.classList.remove('keyboard-active');
-      root.style.setProperty('--app-visual-height', '100dvh');
-    };
-  }, []);
-
   const [chatModalItem, setChatModalItem] = useState<DonationItem | null>(null);
   const [chatPartner, setChatPartner] = useState<{ id: string; name: string; avatar?: string } | null>(null);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -5079,12 +5022,12 @@ export default function App() {
         {/* MODAL 2: CONFIRMAÇÃO DE RESGATE (FLUXO FINAL) */}
         <AnimatePresence>
           {selectedItemForRedeem && (
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs keyboard-modal">
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
               <motion.div
                 initial={{ opacity: 0, y: 120 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 120 }}
-                className="w-full sm:max-w-md bg-white rounded-t-[32px] sm:rounded-3xl shadow-2xl flex flex-col max-h-[90dvh] overflow-hidden border-0 keyboard-panel"
+                className="w-full sm:max-w-md bg-white rounded-t-[32px] sm:rounded-3xl shadow-2xl flex flex-col max-h-[90dvh] overflow-hidden border-0"
               >
                 {/* Fixed Header Bar */}
                 <div className="p-4 pb-3 border-b border-slate-100 shrink-0 bg-white z-10 flex flex-col gap-2.5">
@@ -5261,7 +5204,7 @@ export default function App() {
                               <select
                                 value={pickupTimeWindow}
                                 onChange={(e) => setPickupTimeWindow(e.target.value)}
-                                className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/30"
+                                className="w-full py-2 pl-3 pr-9 box-border bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#14A76C]/30"
                               >
                                 <option value="">Selecionar</option>
                                 <option value="08:00 - 12:00">08:00 - 12:00</option>
@@ -5627,12 +5570,12 @@ export default function App() {
         {/* MODAL 3: CONVERSAR COM DOADOR (SIMULATION CHAT) */}
         <AnimatePresence>
           {chatModalItem && (
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-2 bg-slate-900/60 backdrop-blur-xs keyboard-modal">
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-2 bg-slate-900/60 backdrop-blur-xs">
               <motion.div
                 initial={{ opacity: 0, y: 120 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 120 }}
-                className="w-full sm:max-w-md bg-white rounded-t-[32px] sm:rounded-3xl p-4 shadow-2xl h-[75dvh] max-h-[75dvh] flex flex-col border-0 keyboard-panel"
+                className="w-full sm:max-w-md bg-white rounded-t-[32px] sm:rounded-3xl p-4 shadow-2xl h-[75dvh] max-h-[75dvh] flex flex-col border-0"
               >
                 {/* Chat Header */}
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
