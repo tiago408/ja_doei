@@ -35,16 +35,16 @@ class LalamoveRequestError extends Error {
 // Resolve as credenciais a partir da Secret Manager, com fallback para variáveis de ambiente
 // (LALAMOVE_API_KEY/LALAMOVE_API_SECRET, aceitando também LALAMOVE_SECRET como alias legado).
 function resolveLalamoveCredentials() {
-  const apiKey = LALAMOVE_API_KEY.value() || process.env.LALAMOVE_API_KEY;
-  const apiSecret = LALAMOVE_API_SECRET.value() || process.env.LALAMOVE_API_SECRET || process.env.LALAMOVE_SECRET;
+  const apiKey = (LALAMOVE_API_KEY.value() || process.env.LALAMOVE_API_KEY || "").trim();
+  const apiSecret = (LALAMOVE_API_SECRET.value() || process.env.LALAMOVE_API_SECRET || process.env.LALAMOVE_SECRET || "").trim();
   return { apiKey, apiSecret };
 }
 
 // Assinatura HMAC-SHA256 exigida pela API da Lalamove (header Authorization: HMAC {key}:{timestamp}:{signature})
 function signLalamoveRequest({ method, path, bodyStr, apiSecret }) {
   const timestamp = Date.now().toString();
-  const rawSignature = `${timestamp}\r\n${method}\r\n${path}\r\n\r\n${bodyStr}`;
-  const signature = crypto.createHmac("sha256", apiSecret).update(rawSignature).digest("hex");
+  const rawToSign = `${timestamp}\r\n${method}\r\n${path}\r\n\r\n${bodyStr}`;
+  const signature = crypto.createHmac("sha256", apiSecret).update(rawToSign).digest("hex");
   return { timestamp, signature };
 }
 
@@ -64,6 +64,12 @@ async function callLalamove({ method, path, payload, apiKey, apiSecret }) {
 
   const responsePayload = await response.json().catch(() => null);
   if (!response.ok) {
+    console.error("Lalamove HTTP error detail:", {
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+      body: responsePayload
+    });
     throw new LalamoveRequestError(`Lalamove respondeu HTTP ${response.status}`, response.status, responsePayload);
   }
   return responsePayload;
