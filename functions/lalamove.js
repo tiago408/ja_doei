@@ -111,14 +111,15 @@ exports.quoteLalamove = onRequest({ cors: true, secrets: [LALAMOVE_API_KEY, LALA
     data: {
       serviceType,
       language: "pt_BR",
+      market: "BR_SPO",
       stops: [
         {
-          // lat/lng como string — formato exigido pelo schema da API Sandbox v3
-          coordinates: { lat: String(origin.lat), lng: String(origin.lng) },
+          // lat/lng com 6 casas decimais — formato exigido pelo schema da API Sandbox v3
+          coordinates: { lat: Number(origin.lat).toFixed(6), lng: Number(origin.lng).toFixed(6) },
           address: origin.address || ""
         },
         {
-          coordinates: { lat: String(destination.lat), lng: String(destination.lng) },
+          coordinates: { lat: Number(destination.lat).toFixed(6), lng: Number(destination.lng).toFixed(6) },
           address: destination.address || ""
         }
       ],
@@ -137,7 +138,7 @@ exports.quoteLalamove = onRequest({ cors: true, secrets: [LALAMOVE_API_KEY, LALA
     }
   };
 
-  console.log("Payload enviado Lalamove:", JSON.stringify(body));
+  console.log("Payload Lalamove:", JSON.stringify(body));
 
   try {
     const { apiKey, apiSecret } = resolveLalamoveCredentials();
