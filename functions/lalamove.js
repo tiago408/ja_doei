@@ -15,8 +15,8 @@ const LALAMOVE_BASE_URL = process.env.LALAMOVE_BASE_URL || "https://rest.sandbox
 // Margem de 20% aplicada pela plataforma sobre o valor retornado pela Lalamove
 const PLATFORM_MARKUP = 1.20;
 
-// Tipos de veículo aceitos para itens de grande porte (móveis/eletrodomésticos)
-const ALLOWED_VEHICLE_TYPES = ["MOTORCYCLE", "CAR", "VAN", "TRUCK", "LALAGO"];
+// Sandbox só aceita LALAGO ou VAN para cotação de itens grandes
+const ALLOWED_VEHICLE_TYPES = ["VAN", "LALAGO"];
 
 function resolveServiceType(vehicleType) {
   const normalized = String(vehicleType || "").toUpperCase();
@@ -113,12 +113,12 @@ exports.quoteLalamove = onRequest({ cors: true, secrets: [LALAMOVE_API_KEY, LALA
       language: "pt_BR",
       stops: [
         {
-          // lat/lng como número float — a Lalamove rejeita strings aqui
-          coordinates: { lat: Number(origin.lat), lng: Number(origin.lng) },
+          // lat/lng como string — formato exigido pelo schema da API Sandbox v3
+          coordinates: { lat: String(origin.lat), lng: String(origin.lng) },
           address: origin.address || ""
         },
         {
-          coordinates: { lat: Number(destination.lat), lng: Number(destination.lng) },
+          coordinates: { lat: String(destination.lat), lng: String(destination.lng) },
           address: destination.address || ""
         }
       ],
@@ -136,6 +136,8 @@ exports.quoteLalamove = onRequest({ cors: true, secrets: [LALAMOVE_API_KEY, LALA
         : {})
     }
   };
+
+  console.log("Payload enviado Lalamove:", JSON.stringify(body));
 
   try {
     const { apiKey, apiSecret } = resolveLalamoveCredentials();
