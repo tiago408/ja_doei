@@ -3104,7 +3104,7 @@ export default function App() {
 
               {/* Centro Absoluto - Garante o símbolo no meio exato da tela */}
               <div className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 transform flex-col items-center justify-center gap-3 w-full max-w-xs px-4">
-                <img src={simboloImg} alt="Já Doei" className="h-24 w-auto object-contain" />
+                <img src={simboloImg} alt="Já Doei" className="w-56 max-w-[78vw] h-auto object-contain" />
                 <p className="text-xs font-bold tracking-wider text-slate-700">
                   TROQUE, RESGATE, ECONOMIZE CIRCULANDO.
                 </p>
@@ -8025,7 +8025,7 @@ export default function App() {
 
                 {/* Topo */}
                 <div className="flex flex-col items-center text-center pt-2 pb-4">
-                  <img src={simboloImg} alt="Já Doei" className="h-12 w-auto object-contain mb-2" />
+                  <img src={simboloImg} alt="Já Doei" className="w-32 max-w-[48vw] h-auto object-contain mb-2" />
                   <p className="text-xs font-medium text-slate-500">
                     Entre para doar ou resgatar itens
                   </p>
