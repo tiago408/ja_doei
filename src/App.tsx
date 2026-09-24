@@ -99,6 +99,7 @@ import { registerPushNotifications, listenForForegroundMessages } from './servic
 import { DodoBoxInfoModal } from './components/DodoBoxInfoModal';
 import { SignUpModal } from './components/SignUpModal';
 import { EmailVerificationModal } from './components/EmailVerificationModal';
+import { LandingPage } from './components/LandingPage';
 import { useNavigate } from 'react-router-dom';
 import { checkUserIsAdmin } from './services/adminService';
 
@@ -202,7 +203,7 @@ const isAddressComplete = (address: UserAddress) =>
   Boolean(address.cidade.trim()) &&
   Boolean(address.estado.trim());
 
-export default function App() {
+function WebApp() {
   const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
   const [showSplash, setShowSplash] = useState<boolean>(true);
 
@@ -8201,4 +8202,31 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+function isMobileViewport() {
+  if (typeof window === 'undefined') return true;
+  const mobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(window.navigator.userAgent);
+  return mobileUserAgent || window.innerWidth < 768;
+}
+
+export default function App() {
+  const [shouldShowMobileApp, setShouldShowMobileApp] = useState(() => isMobileViewport());
+  const [isDesktopWebAppForced, setIsDesktopWebAppForced] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setShouldShowMobileApp(isMobileViewport());
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  if (!shouldShowMobileApp && !isDesktopWebAppForced) {
+    return <LandingPage onOpenWebApp={() => setIsDesktopWebAppForced(true)} />;
+  }
+
+  return <WebApp />;
 }
