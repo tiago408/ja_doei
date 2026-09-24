@@ -3103,9 +3103,9 @@ export default function App() {
               </div>
 
               {/* Centro Absoluto - Garante o símbolo no meio exato da tela */}
-              <div className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 transform flex-col items-center justify-center gap-3 w-full max-w-xs px-4">
-                <img src={simboloImg} alt="Já Doei" className="w-56 max-w-[78vw] h-auto object-contain" />
-                <p className="text-xs font-bold tracking-wider text-slate-700">
+              <div className="absolute top-1/2 left-1/2 flex w-56 max-w-[78vw] -translate-x-1/2 -translate-y-1/2 transform flex-col items-center justify-center gap-3">
+                <img src={simboloImg} alt="Já Doei" className="w-full h-auto translate-x-1 object-contain" />
+                <p className="w-full text-center text-xs font-bold tracking-wider text-slate-700">
                   TROQUE, RESGATE, ECONOMIZE CIRCULANDO.
                 </p>
               </div>
