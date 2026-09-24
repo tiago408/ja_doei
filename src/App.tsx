@@ -1803,6 +1803,30 @@ export default function App() {
     return item.userLocation || getProfileLocation();
   };
 
+  const formatPickupDate = (dateText?: string) => {
+    if (!dateText) return '';
+    const [year, month, day] = dateText.split('-').map(Number);
+    if (!year || !month || !day) return dateText;
+
+    const pickupDateValue = new Date(year, month - 1, day);
+    const today = new Date();
+    const isToday = pickupDateValue.toDateString() === today.toDateString();
+    const formattedDate = pickupDateValue.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: isToday ? undefined : 'numeric'
+    });
+
+    return isToday ? `Hoje, ${formattedDate}` : formattedDate;
+  };
+
+  const formatPickupTimeWindow = (timeWindow?: string) => {
+    if (!timeWindow) return '';
+    const [start, end] = timeWindow.split('-').map((part) => part.trim());
+    if (!start || !end) return timeWindow;
+    return `das ${start} às ${end}`;
+  };
+
   const applyCreditRange = (suggestedValue: number) => {
     const min = Math.max(1, Math.round(suggestedValue * 0.9));
     const max = Math.max(min, Math.round(suggestedValue * 1.1));
@@ -3983,26 +4007,39 @@ export default function App() {
                           </div>
                         )}
 
-                        {item.isLargeItem && user?.uid === item.receiverId && item.rescueOrder?.pickupDate && item.rescueOrder?.pickupTimeWindow && (
-                          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-[10px] text-emerald-800">
-                            <p className="font-extrabold">Coleta agendada via Carreto</p>
-                            <p className="mt-0.5 leading-snug">
-                              {item.rescueOrder.pickupDate} ({item.rescueOrder.pickupTimeWindow})
-                              {item.rescueOrder.hasExtraHelper ? ' · Ajudante extra incluso' : ''}
-                            </p>
-                          </div>
-                        )}
+                        {item.isLargeItem && (user?.uid === item.receiverId || user?.uid === item.userId) && item.rescueOrder?.pickupDate && item.rescueOrder?.pickupTimeWindow && (() => {
+                          const trackingUrl = item.trackingUrl || item.rescueOrder?.trackingUrl;
+                          const pickupDateLabel = formatPickupDate(item.rescueOrder.pickupDate);
+                          const pickupWindowLabel = formatPickupTimeWindow(item.rescueOrder.pickupTimeWindow);
 
-                        {item.isLargeItem && user?.uid === item.receiverId && item.trackingUrl && (
-                          <a
-                            href={item.trackingUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-full px-2 py-2 rounded-md bg-[#14A76C] hover:bg-[#108958] text-white text-[10px] font-bold transition-colors text-center"
-                          >
-                            Acompanhar Motorista em Rota
-                          </a>
-                        )}
+                          return (
+                            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-[10px] text-emerald-800 space-y-2">
+                              <div>
+                                <p className="font-extrabold">
+                                  {trackingUrl ? 'Motorista a Caminho!' : 'Coleta agendada via Carreto'}
+                                </p>
+                                <p className="mt-0.5 leading-snug">
+                                  {trackingUrl
+                                    ? `Coleta combinada para ${pickupDateLabel} (${pickupWindowLabel}). Acompanhe o motorista em rota.`
+                                    : `Agendado para ${pickupDateLabel} (${pickupWindowLabel}). O motorista será acionado no horário combinado.`}
+                                  {item.rescueOrder.hasExtraHelper ? ' Ajudante extra incluso.' : ''}
+                                </p>
+                              </div>
+
+                              {trackingUrl && (
+                                <a
+                                  href={trackingUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="w-full px-2 py-2 rounded-md bg-[#14A76C] hover:bg-[#108958] text-white text-[10px] font-bold transition-colors text-center inline-flex items-center justify-center gap-1"
+                                >
+                                  <MapPin className="w-3.5 h-3.5" />
+                                  <span>Acompanhar Motorista em Rota</span>
+                                </a>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {item.status === 'reserved' && user?.uid === item.userId && (
                           <span className="inline-flex items-center w-fit px-2 py-1 rounded-md text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200">
