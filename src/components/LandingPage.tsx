@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Apple, Camera, MessageCircle, QrCode, Smartphone, Truck } from 'lucide-react';
+import { Apple, Bell, BookOpen, Camera, ChevronRight, Coins, MapPin, MessageCircle, Mic, QrCode, Search, Smartphone, Sparkles, Truck } from 'lucide-react';
 import logoImg from '../assets/logo.png';
 import simboloImg from '../assets/simbolo.png';
 import dodoMascoteImg from '../assets/dodo-mascote.png';
@@ -121,26 +121,94 @@ export function LandingPage({ onOpenWebApp }: LandingPageProps) {
           <div className="absolute -left-8 top-16 h-40 w-40 rounded-full bg-[#FF8243]/20 blur-3xl" />
           <div className="absolute -right-10 bottom-20 h-48 w-48 rounded-full bg-[#14A76C]/20 blur-3xl" />
           <div className="relative w-[330px] rounded-[42px] border-[10px] border-slate-950 bg-slate-950 p-2 shadow-2xl shadow-slate-900/30">
-            <div className="overflow-hidden rounded-[30px] bg-[#F5F0E1]">
-              <div className="flex items-center justify-between bg-white px-4 py-4">
-                <img src={logoImg} alt="Já Doei" className="h-7 w-auto object-contain" />
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#14A76C]/10 text-xs font-black text-[#14A76C]">JD</div>
-              </div>
-              <div className="space-y-3 p-4">
-                <div className="rounded-2xl bg-white p-3 shadow-sm">
-                  <img src={dodoMascoteImg} alt="Dodô" className="mx-auto h-28 w-28 object-contain" />
-                  <p className="mt-2 text-center text-xs font-black text-slate-800">Feed de desapegos perto de você</p>
-                </div>
-                {['Cadeira de escritório', 'Livro infantil', 'Mesa lateral'].map((item, index) => (
-                  <div key={item} className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-sm">
-                    <div className={`h-12 w-12 rounded-xl ${index === 0 ? 'bg-emerald-100' : index === 1 ? 'bg-orange-100' : 'bg-sky-100'}`} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-black text-slate-800">{item}</p>
-                      <p className="text-[10px] font-semibold text-slate-400">Cotia, SP · disponível</p>
+            <div className="pointer-events-none absolute left-1/2 top-3 z-10 h-5 w-28 -translate-x-1/2 rounded-full bg-slate-950" />
+            <div className="aspect-[9/19.5] overflow-hidden rounded-[30px] bg-[#F5F0E1] shadow-inner">
+              <div className="h-full overflow-hidden bg-[#F7F2E6] text-slate-900">
+                <header className="rounded-b-2xl bg-[#14A76C] px-4 pb-4 pt-8 text-white shadow-md">
+                  <div className="mb-2 flex items-center justify-between">
+                    <img src={logoImg} alt="Já Doei" className="h-8 w-auto object-contain" />
+                    <div className="flex items-center gap-2">
+                      <div className="flex max-w-[142px] items-center gap-1 truncate rounded-full border border-white/15 bg-white/10 px-2 py-1.5 text-[10px] font-bold text-white">
+                        <MapPin className="h-3.5 w-3.5 shrink-0 text-[#FF8243]" />
+                        <span className="truncate">Cotia, SP</span>
+                      </div>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white">
+                        <Bell className="h-4 w-4" />
+                      </div>
                     </div>
-                    <span className="rounded-full bg-[#FF8243] px-2 py-1 text-[10px] font-black text-white">Resgatar</span>
                   </div>
-                ))}
+
+                  <div className="flex items-center justify-between rounded-2xl border border-white/20 bg-white/15 p-3 shadow-inner backdrop-blur-md">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <img src={dodoMascoteImg} alt="Dodo" className="h-9 w-9 shrink-0 object-contain" />
+                      <div className="min-w-0">
+                        <span className="block text-[11px] font-medium uppercase tracking-wider text-emerald-100">Seus Dodos</span>
+                        <div className="flex items-baseline gap-1.5 text-white">
+                          <span className="text-2xl font-black tracking-tight">250</span>
+                          <span className="text-xs font-semibold text-emerald-200">Dodos</span>
+                        </div>
+                        <span className="mt-0.5 block text-[10px] text-white/90 underline">O que é um Dodo? ⓘ</span>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1 rounded-xl bg-[#FF8243] px-3 py-2 text-xs font-bold text-white shadow-md">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Ganhar mais
+                    </div>
+                  </div>
+                </header>
+
+                <div className="space-y-2.5 px-4 pt-3">
+                  <div className="relative flex items-center">
+                    <Search className="pointer-events-none absolute left-3.5 h-4 w-4 text-slate-400" />
+                    <div className="w-full rounded-full border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-xs font-medium text-slate-400 shadow-sm">
+                      Buscar itens no Já Doei...
+                    </div>
+                  </div>
+
+                  <div className="relative min-h-[140px] overflow-hidden rounded-3xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50 p-3.5 shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
+                    <img
+                      src="/dodo-box.jpeg"
+                      alt="Dodô segurando uma caixa de papelão"
+                      className="absolute right-0 top-0 h-full w-[46%] object-cover object-center mix-blend-multiply"
+                    />
+                    <div className="relative z-10 w-[58%] space-y-1">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#FF8243] px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white shadow-xs">
+                        <Coins className="h-3 w-3" />
+                        Dica de Economia
+                      </span>
+                      <h3 className="pt-0.5 text-sm font-extrabold leading-tight tracking-tight text-slate-800">Conheça a Caixinha do Dodô!</h3>
+                      <p className="text-[11px] font-medium leading-snug text-slate-600">Resgate múltiplos itens do mesmo doador e pague um único frete.</p>
+                    </div>
+                    <div className="relative z-10 mt-2 inline-flex items-center gap-1 rounded-full bg-[#14A76C] px-3 py-1.5 text-[11px] font-bold text-white shadow-md">
+                      Entender como funciona
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { title: 'Livro Mundos Habitados', category: 'Livros', credits: 35, Icon: BookOpen, color: 'bg-amber-100 text-amber-700' },
+                      { title: 'Microfone de Lapela', category: 'Eletrônicos', credits: 90, Icon: Mic, color: 'bg-sky-100 text-sky-700' }
+                    ].map((item) => {
+                      const ItemIcon = item.Icon;
+                      return (
+                        <article key={item.title} className="overflow-hidden rounded-2xl bg-white shadow-sm">
+                          <div className={`flex h-20 items-center justify-center ${item.color}`}>
+                            <ItemIcon className="h-9 w-9" />
+                          </div>
+                          <div className="space-y-1 p-2.5">
+                            <p className="line-clamp-2 min-h-[28px] text-[10px] font-black leading-tight text-slate-800">{item.title}</p>
+                            <p className="truncate text-[9px] font-semibold text-slate-400">{item.category} · Cotia, SP</p>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-black text-[#14A76C]">{item.credits} Dodos</span>
+                              <span className="rounded-full bg-[#FF8243] px-2 py-1 text-[9px] font-black text-white">Resgatar</span>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
