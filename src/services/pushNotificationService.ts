@@ -45,14 +45,19 @@ export const registerPushNotifications = async (userId: string): Promise<string 
 // Recebimento em primeiro plano (foreground): o SDK não mostra notificação do sistema sozinho
 export const listenForForegroundMessages = (callback: (payload: MessagePayload) => void): (() => void) => {
   let unsubscribe = () => {};
+  let cancelled = false;
 
   isSupported()
     .then((supported) => {
-      if (!supported) return;
+      // Evita registrar o listener se o componente já desmontou antes do isSupported resolver
+      if (!supported || cancelled) return;
       const messaging = getMessaging(getApp());
       unsubscribe = onMessage(messaging, callback);
     })
     .catch(() => undefined);
 
-  return () => unsubscribe();
+  return () => {
+    cancelled = true;
+    unsubscribe();
+  };
 };

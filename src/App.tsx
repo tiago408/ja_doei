@@ -832,15 +832,6 @@ function WebApp() {
       const body = payload.notification?.body || data.body || '';
 
       showToast(body ? `${title}: ${body}` : title, 'info');
-
-      if ('Notification' in window && Notification.permission === 'granted') {
-        const systemNotification = new Notification(title, { body, icon: '/favicon.svg' });
-        systemNotification.onclick = () => {
-          window.focus();
-          navigateToNotificationTarget(data);
-          systemNotification.close();
-        };
-      }
     });
 
     return unsubscribe;

@@ -17,15 +17,14 @@ const messaging = firebase.messaging();
 
 // App em segundo plano/fechado: exibe a notificação do sistema
 messaging.onBackgroundMessage((payload) => {
-  const { title, body } = payload.notification || {};
-  const data = payload.data || {};
-
-  self.registration.showNotification(title || 'Já Doei', {
-    body: body || '',
+  const notificationTitle = payload.notification?.title || 'Já Doei';
+  const notificationOptions = {
+    body: payload.notification?.body || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    data
-  });
+    data: payload.data || {}
+  };
+  self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
 // Clique na notificação: foca uma aba existente (avisando a rota alvo) ou abre uma nova
