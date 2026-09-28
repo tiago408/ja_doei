@@ -11,7 +11,7 @@ const PRICING_CACHE_PREFIX = 'ja-doei:pricing-cache:';
 const inMemoryPricingCache = new Map<string, EvaluationResult>();
 
 // URL da Cloud Function gerada no deploy
-const FUNCTION_URL = "https://evaluateitem-l7j7hv4zra-uc.a.run.app";
+const FUNCTION_URL = "/api/evaluateItem";
 
 // Hash simples (djb2) apenas para gerar uma chave curta e estável a partir do conteúdo analisado
 function hashContent(content: string): string {
