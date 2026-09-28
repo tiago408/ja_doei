@@ -278,7 +278,7 @@ function WebApp() {
             userId: data.userId || null,
             receiverId: data.receiverId || null,
             userLocation: data.userLocation || data.location || undefined,
-            isLargeItem: data.isLargeItem === true,
+            isLargeItem: data.isLargeItem === true || (typeof data.size === 'string' && data.size.toLowerCase() === 'large') || data.category === 'Móveis & Decoração',
             trackingUrl: data.trackingUrl || data.rescueOrder?.trackingUrl || undefined,
             rescueOrder: data.rescueOrder || undefined,
             isFavorite: false,
@@ -1278,6 +1278,14 @@ function WebApp() {
     [checkoutItems]
   );
 
+  const requiresPickupScheduling = Boolean(
+    selectedItemForRedeem && (
+      selectedItemForRedeem.isLargeItem ||
+      selectedItemForRedeem.size?.toLowerCase() === 'large' ||
+      selectedItemForRedeem.category === 'Móveis & Decoração'
+    )
+  );
+
   // Checkout Payment simulation & Monetization state
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card'>('pix');
   const [cardNumber, setCardNumber] = useState<string>('4532 8892 1029 3841');
@@ -1556,6 +1564,7 @@ function WebApp() {
   const [donateStep, setDonateStep] = useState<number>(1);
   const [newExtraPhotos, setNewExtraPhotos] = useState<string[]>([]);
   const [isSubmittingDonation, setIsSubmittingDonation] = useState<boolean>(false);
+  const [donationSubmitError, setDonationSubmitError] = useState<string>('');
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'publishing'>('idle');
   const [isItemInvalid, setIsItemInvalid] = useState<boolean>(false);
@@ -2643,6 +2652,7 @@ function WebApp() {
 
   const handleCreateDonation = async (e: React.FormEvent) => {
     e.preventDefault();
+    setDonationSubmitError('');
 
     if (!requireVerifiedEmail()) return;
 
@@ -2793,6 +2803,7 @@ function WebApp() {
       const errorDetails = error instanceof Error ? ` Detalhe: ${error.message}` : '';
       setIsSubmittingDonation(false);
       setUploadPhase('idle');
+      setDonationSubmitError(`Não foi possível salvar a publicação.${errorDetails}`);
       showToast(`Não foi possível salvar a doação no Firestore. Verifique as regras/permissões e tente novamente.${errorDetails}`, 'error');
       return;
     }
@@ -2888,7 +2899,7 @@ function WebApp() {
       return;
     }
 
-    if (!pickupDate || !pickupTimeWindow || !hasAlignedPickupInChat) {
+    if (requiresPickupScheduling && (!pickupDate || !pickupTimeWindow || !hasAlignedPickupInChat)) {
       showToast('Escolha a data, a janela de coleta e confirme o alinhamento com o doador no chat.', 'error');
       return;
     }
@@ -2928,8 +2939,7 @@ function WebApp() {
             status: 'reserved',
             receiverId: user.uid,
             rescueOrder: {
-              pickupDate,
-              pickupTimeWindow,
+              ...(requiresPickupScheduling ? { pickupDate, pickupTimeWindow } : {}),
               hasExtraHelper,
               extraHelperFee,
               freightPrice: currentSelectedFreight.price,
@@ -2979,8 +2989,7 @@ function WebApp() {
                 status: 'reserved',
                 receiverId: user.uid,
                 rescueOrder: {
-                  pickupDate,
-                  pickupTimeWindow,
+                  ...(requiresPickupScheduling ? { pickupDate, pickupTimeWindow } : {}),
                   hasExtraHelper,
                   extraHelperFee,
                   freightPrice: currentSelectedFreight.price,
@@ -5203,7 +5212,7 @@ function WebApp() {
                   const extraHelperFee = hasExtraHelper ? 15.00 : 0;
                   const insuranceFee = isInsuranceSelected ? 3.90 : 0;
                   const totalCashToPay = cashComplement + freightFee + extraHelperFee + insuranceFee;
-                  const canConfirmCheckout = Boolean(pickupDate && pickupTimeWindow && hasAlignedPickupInChat);
+                  const canConfirmCheckout = !requiresPickupScheduling || Boolean(pickupDate && pickupTimeWindow && hasAlignedPickupInChat);
 
                   return (
                     <>
@@ -5279,8 +5288,8 @@ function WebApp() {
                           </button>
                         </div>
 
-                        {/* Agendamento da coleta */}
-                        <div className="p-3 bg-white rounded-2xl border border-slate-200 space-y-3">
+                        {requiresPickupScheduling && (
+                          <div className="p-3 bg-white rounded-2xl border border-slate-200 space-y-3">
                           <div className="flex items-center justify-between gap-2">
                             <div>
                               <span className="text-[9px] text-slate-500 font-extrabold uppercase tracking-wider block">
@@ -5341,10 +5350,11 @@ function WebApp() {
                               </button>
                             </div>
                           </div>
-                        </div>
+                          </div>
+                        )}
 
                         {/* Opcional de ajudante extra */}
-                        <div
+                        {requiresPickupScheduling && <div
                           onClick={() => setHasExtraHelper(!hasExtraHelper)}
                           className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${
                             hasExtraHelper
@@ -5369,7 +5379,7 @@ function WebApp() {
                               Recomendado para móveis, eletros ou itens que precisam de apoio no carregamento.
                             </p>
                           </div>
-                        </div>
+                        </div>}
 
                         {/* Pagamento do Frete (Simulação) */}
                         <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">
@@ -5846,6 +5856,13 @@ function WebApp() {
                     />
                   </div>
                 </div>
+
+                {donationSubmitError && (
+                  <div role="alert" className="mb-3 flex items-start gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-[11px] font-semibold text-rose-700">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span className="min-w-0 break-words">{donationSubmitError}</span>
+                  </div>
+                )}
 
                 {/* Form */}
                 <form onSubmit={handleCreateDonation} className="w-full max-w-full box-border flex flex-col flex-1 min-h-0">
@@ -7794,12 +7811,12 @@ function WebApp() {
                       <div className="bg-emerald-500 text-white p-2 rounded-xl text-lg">📦</div>
                       <div>
                         <p className="text-xs font-bold text-emerald-900">
-                          {isLalamoveFreight ? 'Status: Coleta Agendada via Carreto' : 'Status: Envio Padrão / Coleta Agendada'}
+                          {isLalamoveFreight ? 'Status: Coleta Agendada via Carreto' : 'Status: Envio Padrão'}
                         </p>
                         <p className="text-xs text-emerald-700 mt-1 leading-relaxed">
                           {isLalamoveFreight
                             ? `Coleta confirmada com o doador para o dia ${successRedeemData.pickupDate} (${successRedeemData.pickupTimeWindow}). O motorista fará a retirada no local.`
-                            : 'O doador foi notificado e tem até 48h para embalar e agendar a entrega do item.'}
+                            : 'O doador foi notificado e tem até 48h para embalar e despachar o item.'}
                         </p>
                       </div>
                     </div>
