@@ -1,9 +1,3 @@
-import { GoogleGenerativeAI, type Part } from '@google/generative-ai';
-
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
-// Inicializa com a versão estável da API (v1) para evitar erro 404
-const genAI = new GoogleGenerativeAI(apiKey);
-
 export interface EvaluationResult {
   title: string;
   category: string;
@@ -16,6 +10,9 @@ export interface EvaluationResult {
 const PRICING_CACHE_PREFIX = 'ja-doei:pricing-cache:';
 const inMemoryPricingCache = new Map<string, EvaluationResult>();
 
+// URL da Cloud Function gerada no deploy
+const FUNCTION_URL = "https://evaluateitem-l7j7hv4zra-uc.a.run.app";
+
 // Hash simples (djb2) apenas para gerar uma chave curta e estável a partir do conteúdo analisado
 function hashContent(content: string): string {
   let hash = 5381;
@@ -25,7 +22,13 @@ function hashContent(content: string): string {
   return hash.toString(36);
 }
 
-function buildCacheKey(userId: string | undefined, imageBase64: string | undefined, titleText: string | undefined, categoryText: string | undefined, conditionText: string | undefined): string {
+function buildCacheKey(
+  userId: string | undefined,
+  imageBase64: string | undefined,
+  titleText: string | undefined,
+  categoryText: string | undefined,
+  conditionText: string | undefined
+): string {
   const userPart = userId?.trim() || 'anon';
   const contentPart = imageBase64
     ? hashContent(imageBase64)
@@ -53,7 +56,7 @@ function writeToCache(cacheKey: string, result: EvaluationResult): void {
   try {
     sessionStorage.setItem(cacheKey, JSON.stringify(result));
   } catch {
-    // sessionStorage indisponível (modo privado, quota excedida etc.) - cache em memória já cobre a sessão atual
+    // sessionStorage indisponível (modo privado, quota excedida etc.)
   }
 }
 
@@ -64,11 +67,6 @@ export async function evaluateItemWithGemini(
   conditionText?: string,
   userId?: string
 ): Promise<EvaluationResult | null> {
-  if (!apiKey) {
-    console.warn('VITE_GEMINI_API_KEY não configurada.');
-    return null;
-  }
-
   const cacheKey = buildCacheKey(userId, imageBase64, titleText, categoryText, conditionText);
   const cachedResult = readFromCache(cacheKey);
   if (cachedResult) {
@@ -76,65 +74,29 @@ export async function evaluateItemWithGemini(
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
+    const response = await fetch(FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        imageBase64,
+        titleText,
+        categoryText,
+        conditionText,
+      }),
+    });
 
-    const prompt = `
-      Você é o avaliador oficial do app Já Doei.
-      Analise o item (pela imagem e/ou pelas informações fornecidas):
-      - Título atual: "${titleText || ''}"
-      - Categoria informada: "${categoryText || ''}"
-      - Condição: "${conditionText || 'Usado - Excelente'}"
-
-      Regra de validação (aplique antes de tudo): se a imagem mostrar uma pessoa/selfie/rosto humano,
-      um animal, ou um item proibido (medicamentos, armas, produtos inflamáveis, itens ilícitos),
-      a foto é INVÁLIDA para doação. Nesse caso, retorne "isInvalid": true, "credits": 0 e explique
-      o motivo em "invalidReason". Não é permitido cadastrar esse tipo de foto.
-
-      Caso contrário (item válido para doação):
-      1. Identifique o produto com precisão. Se o título estiver vazio, gere um título comercial adequado.
-      2. Escolha a melhor categoria entre: ["Música & Instrumentos", "Casa, Cozinha & Utensílios", "Móveis & Decoração", "Eletrônicos & Tecnologia", "Esporte & Lazer", "Brinquedos & Jogos", "Moda & Acessórios", "Papelaria & Escritório", "Livros & Mídias", "Outros"].
-      3. Estime o valor em BRL de mercado para seminovos (1 BRL = 1 Crédito).
-         Regra de conservação: "Novo na caixa" = 100%, "Usado - Excelente" = 75-85%, "Usado - Bom" = 50-60%.
-
-      Retorne EXCLUSIVAMENTE um JSON VÁLIDO no seguinte formato (sem formatação markdown \`\`\`json):
-      {
-        "title": "Nome Exato do Item",
-        "category": "Nome da Categoria",
-        "credits": 65,
-        "justification": "Explicacao curta de 1 frase",
-        "isInvalid": false,
-        "invalidReason": ""
-      }
-    `;
-
-    const contents: Array<string | Part> = [prompt];
-
-    if (imageBase64) {
-      const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-      const imagePart: Part = {
-        inlineData: {
-          data: cleanBase64,
-          mimeType: 'image/jpeg'
-        }
-      } as Part;
-      contents.push(imagePart);
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `Erro de rede HTTP: ${response.status}`);
     }
 
-    const result = await model.generateContent(contents);
-    const text = result.response.text().trim();
-    const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-
-    const parsed = JSON.parse(cleanJson) as EvaluationResult;
-    const normalizedIsInvalid = parsed.isInvalid === true || String(parsed.isInvalid).toLowerCase() === 'true';
-    const normalizedResult: EvaluationResult = {
-      ...parsed,
-      isInvalid: normalizedIsInvalid || !parsed.credits || parsed.credits <= 0
-    };
-    writeToCache(cacheKey, normalizedResult);
-    return normalizedResult;
+    const data: EvaluationResult = await response.json();
+    writeToCache(cacheKey, data);
+    return data;
   } catch (error) {
-    console.error('Erro na chamada do Gemini:', error);
+    console.error('Erro na chamada da Cloud Function:', error);
     return null;
   }
 }
-
