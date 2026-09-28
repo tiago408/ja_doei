@@ -1543,6 +1543,7 @@ function WebApp() {
   const [newIsFeatured, setNewIsFeatured] = useState<boolean>(false);
   const [isLargeItem, setIsLargeItem] = useState<boolean>(false);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState<boolean>(false);
+  const [imageAnalysisError, setImageAnalysisError] = useState<string>('');
   const [isPricingAnalyzing, setIsPricingAnalyzing] = useState<boolean>(false);
   const [isPricingLoading, setIsPricingLoading] = useState<boolean>(false);
   const [aiSuggested, setAiSuggested] = useState<boolean>(false);
@@ -1851,7 +1852,17 @@ function WebApp() {
   const resizeImageForAnalysis = (file: File): Promise<string> => new Promise((resolve, reject) => {
     const image = new Image();
     const objectUrl = URL.createObjectURL(file);
+    let settled = false;
+    const timeoutId = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('A imagem demorou muito para abrir'));
+    }, 20000);
     image.onload = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
       URL.revokeObjectURL(objectUrl);
       let scale = Math.min(1, 800 / Math.max(image.naturalWidth, image.naturalHeight));
       const canvas = document.createElement('canvas');
@@ -1877,6 +1888,9 @@ function WebApp() {
       resolve(compressed);
     };
     image.onerror = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
       URL.revokeObjectURL(objectUrl);
       reject(new Error('Não foi possível ler a foto capturada'));
     };
@@ -1892,9 +1906,12 @@ function WebApp() {
     setIsLoadingPricing(true);
     setIsPricingLoading(true);
     setIsItemInvalid(false);
+    setImageAnalysisError('');
+    let imagePrepared = false;
 
     try {
       const base64Image = await resizeImageForAnalysis(file);
+      imagePrepared = true;
       setNewImageUrl(base64Image);
       clearDonationError('image');
 
@@ -1939,7 +1956,11 @@ function WebApp() {
     } catch (error) {
       console.error('Erro ao analisar foto com o Gemini:', error);
       setPricingError('Não foi possível estimar automaticamente. Digite o título e categoria para calcular.');
-      showToast('Não foi possível preparar a foto. Tente novamente.', 'error');
+      const message = imagePrepared
+        ? 'A foto foi aberta, mas a análise não respondeu. Verifique a conexão e tente novamente.'
+        : 'Não foi possível abrir esta foto no iPhone. Tire uma nova foto ou escolha uma imagem JPEG.';
+      setImageAnalysisError(message);
+      showToast(message, 'error');
     } finally {
       setIsAnalyzingImage(false);
       setIsLoadingPricing(false);
@@ -5918,6 +5939,12 @@ function WebApp() {
                           <div className="flex items-start gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-[11px] font-semibold text-rose-700">
                             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                             <span>Esta foto não é permitida (pessoas, animais ou itens proibidos). Remova a foto e tire uma nova de um objeto válido para continuar.</span>
+                          </div>
+                        )}
+                        {imageAnalysisError && (
+                          <div role="alert" className="flex items-start gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-[11px] font-semibold text-rose-700">
+                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                            <span>{imageAnalysisError}</span>
                           </div>
                         )}
                       </div>

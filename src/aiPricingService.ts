@@ -97,6 +97,6 @@ export async function evaluateItemWithGemini(
     return data;
   } catch (error) {
     console.error('Erro na chamada da Cloud Function:', error);
-    return null;
+    throw error;
   }
 }
