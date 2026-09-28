@@ -9,7 +9,10 @@
     "rewrites": [
       {
         "source": "/api/evaluateItem",
-        "function": "evaluateItem"
+        "function": {
+          "functionId": "evaluateItem",
+          "region": "us-central1"
+        }
       },
       {
         "source": "**",
