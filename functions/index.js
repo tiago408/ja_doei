@@ -73,16 +73,26 @@ exports.evaluateItem = onRequest(
   {
     cors: true,
     region: "us-central1",
-    secrets: ["GEMINI_API_KEY"], // Injeta a secret com segurança no container
+    secrets: ["GEMINI_API_KEY"],
   },
   async (req, res) => {
+    // Liberacao explicita de CORS para evitar o bloqueio 'due to access control checks'
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    if (req.method === "OPTIONS") {
+      res.status(204).send("");
+      return;
+    }
+
     if (req.method !== "POST") {
       res.status(405).json({ error: "Método não permitido" });
       return;
     }
 
     try {
-      const { imageBase64, titleText, categoryText, conditionText } = req.body;
+      const { imageBase64, titleText, categoryText, conditionText } = req.body || {};
       const apiKey = process.env.GEMINI_API_KEY || "";
 
       if (!apiKey) {
