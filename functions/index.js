@@ -5,10 +5,6 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 admin.initializeApp();
 
-// Instância do Gemini usando a chave de ambiente do servidor
-const apiKey = process.env.GEMINI_API_KEY || "";
-const genAI = new GoogleGenerativeAI(apiKey);
-
 // Integracao Lalamove
 const lalamove = require("./lalamove");
 exports.quoteLalamove = lalamove.quoteLalamove;
@@ -77,6 +73,7 @@ exports.evaluateItem = onRequest(
   {
     cors: true,
     region: "us-central1",
+    secrets: ["GEMINI_API_KEY"], // Injeta a secret com segurança no container
   },
   async (req, res) => {
     if (req.method !== "POST") {
@@ -86,12 +83,14 @@ exports.evaluateItem = onRequest(
 
     try {
       const { imageBase64, titleText, categoryText, conditionText } = req.body;
+      const apiKey = process.env.GEMINI_API_KEY || "";
 
       if (!apiKey) {
         res.status(500).json({ error: "GEMINI_API_KEY não configurada no servidor." });
         return;
       }
 
+      const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
 
       const prompt = `
