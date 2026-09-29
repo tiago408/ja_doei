@@ -134,7 +134,7 @@ test('rejects requests without a verified Firebase user', async () => {
   assert.equal(geminiCalls, 3);
 });
 
-test('keeps maximum and condition-adjusted evaluations stable as separate values', async () => {
+test('keeps the same base Dodos regardless of condition and photo', async () => {
   const requests = [
     { imageBase64: 'max-photo' },
     { imageBase64: 'condition-photo', conditionText: 'Usado - Marcas de uso' },
@@ -156,8 +156,8 @@ test('keeps maximum and condition-adjusted evaluations stable as separate values
     results.push(response.body);
   }
 
-  assert.deepEqual(results.map((result) => result.credits), [200, 130, 130]);
-  assert.match(generatedPrompts[3], /valor MÁXIMO plausível/);
-  assert.match(generatedPrompts[4], /Usado - Marcas de uso/);
-  assert.equal(geminiCalls, 5);
+  assert.deepEqual(results.map((result) => result.credits), [200, 200, 200]);
+  assert.deepEqual(results.map((result) => result.baseDodos), [200, 200, 200]);
+  assert.match(generatedPrompts[3], /valor-base MÁXIMO plausível/);
+  assert.equal(geminiCalls, 4);
 });

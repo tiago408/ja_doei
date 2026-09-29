@@ -110,7 +110,7 @@ exports.evaluateItem = onRequest(
     }
 
     try {
-      const { imageBase64, titleText, categoryText, conditionText } = req.body || {};
+      const { imageBase64, titleText, categoryText } = req.body || {};
       const cleanBase64 = typeof imageBase64 === "string"
         ? imageBase64.replace(/^data:image\/\w+;base64,/, "")
         : "";
@@ -132,13 +132,11 @@ exports.evaluateItem = onRequest(
 
       const normalizedRequestedTitle = normalizeItemIdentity(titleText);
       const genericTitles = new Set(["", "item", "item fotografado", "produto"]);
-      const conditionIdentity = normalizeItemIdentity(conditionText) || "valor-maximo";
-      const scopeToCondition = (identity) => `${identity}:condition:${conditionIdentity}`;
       const imageIdentity = cleanBase64
-        ? scopeToCondition(`image:${createHash("sha256").update(cleanBase64).digest("hex")}`)
+        ? `image:${createHash("sha256").update(cleanBase64).digest("hex")}`
         : null;
       const requestedTitleIdentity = !genericTitles.has(normalizedRequestedTitle)
-        ? scopeToCondition(`title:${normalizedRequestedTitle}`)
+        ? `title:${normalizedRequestedTitle}`
         : null;
       const imageEvaluationRef = imageIdentity
         ? getUserItemEvaluationRef(userId, imageIdentity)
@@ -178,7 +176,7 @@ exports.evaluateItem = onRequest(
         Analise o item (pela imagem e/ou pelas informações fornecidas):
         - Título atual: "${titleText || ''}"
         - Categoria informada: "${categoryText || ''}"
-        - Condição selecionada pelo usuário: "${conditionText || 'Ainda não selecionada'}"
+        - Avaliação solicitada: valor-base do produto, sem aplicar depreciação por estado.
 
         Regra de validação (aplique antes de tudo): se a imagem mostrar uma pessoa/selfie/rosto humano,
         um animal, ou um item proibido (medicamentos, armas, produtos inflamáveis, itens ilícitos),
@@ -189,9 +187,8 @@ exports.evaluateItem = onRequest(
         1. Identifique o produto com precisão. Se o título estiver vazio, gere um título comercial canônico, incluindo marca e modelo quando identificáveis. Use o mesmo padrão de nome para o mesmo produto e não inclua cor ou condição no título.
         2. Escolha a melhor categoria entre: ["Música & Instrumentos", "Casa, Cozinha & Utensílios", "Móveis & Decoração", "Eletrônicos & Tecnologia", "Esporte & Lazer", "Brinquedos & Jogos", "Moda & Acessórios", "Papelaria & Escritório", "Livros & Mídias", "Outros"].
         3. Estime organicamente o valor em créditos (1 BRL = 1 Crédito), considerando modelo, marca e preços de mercado. Exemplos de referência: garrafa térmica simples 20-40; premium identificável (ex.: Stanley, Thermos ou CamelBak) 100-180; caneca comum 10-20; mochila 40-80; livro 10-30; jogo de tabuleiro 30-60; cadeira 60-120; ventilador ou liquidificador 70-140; fone com fio 20-40; fone Bluetooth de marca 70-140 créditos.
-        4. Se a condição estiver "Ainda não selecionada", avalie o valor MÁXIMO plausível do item como novo/na caixa. Não desconte por marcas de uso visíveis nessa etapa; o usuário ainda vai escolher o estado.
-        5. Se o usuário selecionou uma condição, use exatamente essa condição para avaliar o item: "Novo na caixa" = faixa superior; "Usado - Excelente" = próximo do máximo, com pequeno desconto; "Usado - Marcas de uso" = desconto compatível com o desgaste; "Para conserto/peças" = valor baixo de peças/salvamento. A condição selecionada deve alterar a pontuação conforme o desgaste esperado.
-        Retorne um inteiro em créditos e uma justificativa curta. Para o mesmo usuário, item identificado e mesma condição, mantenha sempre a mesma avaliação.
+        4. Retorne o valor-base MÁXIMO plausível do item como novo/na caixa. Não aplique descontos por estado, avarias ou marcas de uso; o frontend calcula a depreciação a partir deste valor-base.
+        Retorne um inteiro em créditos para o valor-base e uma justificativa curta. Para o mesmo usuário e item identificado, mantenha sempre a mesma avaliação-base.
 
         Retorne EXCLUSIVAMENTE um JSON VÁLIDO no seguinte formato (sem formatação markdown \`\`\`json):
         {
@@ -227,12 +224,13 @@ exports.evaluateItem = onRequest(
       let evaluation = {
         ...parsed,
         credits,
+        baseDodos: credits,
         isInvalid: normalizedIsInvalid || !Number.isFinite(credits) || credits <= 0
       };
 
       const canonicalTitle = normalizeItemIdentity(evaluation.title);
       const canonicalTitleIdentity = !genericTitles.has(canonicalTitle)
-        ? scopeToCondition(`title:${canonicalTitle}`)
+        ? `title:${canonicalTitle}`
         : null;
       const refsByPath = new Map();
       for (const evaluationRef of [
