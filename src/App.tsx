@@ -1567,7 +1567,6 @@ function WebApp() {
   const [isSubmittingDonation, setIsSubmittingDonation] = useState<boolean>(false);
   const [donationSubmitError, setDonationSubmitError] = useState<string>('');
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
-  const [evaluationDraftId, setEvaluationDraftId] = useState(() => crypto.randomUUID());
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'publishing'>('idle');
   const [isItemInvalid, setIsItemInvalid] = useState<boolean>(false);
   const pricingRequestId = useRef(0);
@@ -1681,7 +1680,6 @@ function WebApp() {
     setUploadPhase('idle');
     setIsItemInvalid(false);
     setDonationErrors({});
-    setEvaluationDraftId(crypto.randomUUID());
   };
 
   useEffect(() => {
@@ -1728,8 +1726,7 @@ function WebApp() {
         title,
         categoryOverride,
         conditionOverride,
-        user?.uid,
-        evaluationDraftId
+        user?.uid
       );
       if (requestId !== pricingRequestId.current) return;
       if (!pricing) throw new Error('O Gemini não retornou uma avaliação válida');
@@ -1925,17 +1922,13 @@ function WebApp() {
     try {
       const base64Image = await resizeImageForAnalysis(file);
       imagePrepared = true;
-      const draftId = newImageUrl && newImageUrl !== base64Image
-        ? crypto.randomUUID()
-        : evaluationDraftId;
-      if (draftId !== evaluationDraftId) setEvaluationDraftId(draftId);
       setNewImageUrl(base64Image);
       clearDonationError('image');
 
       const title = newTitle.trim() || 'Item fotografado';
       const category = newCategory;
       const condition = newCondition;
-      const result = await evaluateItemWithGemini(base64Image, title, category, condition, user?.uid, draftId);
+      const result = await evaluateItemWithGemini(base64Image, title, category, condition, user?.uid);
 
       const blockedTerms = ['selfie', 'pessoa', 'pessoas', 'rosto', 'humano', 'animal', 'cachorro', 'gato', 'inválid', 'invalid', 'não é possível', 'não pode ser avaliado', 'proibido'];
       const combinedText = `${result?.title || ''} ${result?.justification || ''} ${result?.invalidReason || ''}`.toLowerCase();
@@ -5913,7 +5906,6 @@ function WebApp() {
                               onClick={() => {
                                 setNewImageUrl('');
                                 setNewImageFile(null);
-                                setEvaluationDraftId(crypto.randomUUID());
                                 setIsAnalyzingImage(false);
                                 setAiSuggested(false);
                                 setIsItemInvalid(false);
