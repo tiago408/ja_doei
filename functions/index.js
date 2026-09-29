@@ -2,6 +2,7 @@ const functions = require("firebase-functions/v1");
 const { onRequest } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { createHash } = require("crypto");
 
 admin.initializeApp();
 
@@ -93,6 +94,32 @@ exports.evaluateItem = onRequest(
 
     try {
       const { imageBase64, titleText, categoryText, conditionText } = req.body || {};
+      const cleanBase64 = typeof imageBase64 === "string"
+        ? imageBase64.replace(/^data:image\/\w+;base64,/, "")
+        : "";
+      const cacheHash = createHash("sha256")
+        .update("evaluation-v1\0")
+        .update(cleanBase64)
+        .update("\0")
+        .update(JSON.stringify({
+          titleText: titleText || "",
+          categoryText: categoryText || "",
+          conditionText: conditionText || "",
+        }))
+        .digest("hex");
+      const evaluationRef = admin.firestore().collection("itemEvaluations").doc(cacheHash);
+
+      try {
+        const cachedEvaluation = await evaluationRef.get();
+        const cachedResult = cachedEvaluation.data()?.result;
+        if (cachedResult) {
+          res.status(200).json(cachedResult);
+          return;
+        }
+      } catch (cacheError) {
+        console.warn("Falha ao consultar o cache de avaliações:", cacheError.message);
+      }
+
       const apiKey = process.env.GEMINI_API_KEY || "";
 
       if (!apiKey) {
@@ -101,7 +128,14 @@ exports.evaluateItem = onRequest(
       }
 
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
+      const model = genAI.getGenerativeModel({
+        model: "gemini-3.6-flash",
+        generationConfig: {
+          temperature: 0,
+          topP: 1,
+          topK: 1,
+        },
+      });
 
       const prompt = `
         Você é o avaliador oficial do app Já Doei.
@@ -118,8 +152,18 @@ exports.evaluateItem = onRequest(
         Caso contrário (item válido para doação):
         1. Identifique o produto com precisão. Se o título estiver vazio, gere um título comercial adequado.
         2. Escolha a melhor categoria entre: ["Música & Instrumentos", "Casa, Cozinha & Utensílios", "Móveis & Decoração", "Eletrônicos & Tecnologia", "Esporte & Lazer", "Brinquedos & Jogos", "Moda & Acessórios", "Papelaria & Escritório", "Livros & Mídias", "Outros"].
-        3. Estime o valor em BRL de mercado para seminovos (1 BRL = 1 Crédito).
-           Regra de conservação: "Novo na caixa" = 100%, "Usado - Excelente" = 75-85%, "Usado - Bom" = 50-60%.
+          3. Avalie em créditos (1 BRL = 1 Crédito), usando estes valores-base fixos como referência para item usado em bom estado:
+            - Garrafa térmica simples, sem marca premium identificável: 30 créditos.
+            - Garrafa térmica de marca premium identificável (ex.: Stanley, Thermos ou CamelBak): 120 créditos.
+            - Caneca comum: 15 créditos; mochila comum: 60 créditos; livro comum: 20 créditos.
+            - Jogo de tabuleiro comum: 40 créditos; cadeira comum: 80 créditos.
+            - Ventilador doméstico: 100 créditos; liquidificador doméstico: 100 créditos.
+            - Fone com fio comum: 30 créditos; fone Bluetooth de marca reconhecível: 100 créditos.
+            Se o item corresponder a uma dessas classes, use exatamente o valor indicado antes do ajuste de conservação.
+            Se a marca premium não puder ser lida ou reconhecida com segurança, use o valor da classe simples/comum.
+            Para item não listado, escolha a classe mais próxima e use um único valor-base, sem variar por chamada.
+          4. Aplique exatamente um multiplicador ao valor-base: "Novo na caixa" = 1,00; "Usado - Excelente" = 0,80; "Usado - Bom" = 0,55. Se a condição estiver ausente, use 0,80.
+            Arredonde o resultado para o múltiplo de 5 créditos mais próximo. Não use faixas, sorteio ou estimativas diferentes para o mesmo item e os mesmos dados.
 
         Retorne EXCLUSIVAMENTE um JSON VÁLIDO no seguinte formato (sem formatação markdown \`\`\`json):
         {
@@ -134,12 +178,11 @@ exports.evaluateItem = onRequest(
 
       const contents = [prompt];
 
-      if (imageBase64) {
-        const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      if (cleanBase64) {
         const imagePart = {
           inlineData: {
             data: cleanBase64,
-            mimeType: 'image/jpeg'
+            mimeType: "image/jpeg"
           }
         };
         contents.push(imagePart);
@@ -152,10 +195,21 @@ exports.evaluateItem = onRequest(
       const parsed = JSON.parse(cleanJson);
       const normalizedIsInvalid = parsed.isInvalid === true || String(parsed.isInvalid).toLowerCase() === 'true';
 
-      res.status(200).json({
+      const evaluation = {
         ...parsed,
         isInvalid: normalizedIsInvalid || !parsed.credits || parsed.credits <= 0
-      });
+      };
+
+      try {
+        await evaluationRef.set({
+          result: evaluation,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } catch (cacheError) {
+        console.warn("Falha ao salvar no cache de avaliações:", cacheError.message);
+      }
+
+      res.status(200).json(evaluation);
     } catch (error) {
       console.error("Erro na Cloud Function do Gemini:", error);
       res.status(500).json({ error: error?.message || "Erro interno ao avaliar item." });
