@@ -3,14 +3,19 @@ const Module = require('node:module');
 const { test } = require('node:test');
 
 const documents = new Map();
-const scores = [31, 40, 50];
+const scores = [90, 125, 145];
 let geminiCalls = 0;
 
 const firestore = {
   collection: (name) => ({
     doc: (id) => {
       const key = `${name}/${id}`;
-      return { key, get: async () => ({ data: () => documents.get(key) }) };
+      return {
+        key,
+        id,
+        path: key,
+        get: async () => ({ data: () => documents.get(key) }),
+      };
     },
   }),
   runTransaction: async (callback) => {
@@ -40,6 +45,9 @@ const mocks = {
     getFirestore: () => firestore,
     FieldValue: { serverTimestamp: () => 'test-timestamp' },
   },
+  'firebase-admin/auth': {
+    getAuth: () => ({ verifyIdToken: async (token) => ({ uid: token }) }),
+  },
   '@google/generative-ai': {
     GoogleGenerativeAI: class {
       getGenerativeModel() {
@@ -49,7 +57,7 @@ const mocks = {
             return {
               response: {
                 text: () => JSON.stringify({
-                  title: 'Item de teste',
+                  title: 'Garrafa térmica Track & Field',
                   category: 'Outros',
                   credits,
                   justification: 'Avaliação simulada',
@@ -92,22 +100,34 @@ function makeResponse() {
   };
 }
 
-test('locks the third evaluation to the average and skips Gemini on the fourth', async () => {
+test('reuses the first evaluation for the same user and image, but not for another user', async () => {
   const results = [];
+  const requests = [
+    { userId: 'user-a', imageBase64: 'photo-one', titleText: 'Garrafa térmica Track & Field' },
+    { userId: 'user-a', imageBase64: 'photo-two', titleText: 'Item fotografado' },
+    { userId: 'user-b', imageBase64: 'photo-two', titleText: 'Item fotografado' },
+  ];
 
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (const request of requests) {
     const response = makeResponse();
-    await evaluateItem({ method: 'POST', body: { draftId: 'draft-test' } }, response);
+    await evaluateItem({
+      method: 'POST',
+      headers: { authorization: `Bearer ${request.userId}` },
+      body: { imageBase64: request.imageBase64, titleText: request.titleText },
+    }, response);
     assert.equal(response.statusCode, 200);
     results.push(response.body);
   }
 
-  const saved = [...documents.values()][0];
-  assert.deepEqual(results.map((result) => result.credits), [31, 40, 40, 40]);
-  assert.deepEqual(saved.evaluationHistory, [31, 40, 50]);
-  assert.equal(saved.lockedValue, 40);
-  assert.equal(saved.isLocked, true);
-  assert.equal(results[2].isLocked, true);
-  assert.equal(results[3].isLocked, true);
+  assert.deepEqual(results.map((result) => result.credits), [90, 90, 145]);
+  assert.equal(results[1].title, results[0].title);
+  assert.equal(documents.size, 5);
+  assert.equal(geminiCalls, 3);
+});
+
+test('rejects requests without a verified Firebase user', async () => {
+  const response = makeResponse();
+  await evaluateItem({ method: 'POST', body: { imageBase64: 'same-item-photo' } }, response);
+  assert.equal(response.statusCode, 401);
   assert.equal(geminiCalls, 3);
 });

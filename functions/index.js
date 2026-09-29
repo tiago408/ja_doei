@@ -2,11 +2,28 @@ const functions = require("firebase-functions/v1");
 const { onRequest } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { getAuth } = require("firebase-admin/auth");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { createHash } = require("crypto");
 
 admin.initializeApp();
 const db = getFirestore();
+
+function normalizeItemIdentity(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getUserItemEvaluationRef(userId, itemIdentity) {
+  const id = createHash("sha256")
+    .update(JSON.stringify([userId, itemIdentity]))
+    .digest("hex");
+  return db.collection("userItemEvaluations").doc(id);
+}
 
 // Integracao Lalamove
 const lalamove = require("./lalamove");
@@ -93,28 +110,46 @@ exports.evaluateItem = onRequest(
     }
 
     try {
-      const { imageBase64, titleText, categoryText, conditionText, draftId } = req.body || {};
+      const { imageBase64, titleText, categoryText, conditionText } = req.body || {};
       const cleanBase64 = typeof imageBase64 === "string"
         ? imageBase64.replace(/^data:image\/\w+;base64,/, "")
         : "";
-      if (draftId !== undefined && (typeof draftId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(draftId))) {
-        res.status(400).json({ error: "ID de rascunho inválido." });
+
+      const authorization = req.headers?.authorization || req.get?.("authorization") || "";
+      const idToken = /^Bearer\s+(.+)$/i.exec(authorization)?.[1];
+      if (!idToken) {
+        res.status(401).json({ error: "Autenticação necessária para avaliar este item." });
         return;
       }
 
-      const evaluationRef = draftId
-        ? db.collection("draftEvaluations").doc(createHash("sha256").update(draftId).digest("hex"))
-        : null;
+      let userId;
+      try {
+        ({ uid: userId } = await getAuth().verifyIdToken(idToken));
+      } catch {
+        res.status(401).json({ error: "Sessão inválida. Entre novamente para avaliar este item." });
+        return;
+      }
 
-      if (evaluationRef) {
-        const draftSnapshot = await evaluationRef.get();
-        const draftData = draftSnapshot.data();
-        if (draftData?.isLocked) {
-          res.status(200).json(draftData.lockedResult || {
-            ...(draftData.latestResult || {}),
-            credits: draftData.lockedValue,
-            isLocked: true,
-          });
+      const normalizedRequestedTitle = normalizeItemIdentity(titleText);
+      const genericTitles = new Set(["", "item", "item fotografado", "produto"]);
+      const imageIdentity = cleanBase64
+        ? `image:${createHash("sha256").update(cleanBase64).digest("hex")}`
+        : null;
+      const requestedTitleIdentity = !genericTitles.has(normalizedRequestedTitle)
+        ? `title:${normalizedRequestedTitle}`
+        : null;
+      const imageEvaluationRef = imageIdentity
+        ? getUserItemEvaluationRef(userId, imageIdentity)
+        : null;
+      const requestedTitleRef = requestedTitleIdentity
+        ? getUserItemEvaluationRef(userId, requestedTitleIdentity)
+        : null;
+      const initialRefs = [imageEvaluationRef, requestedTitleRef].filter(Boolean);
+
+      for (const evaluationRef of initialRefs) {
+        const cachedEvaluation = (await evaluationRef.get()).data()?.result;
+        if (cachedEvaluation) {
+          res.status(200).json(cachedEvaluation);
           return;
         }
       }
@@ -149,7 +184,7 @@ exports.evaluateItem = onRequest(
         o motivo em "invalidReason". Não é permitido cadastrar esse tipo de foto.
 
         Caso contrário (item válido para doação):
-        1. Identifique o produto com precisão. Se o título estiver vazio, gere um título comercial adequado.
+        1. Identifique o produto com precisão. Se o título estiver vazio, gere um título comercial canônico, incluindo marca e modelo quando identificáveis. Use o mesmo padrão de nome para o mesmo produto e não inclua cor ou condição no título.
         2. Escolha a melhor categoria entre: ["Música & Instrumentos", "Casa, Cozinha & Utensílios", "Móveis & Decoração", "Eletrônicos & Tecnologia", "Esporte & Lazer", "Brinquedos & Jogos", "Moda & Acessórios", "Papelaria & Escritório", "Livros & Mídias", "Outros"].
           3. Estime organicamente o valor de revenda em créditos (1 BRL = 1 Crédito), considerando modelo, marca, estado visível, acessórios e preços típicos de usados. Exemplos de referência para item usado em bom estado: garrafa térmica simples 20-40; garrafa térmica premium identificável (ex.: Stanley, Thermos ou CamelBak) 100-180; caneca comum 10-20; mochila comum 40-80; livro comum 10-30; jogo de tabuleiro comum 30-60; cadeira comum 60-120; ventilador ou liquidificador doméstico 70-140; fone com fio comum 20-40; fone Bluetooth de marca reconhecível 70-140 créditos. São referências, não valores fixos: escolha a pontuação que melhor corresponda à foto e não invente marcas ou características que não estejam visíveis.
           4. Considere a conservação: "Novo na caixa" pode valer mais que um usado equivalente; "Usado - Excelente" deve ficar perto do topo da referência; "Usado - Bom" deve ficar perto da parte inferior. Retorne um inteiro em créditos e uma justificativa curta, sem forçar valores para produzir uma variação artificial.
@@ -190,46 +225,41 @@ exports.evaluateItem = onRequest(
         isInvalid: normalizedIsInvalid || !parsed.credits || parsed.credits <= 0
       };
 
-      if (evaluationRef && !evaluation.isInvalid && Number.isFinite(Number(evaluation.credits))) {
+      const canonicalTitle = normalizeItemIdentity(evaluation.title);
+      const canonicalTitleIdentity = !genericTitles.has(canonicalTitle)
+        ? `title:${canonicalTitle}`
+        : null;
+      const refsByPath = new Map();
+      for (const evaluationRef of [
+        imageEvaluationRef,
+        requestedTitleRef,
+        canonicalTitleIdentity ? getUserItemEvaluationRef(userId, canonicalTitleIdentity) : null,
+      ]) {
+        if (evaluationRef) refsByPath.set(evaluationRef.path || evaluationRef.id, evaluationRef);
+      }
+      const evaluationRefs = [...refsByPath.values()];
+
+      if (evaluationRefs.length) {
         evaluation = await db.runTransaction(async (transaction) => {
-          const currentSnapshot = await transaction.get(evaluationRef);
-          const currentData = currentSnapshot.data() || {};
-          if (currentData.isLocked) {
-            return currentData.lockedResult || {
-              ...(currentData.latestResult || {}),
-              credits: currentData.lockedValue,
-              isLocked: true,
-            };
+          const snapshots = await Promise.all(evaluationRefs.map((evaluationRef) => transaction.get(evaluationRef)));
+          const currentResult = snapshots.map((snapshot) => snapshot.data()?.result).find(Boolean);
+          if (currentResult) {
+            for (const evaluationRef of evaluationRefs) {
+              transaction.set(evaluationRef, {
+                result: currentResult,
+                createdAt: FieldValue.serverTimestamp(),
+              }, { merge: true });
+            }
+            return currentResult;
           }
 
-          const history = Array.isArray(currentData.evaluationHistory)
-            ? currentData.evaluationHistory.filter((value) => Number.isFinite(Number(value))).map(Number)
-            : [];
-          const nextHistory = [...history, Number(evaluation.credits)];
-          const updatedAt = FieldValue.serverTimestamp();
-
-          if (nextHistory.length >= 3) {
-            const lockedValue = Math.round(nextHistory.slice(0, 3).reduce((sum, value) => sum + value, 0) / 3);
-            const lockedResult = { ...evaluation, credits: lockedValue, isLocked: true };
+          for (const evaluationRef of evaluationRefs) {
             transaction.set(evaluationRef, {
-              evaluationHistory: nextHistory.slice(0, 3),
-              isLocked: true,
-              lockedValue,
-              lockedResult,
-              latestResult: lockedResult,
-              updatedAt,
+              result: evaluation,
+              createdAt: FieldValue.serverTimestamp(),
             }, { merge: true });
-            return lockedResult;
           }
-
-          const result = { ...evaluation, isLocked: false };
-          transaction.set(evaluationRef, {
-            evaluationHistory: nextHistory,
-            isLocked: false,
-            latestResult: result,
-            updatedAt,
-          }, { merge: true });
-          return result;
+          return evaluation;
         });
       }
 
