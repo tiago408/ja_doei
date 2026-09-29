@@ -1,10 +1,12 @@
 const functions = require("firebase-functions/v1");
 const { onRequest } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { createHash } = require("crypto");
 
 admin.initializeApp();
+const db = getFirestore();
 
 // Integracao Lalamove
 const lalamove = require("./lalamove");
@@ -20,7 +22,7 @@ exports.onNotificationCreate = functions.firestore
     if (!recipientId) return;
 
     try {
-      const userDoc = await admin.firestore().collection("users").doc(recipientId).get();
+      const userDoc = await db.collection("users").doc(recipientId).get();
       const fcmToken = userDoc.data()?.fcmToken;
       if (!fcmToken) return;
 
@@ -47,8 +49,6 @@ exports.onNotificationCreate = functions.firestore
 // Apaga os dados do usuário ao deletar conta
 exports.onUserDelete = functions.auth.user().onDelete(async (user) => {
   const uid = user.uid;
-  const db = admin.firestore();
-
   console.log(`Iniciando remocao dos dados para o UID: ${uid}`);
 
   try {
@@ -103,7 +103,7 @@ exports.evaluateItem = onRequest(
       }
 
       const evaluationRef = draftId
-        ? admin.firestore().collection("draftEvaluations").doc(createHash("sha256").update(draftId).digest("hex"))
+        ? db.collection("draftEvaluations").doc(createHash("sha256").update(draftId).digest("hex"))
         : null;
 
       if (evaluationRef) {
@@ -191,7 +191,7 @@ exports.evaluateItem = onRequest(
       };
 
       if (evaluationRef && !evaluation.isInvalid && Number.isFinite(Number(evaluation.credits))) {
-        evaluation = await admin.firestore().runTransaction(async (transaction) => {
+        evaluation = await db.runTransaction(async (transaction) => {
           const currentSnapshot = await transaction.get(evaluationRef);
           const currentData = currentSnapshot.data() || {};
           if (currentData.isLocked) {
@@ -206,7 +206,7 @@ exports.evaluateItem = onRequest(
             ? currentData.evaluationHistory.filter((value) => Number.isFinite(Number(value))).map(Number)
             : [];
           const nextHistory = [...history, Number(evaluation.credits)];
-          const updatedAt = admin.firestore.FieldValue.serverTimestamp();
+          const updatedAt = FieldValue.serverTimestamp();
 
           if (nextHistory.length >= 3) {
             const lockedValue = Math.round(nextHistory.slice(0, 3).reduce((sum, value) => sum + value, 0) / 3);

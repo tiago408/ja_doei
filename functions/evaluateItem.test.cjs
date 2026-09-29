@@ -35,9 +35,10 @@ const mocks = {
   'firebase-functions/v2/https': { onRequest: (_options, handler) => handler },
   'firebase-admin': {
     initializeApp() {},
-    firestore: Object.assign(() => firestore, {
-      FieldValue: { serverTimestamp: () => 'test-timestamp' },
-    }),
+  },
+  'firebase-admin/firestore': {
+    getFirestore: () => firestore,
+    FieldValue: { serverTimestamp: () => 'test-timestamp' },
   },
   '@google/generative-ai': {
     GoogleGenerativeAI: class {
