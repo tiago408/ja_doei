@@ -5,6 +5,7 @@ export interface EvaluationResult {
   justification: string;
   isInvalid?: boolean;
   invalidReason?: string;
+  isLocked?: boolean;
 }
 
 const PRICING_CACHE_PREFIX = 'ja-doei:pricing-cache:';
@@ -65,12 +66,13 @@ export async function evaluateItemWithGemini(
   titleText?: string,
   categoryText?: string,
   conditionText?: string,
-  userId?: string
+  userId?: string,
+  draftId?: string
 ): Promise<EvaluationResult | null> {
   const cacheKey = buildCacheKey(userId, imageBase64, titleText, categoryText, conditionText);
-  const cachedResult = readFromCache(cacheKey);
-  if (cachedResult) {
-    return cachedResult;
+  if (!draftId) {
+    const cachedResult = readFromCache(cacheKey);
+    if (cachedResult) return cachedResult;
   }
 
   try {
@@ -84,6 +86,7 @@ export async function evaluateItemWithGemini(
         titleText,
         categoryText,
         conditionText,
+        draftId,
       }),
     });
 
@@ -93,7 +96,7 @@ export async function evaluateItemWithGemini(
     }
 
     const data: EvaluationResult = await response.json();
-    writeToCache(cacheKey, data);
+    if (!draftId) writeToCache(cacheKey, data);
     return data;
   } catch (error) {
     console.error('Erro na chamada da Cloud Function:', error);
