@@ -1722,7 +1722,7 @@ function WebApp() {
     setCreditsMax(0);
     try {
       const pricing = await evaluateItemWithGemini(
-        undefined,
+        newImageUrl || undefined,
         title,
         categoryOverride,
         conditionOverride,
