@@ -4,6 +4,7 @@ export interface EvaluationResult {
   title: string;
   category: string;
   credits: number;
+  baseDodos?: number;
   justification: string;
   isInvalid?: boolean;
   invalidReason?: string;
