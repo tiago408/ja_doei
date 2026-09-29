@@ -41,7 +41,8 @@ import {
   Pencil,
   Trash2,
   Flag,
-  RefreshCw
+  RefreshCw,
+  LoaderCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -5892,9 +5893,10 @@ function WebApp() {
                               className="w-full max-w-full box-border h-44 object-cover"
                             />
                             {isAnalyzingImage && (
-                              <div className="absolute inset-0 flex items-center justify-center bg-slate-900/45 text-white">
+                              <div className="absolute inset-0 flex items-center justify-center bg-slate-900/45 text-white animate-pulse">
                                 <span className="flex items-center gap-2 rounded-full bg-slate-900/75 px-3 py-2 text-xs font-bold">
                                   <Sparkles className="w-4 h-4 animate-pulse" />
+                                  <LoaderCircle className="w-4 h-4 animate-spin" />
                                   Analisando imagem com IA...
                                 </span>
                               </div>
@@ -5946,7 +5948,7 @@ function WebApp() {
                         </div>
 
                         {isAnalyzingImage && (
-                          <div className="flex items-center gap-2 rounded-xl border border-[#14A76C]/20 bg-emerald-50 p-2 text-[11px] font-semibold text-[#14A76C]">
+                          <div className="flex items-center gap-2 rounded-xl border border-[#14A76C]/20 bg-emerald-50 p-2 text-[11px] font-semibold text-[#14A76C] animate-pulse">
                             <Sparkles className="w-4 h-4 animate-pulse" />
                             <span>Analisando imagem via IA...</span>
                           </div>
@@ -6547,8 +6549,8 @@ function WebApp() {
                     {donateStep < 3 ? (
                       <button
                         type="submit"
-                        disabled={donateStep === 1 && isItemInvalid}
-                        className="flex-1 px-5 py-2.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        disabled={donateStep === 1 && (isItemInvalid || isAnalyzingImage)}
+                        className="flex-1 px-5 py-2.5 rounded-xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <span>Continuar</span>
                         <ChevronRight className="w-4 h-4" />
