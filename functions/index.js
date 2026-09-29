@@ -93,31 +93,30 @@ exports.evaluateItem = onRequest(
     }
 
     try {
-      const { imageBase64, titleText, categoryText, conditionText } = req.body || {};
+      const { imageBase64, titleText, categoryText, conditionText, draftId } = req.body || {};
       const cleanBase64 = typeof imageBase64 === "string"
         ? imageBase64.replace(/^data:image\/\w+;base64,/, "")
         : "";
-      const cacheHash = createHash("sha256")
-        .update("evaluation-v1\0")
-        .update(cleanBase64)
-        .update("\0")
-        .update(JSON.stringify({
-          titleText: titleText || "",
-          categoryText: categoryText || "",
-          conditionText: conditionText || "",
-        }))
-        .digest("hex");
-      const evaluationRef = admin.firestore().collection("itemEvaluations").doc(cacheHash);
+      if (draftId !== undefined && (typeof draftId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(draftId))) {
+        res.status(400).json({ error: "ID de rascunho inválido." });
+        return;
+      }
 
-      try {
-        const cachedEvaluation = await evaluationRef.get();
-        const cachedResult = cachedEvaluation.data()?.result;
-        if (cachedResult) {
-          res.status(200).json(cachedResult);
+      const evaluationRef = draftId
+        ? admin.firestore().collection("draftEvaluations").doc(createHash("sha256").update(draftId).digest("hex"))
+        : null;
+
+      if (evaluationRef) {
+        const draftSnapshot = await evaluationRef.get();
+        const draftData = draftSnapshot.data();
+        if (draftData?.isLocked) {
+          res.status(200).json(draftData.lockedResult || {
+            ...(draftData.latestResult || {}),
+            credits: draftData.lockedValue,
+            isLocked: true,
+          });
           return;
         }
-      } catch (cacheError) {
-        console.warn("Falha ao consultar o cache de avaliações:", cacheError.message);
       }
 
       const apiKey = process.env.GEMINI_API_KEY || "";
@@ -131,9 +130,9 @@ exports.evaluateItem = onRequest(
       const model = genAI.getGenerativeModel({
         model: "gemini-3.6-flash",
         generationConfig: {
-          temperature: 0,
-          topP: 1,
-          topK: 1,
+          temperature: 0.7,
+          topP: 0.9,
+          topK: 40,
         },
       });
 
@@ -152,18 +151,8 @@ exports.evaluateItem = onRequest(
         Caso contrário (item válido para doação):
         1. Identifique o produto com precisão. Se o título estiver vazio, gere um título comercial adequado.
         2. Escolha a melhor categoria entre: ["Música & Instrumentos", "Casa, Cozinha & Utensílios", "Móveis & Decoração", "Eletrônicos & Tecnologia", "Esporte & Lazer", "Brinquedos & Jogos", "Moda & Acessórios", "Papelaria & Escritório", "Livros & Mídias", "Outros"].
-          3. Avalie em créditos (1 BRL = 1 Crédito), usando estes valores-base fixos como referência para item usado em bom estado:
-            - Garrafa térmica simples, sem marca premium identificável: 30 créditos.
-            - Garrafa térmica de marca premium identificável (ex.: Stanley, Thermos ou CamelBak): 120 créditos.
-            - Caneca comum: 15 créditos; mochila comum: 60 créditos; livro comum: 20 créditos.
-            - Jogo de tabuleiro comum: 40 créditos; cadeira comum: 80 créditos.
-            - Ventilador doméstico: 100 créditos; liquidificador doméstico: 100 créditos.
-            - Fone com fio comum: 30 créditos; fone Bluetooth de marca reconhecível: 100 créditos.
-            Se o item corresponder a uma dessas classes, use exatamente o valor indicado antes do ajuste de conservação.
-            Se a marca premium não puder ser lida ou reconhecida com segurança, use o valor da classe simples/comum.
-            Para item não listado, escolha a classe mais próxima e use um único valor-base, sem variar por chamada.
-          4. Aplique exatamente um multiplicador ao valor-base: "Novo na caixa" = 1,00; "Usado - Excelente" = 0,80; "Usado - Bom" = 0,55. Se a condição estiver ausente, use 0,80.
-            Arredonde o resultado para o múltiplo de 5 créditos mais próximo. Não use faixas, sorteio ou estimativas diferentes para o mesmo item e os mesmos dados.
+          3. Estime organicamente o valor de revenda em créditos (1 BRL = 1 Crédito), considerando modelo, marca, estado visível, acessórios e preços típicos de usados. Exemplos de referência para item usado em bom estado: garrafa térmica simples 20-40; garrafa térmica premium identificável (ex.: Stanley, Thermos ou CamelBak) 100-180; caneca comum 10-20; mochila comum 40-80; livro comum 10-30; jogo de tabuleiro comum 30-60; cadeira comum 60-120; ventilador ou liquidificador doméstico 70-140; fone com fio comum 20-40; fone Bluetooth de marca reconhecível 70-140 créditos. São referências, não valores fixos: escolha a pontuação que melhor corresponda à foto e não invente marcas ou características que não estejam visíveis.
+          4. Considere a conservação: "Novo na caixa" pode valer mais que um usado equivalente; "Usado - Excelente" deve ficar perto do topo da referência; "Usado - Bom" deve ficar perto da parte inferior. Retorne um inteiro em créditos e uma justificativa curta, sem forçar valores para produzir uma variação artificial.
 
         Retorne EXCLUSIVAMENTE um JSON VÁLIDO no seguinte formato (sem formatação markdown \`\`\`json):
         {
@@ -195,18 +184,53 @@ exports.evaluateItem = onRequest(
       const parsed = JSON.parse(cleanJson);
       const normalizedIsInvalid = parsed.isInvalid === true || String(parsed.isInvalid).toLowerCase() === 'true';
 
-      const evaluation = {
+      let evaluation = {
         ...parsed,
+        credits: Number(parsed.credits),
         isInvalid: normalizedIsInvalid || !parsed.credits || parsed.credits <= 0
       };
 
-      try {
-        await evaluationRef.set({
-          result: evaluation,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      if (evaluationRef && !evaluation.isInvalid && Number.isFinite(Number(evaluation.credits))) {
+        evaluation = await admin.firestore().runTransaction(async (transaction) => {
+          const currentSnapshot = await transaction.get(evaluationRef);
+          const currentData = currentSnapshot.data() || {};
+          if (currentData.isLocked) {
+            return currentData.lockedResult || {
+              ...(currentData.latestResult || {}),
+              credits: currentData.lockedValue,
+              isLocked: true,
+            };
+          }
+
+          const history = Array.isArray(currentData.evaluationHistory)
+            ? currentData.evaluationHistory.filter((value) => Number.isFinite(Number(value))).map(Number)
+            : [];
+          const nextHistory = [...history, Number(evaluation.credits)];
+          const updatedAt = admin.firestore.FieldValue.serverTimestamp();
+
+          if (nextHistory.length >= 3) {
+            const lockedValue = Math.round(nextHistory.slice(0, 3).reduce((sum, value) => sum + value, 0) / 3);
+            const lockedResult = { ...evaluation, credits: lockedValue, isLocked: true };
+            transaction.set(evaluationRef, {
+              evaluationHistory: nextHistory.slice(0, 3),
+              isLocked: true,
+              lockedValue,
+              lockedResult,
+              latestResult: lockedResult,
+              updatedAt,
+            }, { merge: true });
+            return lockedResult;
+          }
+
+          const result = { ...evaluation, isLocked: false };
+          transaction.set(evaluationRef, {
+            evaluationHistory: nextHistory,
+            isLocked: false,
+            latestResult: result,
+            updatedAt,
+          }, { merge: true });
+          return result;
         });
-      } catch (cacheError) {
-        console.warn("Falha ao salvar no cache de avaliações:", cacheError.message);
       }
 
       res.status(200).json(evaluation);
