@@ -132,11 +132,13 @@ exports.evaluateItem = onRequest(
 
       const normalizedRequestedTitle = normalizeItemIdentity(titleText);
       const genericTitles = new Set(["", "item", "item fotografado", "produto"]);
+      const conditionIdentity = normalizeItemIdentity(conditionText) || "valor-maximo";
+      const scopeToCondition = (identity) => `${identity}:condition:${conditionIdentity}`;
       const imageIdentity = cleanBase64
-        ? `image:${createHash("sha256").update(cleanBase64).digest("hex")}`
+        ? scopeToCondition(`image:${createHash("sha256").update(cleanBase64).digest("hex")}`)
         : null;
       const requestedTitleIdentity = !genericTitles.has(normalizedRequestedTitle)
-        ? `title:${normalizedRequestedTitle}`
+        ? scopeToCondition(`title:${normalizedRequestedTitle}`)
         : null;
       const imageEvaluationRef = imageIdentity
         ? getUserItemEvaluationRef(userId, imageIdentity)
@@ -176,7 +178,7 @@ exports.evaluateItem = onRequest(
         Analise o item (pela imagem e/ou pelas informações fornecidas):
         - Título atual: "${titleText || ''}"
         - Categoria informada: "${categoryText || ''}"
-        - Condição: "${conditionText || 'Usado - Excelente'}"
+        - Condição selecionada pelo usuário: "${conditionText || 'Ainda não selecionada'}"
 
         Regra de validação (aplique antes de tudo): se a imagem mostrar uma pessoa/selfie/rosto humano,
         um animal, ou um item proibido (medicamentos, armas, produtos inflamáveis, itens ilícitos),
@@ -186,8 +188,10 @@ exports.evaluateItem = onRequest(
         Caso contrário (item válido para doação):
         1. Identifique o produto com precisão. Se o título estiver vazio, gere um título comercial canônico, incluindo marca e modelo quando identificáveis. Use o mesmo padrão de nome para o mesmo produto e não inclua cor ou condição no título.
         2. Escolha a melhor categoria entre: ["Música & Instrumentos", "Casa, Cozinha & Utensílios", "Móveis & Decoração", "Eletrônicos & Tecnologia", "Esporte & Lazer", "Brinquedos & Jogos", "Moda & Acessórios", "Papelaria & Escritório", "Livros & Mídias", "Outros"].
-          3. Estime organicamente o valor de revenda em créditos (1 BRL = 1 Crédito), considerando modelo, marca, estado visível, acessórios e preços típicos de usados. Exemplos de referência para item usado em bom estado: garrafa térmica simples 20-40; garrafa térmica premium identificável (ex.: Stanley, Thermos ou CamelBak) 100-180; caneca comum 10-20; mochila comum 40-80; livro comum 10-30; jogo de tabuleiro comum 30-60; cadeira comum 60-120; ventilador ou liquidificador doméstico 70-140; fone com fio comum 20-40; fone Bluetooth de marca reconhecível 70-140 créditos. São referências, não valores fixos: escolha a pontuação que melhor corresponda à foto e não invente marcas ou características que não estejam visíveis.
-          4. Considere a conservação: "Novo na caixa" pode valer mais que um usado equivalente; "Usado - Excelente" deve ficar perto do topo da referência; "Usado - Bom" deve ficar perto da parte inferior. Retorne um inteiro em créditos e uma justificativa curta, sem forçar valores para produzir uma variação artificial.
+        3. Estime organicamente o valor em créditos (1 BRL = 1 Crédito), considerando modelo, marca e preços de mercado. Exemplos de referência: garrafa térmica simples 20-40; premium identificável (ex.: Stanley, Thermos ou CamelBak) 100-180; caneca comum 10-20; mochila 40-80; livro 10-30; jogo de tabuleiro 30-60; cadeira 60-120; ventilador ou liquidificador 70-140; fone com fio 20-40; fone Bluetooth de marca 70-140 créditos.
+        4. Se a condição estiver "Ainda não selecionada", avalie o valor MÁXIMO plausível do item como novo/na caixa. Não desconte por marcas de uso visíveis nessa etapa; o usuário ainda vai escolher o estado.
+        5. Se o usuário selecionou uma condição, use exatamente essa condição para avaliar o item: "Novo na caixa" = faixa superior; "Usado - Excelente" = próximo do máximo, com pequeno desconto; "Usado - Marcas de uso" = desconto compatível com o desgaste; "Para conserto/peças" = valor baixo de peças/salvamento. A condição selecionada deve alterar a pontuação conforme o desgaste esperado.
+        Retorne um inteiro em créditos e uma justificativa curta. Para o mesmo usuário, item identificado e mesma condição, mantenha sempre a mesma avaliação.
 
         Retorne EXCLUSIVAMENTE um JSON VÁLIDO no seguinte formato (sem formatação markdown \`\`\`json):
         {
@@ -218,16 +222,17 @@ exports.evaluateItem = onRequest(
 
       const parsed = JSON.parse(cleanJson);
       const normalizedIsInvalid = parsed.isInvalid === true || String(parsed.isInvalid).toLowerCase() === 'true';
+      const credits = Number(parsed.credits);
 
       let evaluation = {
         ...parsed,
-        credits: Number(parsed.credits),
-        isInvalid: normalizedIsInvalid || !parsed.credits || parsed.credits <= 0
+        credits,
+        isInvalid: normalizedIsInvalid || !Number.isFinite(credits) || credits <= 0
       };
 
       const canonicalTitle = normalizeItemIdentity(evaluation.title);
       const canonicalTitleIdentity = !genericTitles.has(canonicalTitle)
-        ? `title:${canonicalTitle}`
+        ? scopeToCondition(`title:${canonicalTitle}`)
         : null;
       const refsByPath = new Map();
       for (const evaluationRef of [
@@ -239,7 +244,7 @@ exports.evaluateItem = onRequest(
       }
       const evaluationRefs = [...refsByPath.values()];
 
-      if (evaluationRefs.length) {
+      if (evaluationRefs.length && !evaluation.isInvalid) {
         evaluation = await db.runTransaction(async (transaction) => {
           const snapshots = await Promise.all(evaluationRefs.map((evaluationRef) => transaction.get(evaluationRef)));
           const currentResult = snapshots.map((snapshot) => snapshot.data()?.result).find(Boolean);

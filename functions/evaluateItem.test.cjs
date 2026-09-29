@@ -3,8 +3,9 @@ const Module = require('node:module');
 const { test } = require('node:test');
 
 const documents = new Map();
-const scores = [90, 125, 145];
+const scores = [90, 125, 145, 200, 130];
 let geminiCalls = 0;
+const generatedPrompts = [];
 
 const firestore = {
   collection: (name) => ({
@@ -52,7 +53,8 @@ const mocks = {
     GoogleGenerativeAI: class {
       getGenerativeModel() {
         return {
-          generateContent: async () => {
+          generateContent: async (contents) => {
+            generatedPrompts.push(contents[0]);
             const credits = scores[geminiCalls++];
             return {
               response: {
@@ -130,4 +132,32 @@ test('rejects requests without a verified Firebase user', async () => {
   await evaluateItem({ method: 'POST', body: { imageBase64: 'same-item-photo' } }, response);
   assert.equal(response.statusCode, 401);
   assert.equal(geminiCalls, 3);
+});
+
+test('keeps maximum and condition-adjusted evaluations stable as separate values', async () => {
+  const requests = [
+    { imageBase64: 'max-photo' },
+    { imageBase64: 'condition-photo', conditionText: 'Usado - Marcas de uso' },
+    { imageBase64: 'another-photo', conditionText: 'Usado - Marcas de uso' },
+  ];
+  const results = [];
+
+  for (const request of requests) {
+    const response = makeResponse();
+    await evaluateItem({
+      method: 'POST',
+      headers: { authorization: 'Bearer user-c' },
+      body: {
+        titleText: 'Garrafa térmica Track & Field',
+        ...request,
+      },
+    }, response);
+    assert.equal(response.statusCode, 200);
+    results.push(response.body);
+  }
+
+  assert.deepEqual(results.map((result) => result.credits), [200, 130, 130]);
+  assert.match(generatedPrompts[3], /valor MÁXIMO plausível/);
+  assert.match(generatedPrompts[4], /Usado - Marcas de uso/);
+  assert.equal(geminiCalls, 5);
 });
