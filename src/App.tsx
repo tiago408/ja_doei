@@ -1541,7 +1541,6 @@ function WebApp() {
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('');
   const [newCredits, setNewCredits] = useState<number>(100);
-  const [baseDodos, setBaseDodos] = useState<number>(0);
   const [suggestedCredits, setSuggestedCredits] = useState<number>(100);
   const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
   const [newLocation, setNewLocation] = useState('');
@@ -1654,7 +1653,6 @@ function WebApp() {
     setNewTitle('');
     setNewCategory('');
     setNewCredits(100);
-    setBaseDodos(0);
     setSuggestedCredits(100);
     setNewLocation('');
     setNewCondition('');
@@ -1694,7 +1692,10 @@ function WebApp() {
     }
   }, [isDonateModalOpen]);
 
-  const handleCalculatePricing = async (categoryOverride = newCategory) => {
+  const handleCalculatePricing = async (
+    conditionOverride = newCondition,
+    categoryOverride = newCategory
+  ) => {
     const requestId = ++pricingRequestId.current;
     const title = newTitle.trim();
     if (!title || !categoryOverride.trim()) {
@@ -1702,7 +1703,6 @@ function WebApp() {
       setIsPricingLoading(false);
       setIsLoadingPricing(false);
       setNewCredits(0);
-      setBaseDodos(0);
       setSuggestedCredits(0);
       setCreditsMin(0);
       setCreditsMax(0);
@@ -1717,7 +1717,6 @@ function WebApp() {
     setIsLoadingPricing(true);
     setPricingError('');
     setNewCredits(0);
-    setBaseDodos(0);
     setSuggestedCredits(0);
     setCreditsMin(0);
     setCreditsMax(0);
@@ -1726,26 +1725,23 @@ function WebApp() {
         newImageUrl || undefined,
         title,
         categoryOverride,
-        '',
+        conditionOverride,
         user?.uid
       );
       if (requestId !== pricingRequestId.current) return;
       if (!pricing) throw new Error('O Gemini não retornou uma avaliação válida');
-      const baseValue = pricing.baseDodos ?? pricing.credits;
-      const conditionValue = calculateConditionDodos(baseValue, newCondition);
-      setBaseDodos(baseValue);
-      setSuggestedCredits(conditionValue);
+      setNewCredits(pricing.credits);
+      setSuggestedCredits(pricing.credits);
       if (DONATION_CATEGORIES.includes(pricing.category as (typeof DONATION_CATEGORIES)[number])) {
         setNewCategory(pricing.category);
       }
-      applyCreditRange(conditionValue);
+      applyCreditRange(pricing.credits);
       setRequiresModeration(false);
       setPricingJustification(pricing.justification);
     } catch (error) {
       if (requestId !== pricingRequestId.current) return;
       console.error('Gemini indisponível; precificação não calculada:', error);
       setNewCredits(0);
-      setBaseDodos(0);
       setSuggestedCredits(0);
       setCreditsMin(0);
       setCreditsMax(0);
@@ -1832,16 +1828,6 @@ function WebApp() {
     const [start, end] = timeWindow.split('-').map((part) => part.trim());
     if (!start || !end) return timeWindow;
     return `das ${start} às ${end}`;
-  };
-
-  const calculateConditionDodos = (baseValue: number, condition: string) => {
-    const multiplier = {
-      'Novo na caixa': 1,
-      'Usado - Excelente': 0.85,
-      'Usado - Marcas de uso': 0.6,
-      'Para conserto/peças': 0.35,
-    }[condition] ?? 1;
-    return Math.max(0, Math.round(baseValue * multiplier));
   };
 
   const applyCreditRange = (suggestedValue: number) => {
@@ -1932,7 +1918,6 @@ function WebApp() {
     setIsItemInvalid(false);
     setImageAnalysisError('');
     setNewCredits(0);
-    setBaseDodos(0);
     setSuggestedCredits(0);
     setCreditsMin(0);
     setCreditsMax(0);
@@ -1946,7 +1931,8 @@ function WebApp() {
 
       const title = newTitle.trim() || 'Item fotografado';
       const category = newCategory;
-      const result = await evaluateItemWithGemini(base64Image, title, category, '', user?.uid);
+      const condition = newCondition;
+      const result = await evaluateItemWithGemini(base64Image, title, category, condition, user?.uid);
 
       const blockedTerms = ['selfie', 'pessoa', 'pessoas', 'rosto', 'humano', 'animal', 'cachorro', 'gato', 'inválid', 'invalid', 'não é possível', 'não pode ser avaliado', 'proibido'];
       const combinedText = `${result?.title || ''} ${result?.justification || ''} ${result?.invalidReason || ''}`.toLowerCase();
@@ -1955,7 +1941,6 @@ function WebApp() {
       if (result?.isInvalid || isBlockedByText) {
         setIsItemInvalid(true);
         setNewCredits(0);
-        setBaseDodos(0);
         setSuggestedCredits(0);
         setCreditsMin(0);
         setCreditsMax(0);
@@ -1977,17 +1962,14 @@ function WebApp() {
           setNewCategory(normalizedCategory);
         }
         setPricingJustification(result.justification);
-        const baseValue = result.baseDodos ?? result.credits;
-        const conditionValue = calculateConditionDodos(baseValue, newCondition);
-        setBaseDodos(baseValue);
-        setSuggestedCredits(conditionValue);
-        applyCreditRange(conditionValue);
+        setNewCredits(result.credits);
+        setSuggestedCredits(result.credits);
+        applyCreditRange(result.credits);
         setAiSuggested(true);
       }
     } catch (error) {
       console.error('Erro ao analisar foto com o Gemini:', error);
       setNewCredits(0);
-      setBaseDodos(0);
       setSuggestedCredits(0);
       setCreditsMin(0);
       setCreditsMax(0);
@@ -2509,6 +2491,14 @@ function WebApp() {
     let sanitized = text;
     let isBlocked = false;
     const maskPlaceholder = '[conteúdo ocultado por segurança]';
+    const phoneRegex = /(?:\+?55\s*)?(?:\(?\d{2}\)?[\s.-]*)?9?\d{4}[\s.-]?\d{4}\b/i;
+    const cepRegex = /\b\d{5}-?\d{3}\b/;
+    const addressRegex = /(?:\b(?:rua|avenida|alameda|travessa|praça|estrada|quadra|residencial|servidão)\b|\b(?:r|av|al|trv|prc|est|qd)\.)[\s\S]*?\b\d{1,5}\b/i;
+    const complementRegex = /(?:\b(?:ap|apt|apto|bloco|bl|casa|num|numero)\b|nº)\s*[\w\d]+/i;
+
+    if ([phoneRegex, cepRegex, addressRegex, complementRegex].some((regex) => regex.test(text))) {
+      return { isBlocked: true, sanitized: maskPlaceholder };
+    }
 
     const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
     if (emailRegex.test(text)) {
@@ -2581,15 +2571,10 @@ function WebApp() {
 
     const messageText = chatInputText.trim();
 
-    if (isUnsafeMessage(messageText, chatMessages, user.uid)) {
-      alert("Envio bloqueado: a sequência de mensagens contém um número de telefone ou contato externo.");
-      return;
-    }
-
     const { isBlocked } = validateChatMessage(messageText);
-    if (isBlocked) {
+    if (isBlocked || isUnsafeMessage(messageText, chatMessages, user.uid)) {
       showToast(
-        'Para a sua segurança e garantia das suas trocas, não é permitido compartilhar telefones, links ou dados de contato externos. Mantenha a conversa no Já Doei.',
+        'Por razões de segurança, não é permitido partilhar telefones, CEPs ou endereços completos no chat. Utilize o fluxo oficial do Já Doei.',
         'error'
       );
       return;
@@ -6097,7 +6082,7 @@ function WebApp() {
                               setPricingError('');
                               setIsLargeItem(category === 'Móveis & Decoração');
                               if (category) clearDonationError('category');
-                              void handleCalculatePricing(category);
+                              void handleCalculatePricing(newCondition, category);
                             }}
                             className={`w-full px-3 py-2 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 border ${
                               donationErrors.category
@@ -6148,20 +6133,10 @@ function WebApp() {
                             ref={conditionSelectRef}
                             value={newCondition}
                             onChange={(e) => {
-                              const condition = e.target.value;
-                              setNewCondition(condition);
+                              setNewCondition(e.target.value);
                               setPricingError('');
-                              if (condition) clearDonationError('condition');
-                              if (baseDodos <= 0) {
-                                setNewCredits(0);
-                                setSuggestedCredits(0);
-                                setCreditsMin(0);
-                                setCreditsMax(0);
-                                return;
-                              }
-                              const conditionValue = calculateConditionDodos(baseDodos, condition);
-                              setSuggestedCredits(conditionValue);
-                              applyCreditRange(conditionValue);
+                              if (e.target.value) clearDonationError('condition');
+                              void handleCalculatePricing(e.target.value);
                             }}
                             className={`w-full px-3 py-2 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 border ${
                               donationErrors.condition
