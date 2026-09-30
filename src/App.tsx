@@ -2518,8 +2518,10 @@ function WebApp() {
     const cepRegex = /\b\d{5}-?\d{3}\b/;
     const addressRegex = /(?:\b(?:rua|avenida|alameda|travessa|praça|estrada|quadra|residencial|servidão)\b|\b(?:r|av|al|trv|prc|est|qd)\.)[\s\S]*?\b\d{1,5}\b/i;
     const complementRegex = /(?:\b(?:ap|apt|apto|bloco|bl|casa|num|numero)\b|nº)\s*[\w\d]+/i;
+    const streetNameRegex = /\b(?:rua|avenida|alameda|travessa|praça|estrada|servidão|res|residencial)\b|\b(?:r|av|al|trv|prc|est)\.(?=\s|$)/i;
+    const numberWordsRegex = /\b(cento|duzentos|trezentos|quatrocentos|quinhentos|seiscentos|setecentos|oitocentos|novecentos|dez|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|zero|meia)\b/i;
 
-    if ([phoneRegex, cepRegex, addressRegex, complementRegex].some((regex) => regex.test(text))) {
+    if ([phoneRegex, cepRegex, addressRegex, complementRegex, streetNameRegex, numberWordsRegex].some((regex) => regex.test(text))) {
       return { isBlocked: true, sanitized: maskPlaceholder };
     }
 
@@ -2597,7 +2599,7 @@ function WebApp() {
     const { isBlocked } = validateChatMessage(messageText);
     if (isBlocked || isUnsafeMessage(messageText, chatMessages, user.uid)) {
       showToast(
-        'Por razões de segurança, não é permitido compartilhar telefones, CEPs ou endereços no chat. Utilize o fluxo oficial do Já Doei.',
+        'Por razões de segurança, não é permitido compartilhar nomes de ruas, endereços ou telefones (mesmo por extenso) no chat. Utilize o fluxo oficial do Já Doei.',
         'error'
       );
       window.requestAnimationFrame(() => chatInputRef.current?.focus({ preventScroll: true }));
