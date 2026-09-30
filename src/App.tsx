@@ -1414,6 +1414,7 @@ function WebApp() {
   const [chatPartner, setChatPartner] = useState<{ id: string; name: string; avatar?: string } | null>(null);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [chatInputText, setChatInputText] = useState<string>('');
+  const chatInputRef = useRef<HTMLInputElement>(null);
   const [chatMessages, setChatMessages] = useState<Array<{ id: string; senderId: string; text: string; timestamp: Date | null; read: boolean }>>([]);
   const [isSendingChatMessage, setIsSendingChatMessage] = useState<boolean>(false);
 
@@ -2596,9 +2597,10 @@ function WebApp() {
     const { isBlocked } = validateChatMessage(messageText);
     if (isBlocked || isUnsafeMessage(messageText, chatMessages, user.uid)) {
       showToast(
-        'Por razões de segurança, não é permitido partilhar telefones, CEPs ou endereços completos no chat. Utilize o fluxo oficial do Já Doei.',
+        'Por razões de segurança, não é permitido compartilhar telefones, CEPs ou endereços no chat. Utilize o fluxo oficial do Já Doei.',
         'error'
       );
+      window.requestAnimationFrame(() => chatInputRef.current?.focus({ preventScroll: true }));
       return;
     }
 
@@ -3181,7 +3183,7 @@ function WebApp() {
               initial={{ opacity: 0, y: -20, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.9 }}
-              className={`absolute top-16 left-4 right-4 z-50 p-3.5 rounded-2xl shadow-xl flex items-start gap-3 border text-xs font-medium backdrop-blur-md ${
+              className={`fixed top-16 left-4 right-4 z-[10000] p-3.5 rounded-2xl shadow-xl flex items-start gap-3 border text-xs font-medium backdrop-blur-md ${
                 toastMessage.type === 'error'
                   ? 'bg-rose-900/90 border-rose-700 text-rose-100'
                   : toastMessage.type === 'info'
@@ -5813,6 +5815,7 @@ function WebApp() {
                   className="chat-footer border-t border-slate-100 flex items-center gap-2"
                 >
                   <input
+                    ref={chatInputRef}
                     type="text"
                     value={chatInputText}
                     onChange={(e) => setChatInputText(e.target.value)}
