@@ -53,6 +53,7 @@ import {
   query,
   where,
   orderBy,
+  runTransaction,
   serverTimestamp,
   doc,
   deleteDoc,
@@ -1051,6 +1052,7 @@ function WebApp() {
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
   const [selectedItemForDetails, setSelectedItemForDetails] = useState<DonationItem | null>(null);
   const [selectedItemForRedeem, setSelectedItemForRedeem] = useState<DonationItem | null>(null);
+  const [isSubmittingRedeem, setIsSubmittingRedeem] = useState<boolean>(false);
   const [isImageZoomed, setIsImageZoomed] = useState<boolean>(false);
   const [detailsPhotoIndex, setDetailsPhotoIndex] = useState<number>(0);
 
@@ -2431,8 +2433,11 @@ function WebApp() {
 
   // Copy PIX Code
   const handleCopyPixCode = () => {
-    const checkoutFreightAmount = currentSelectedFreight.price + (hasExtraHelper ? 15.00 : 0) + (isInsuranceSelected ? 3.90 : 0);
-    const pixKey = `00020126580014BR.GOV.BCB.PIX0136jadoei-frete-pagamento-20265204000053039865405${checkoutFreightAmount.toFixed(2)}5802BR`;
+    const itemPriceDodos = checkoutCreditsTotal || selectedItemForRedeem?.credits || 0;
+    const dodosToUse = Math.min(Math.max(0, userCredits), itemPriceDodos);
+    const cashComplement = (itemPriceDodos - dodosToUse) * 1.50;
+    const totalCheckoutAmount = cashComplement + currentSelectedFreight.price + (hasExtraHelper ? 15.00 : 0) + (isInsuranceSelected ? 3.90 : 0);
+    const pixKey = `00020126580014BR.GOV.BCB.PIX0136jadoei-checkout-pagamento-20265204000053039865405${totalCheckoutAmount.toFixed(2)}5802BR`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(pixKey);
     }
@@ -2930,7 +2935,7 @@ function WebApp() {
   };
 
   const handleConfirmRedeem = async () => {
-    if (!selectedItemForRedeem || !user) return;
+    if (!selectedItemForRedeem || !user || isSubmittingRedeem) return;
 
     const isLalamoveFallbackQuote = selectedItemForRedeem.isLargeItem && lalamoveQuote?.isSimulated;
     if (selectedItemForRedeem.isLargeItem && !lalamoveQuote?.quotationId && !isLalamoveFallbackQuote) {
@@ -2944,7 +2949,6 @@ function WebApp() {
     }
 
     const itemsToRedeem = checkoutItems.length ? checkoutItems : [selectedItemForRedeem];
-    const itemCredits = itemsToRedeem.reduce((total, item) => total + item.credits, 0);
     const donorId = selectedItemForRedeem.userId;
     const extraHelperFee = hasExtraHelper ? 15.00 : 0;
     const freightPriceWithHelper = currentSelectedFreight.price + extraHelperFee;
@@ -2954,27 +2958,46 @@ function WebApp() {
       return;
     }
 
+    setIsSubmittingRedeem(true);
     try {
       const userRef = doc(db, 'users', user.uid);
-      const userSnap = await getDoc(userRef);
-      const currentCredits = Number(userSnap.data()?.credits ?? userCredits);
-      const limitePermitido = -Math.round(itemCredits * 0.30);
-      const nextCredits = currentCredits - itemCredits;
+      const donationRefs = itemsToRedeem.map((item) => doc(db, 'donations', item.id));
+      const transactionRefs = itemsToRedeem.map(() => doc(collection(db, 'users', user.uid, 'transactions')));
+      const redeemResult = await runTransaction(db, async (transaction) => {
+        const userSnapshot = await transaction.get(userRef);
+        if (!userSnapshot.exists()) throw new Error('Conta do usuário não encontrada.');
 
-      if (nextCredits < limitePermitido) {
-        showToast(
-          'Saldo insuficiente. Você precisa de mais Dodos! Que tal publicar um desapego agora para ganhar Dodos?',
-          'error'
-        );
-        return;
-      }
+        const donationSnapshots = await Promise.all(donationRefs.map((donationRef) => transaction.get(donationRef)));
+        const itemsFromServer = donationSnapshots.map((snapshot, index) => {
+          if (!snapshot.exists()) throw new Error('Um dos itens não está mais disponível.');
+          const donation = snapshot.data();
+          if ((donation.status || 'available') !== 'available' || donation.userId !== donorId) {
+            throw new Error('Um dos itens não está mais disponível para resgate.');
+          }
+          const credits = Number(donation.credits);
+          if (!Number.isFinite(credits) || credits <= 0) throw new Error('Preço inválido para um dos itens.');
+          return { credits, title: donation.title || itemsToRedeem[index].title };
+        });
 
-      await updateDoc(userRef, {
-        credits: nextCredits
-      });
-      await Promise.all(
-        itemsToRedeem.map((item) =>
-          updateDoc(doc(db, 'donations', item.id), {
+        const itemPriceDodos = itemsFromServer.reduce((total, item) => total + item.credits, 0);
+        const currentCredits = Number(userSnapshot.data().credits ?? 0);
+        const minimumCredits = itemPriceDodos * 0.70;
+        if (!Number.isFinite(currentCredits) || currentCredits < minimumCredits) {
+          throw new Error('Saldo insuficiente. Você precisa ter no mínimo 70% do valor do item em Dodôs para resgatar.');
+        }
+
+        const dodosToUse = Math.min(currentCredits, itemPriceDodos);
+        const dodosMissing = itemPriceDodos - dodosToUse;
+        const valorEmReais = dodosMissing * 1.50;
+        const nextCredits = currentCredits - dodosToUse;
+        transaction.update(userRef, { credits: nextCredits });
+        let remainingDodos = dodosToUse;
+        itemsFromServer.forEach((item, index) => {
+          const dodosDebitados = Math.min(item.credits, remainingDodos);
+          remainingDodos -= dodosDebitados;
+          const itemDodosMissing = item.credits - dodosDebitados;
+          const valorPagoReais = itemDodosMissing * 1.50;
+          transaction.update(donationRefs[index], {
             status: 'reserved',
             receiverId: user.uid,
             rescueOrder: {
@@ -2983,12 +3006,30 @@ function WebApp() {
               extraHelperFee,
               freightPrice: currentSelectedFreight.price,
               totalFreightPrice: freightPriceWithHelper,
+              cashComplement: valorPagoReais,
               paymentMethod,
               updatedAt: serverTimestamp()
             },
-          })
-        )
-      );
+          });
+          transaction.set(transactionRefs[index], {
+            tipo: 'RESGATE',
+            valor: -dodosDebitados,
+            dodosDebitados,
+            valorPagoReais,
+            itemTitle: item.title,
+            data: new Date(),
+          });
+        });
+
+        return {
+          nextCredits,
+          creditsUsed: dodosToUse,
+          cashComplement: valorEmReais,
+          items: itemsFromServer,
+          userPhone: userSnapshot.data().whatsapp || '',
+        };
+      });
+
       await addDoc(collection(db, 'notifications'), {
         userId: donorId,
         title: itemsToRedeem.length > 1 ? 'Caixinha do Dodô resgatada' : 'Item resgatado',
@@ -3008,7 +3049,7 @@ function WebApp() {
           await createLalamoveOrder(
             lalamoveQuote,
             { name: donorData?.name || selectedItemForRedeem.donorName || 'Doador Já Doei', phone: donorData?.whatsapp || '' },
-            { name: user.name, phone: userSnap.data()?.whatsapp || '' }
+              { name: user.name, phone: redeemResult.userPhone }
           );
         } catch (error) {
           console.error('Erro ao criar corrida na Lalamove:', error);
@@ -3018,7 +3059,7 @@ function WebApp() {
 
       const redeemedIds = new Set(itemsToRedeem.map((item) => item.id));
 
-      setUserCredits(nextCredits);
+      setUserCredits(redeemResult.nextCredits);
       setItems((prev) =>
         prev.map((item) =>
           redeemedIds.has(item.id)
@@ -3050,15 +3091,15 @@ function WebApp() {
       setSuccessRedeemData({
         item: redeemedItem,
         orderNumber,
-        creditsUsed: itemCredits,
+        creditsUsed: redeemResult.creditsUsed,
         freightPrice: freightPriceWithHelper,
         pickupDate,
         pickupTimeWindow,
         hasExtraHelper,
         extraHelperFee,
-        cashComplement: 0,
+        cashComplement: redeemResult.cashComplement,
         insuranceFee: isInsuranceSelected ? 3.90 : 0,
-        totalCashPaid: isInsuranceSelected ? freightPriceWithHelper + 3.90 : freightPriceWithHelper,
+        totalCashPaid: redeemResult.cashComplement + freightPriceWithHelper + (isInsuranceSelected ? 3.90 : 0),
         deliveryType: 'standard',
         carrierName: currentSelectedFreight.carrierName || currentSelectedFreight.name,
         freightType: currentSelectedFreight.type,
@@ -3073,7 +3114,14 @@ function WebApp() {
       );
     } catch (error) {
       console.error('Erro ao confirmar resgate:', error);
-      showToast('Não foi possível confirmar o resgate. Tente novamente.', 'error');
+      showToast(
+        error instanceof Error && error.message.startsWith('Saldo insuficiente.')
+          ? error.message
+          : 'Não foi possível confirmar o resgate. Tente novamente.',
+        'error'
+      );
+    } finally {
+      setIsSubmittingRedeem(false);
     }
   };
 
@@ -5239,14 +5287,11 @@ function WebApp() {
                 {/* Resumo Discriminado do Resgate e Complemento em R$ */}
                 {(() => {
                   const itemCost = checkoutCreditsTotal || selectedItemForRedeem.credits;
-                  const limitePermitido = -Math.round(itemCost * 0.30);
-                  const maxMissingAllowed = Math.round(itemCost * 0.30);
-                  const safeItemCredits = Math.max(limitePermitido, userCredits);
-                  const missingCredits = Math.max(0, itemCost - safeItemCredits);
-                  const canRedeemWithComplement = missingCredits <= maxMissingAllowed;
-
-                  const creditsUsed = Math.max(0, Math.min(safeItemCredits, itemCost));
-                  const cashComplement = (itemCost - creditsUsed) * 1.00;
+                  const minimumDodos = itemCost * 0.70;
+                  const canRedeemWithComplement = userCredits >= minimumDodos;
+                  const creditsUsed = Math.min(Math.max(0, userCredits), itemCost);
+                  const missingCredits = itemCost - creditsUsed;
+                  const cashComplement = missingCredits * 1.50;
                   const freightFee = currentSelectedFreight.price;
                   const extraHelperFee = hasExtraHelper ? 15.00 : 0;
                   const insuranceFee = isInsuranceSelected ? 3.90 : 0;
@@ -5420,16 +5465,19 @@ function WebApp() {
                           </div>
                         </div>}
 
-                        {/* Pagamento do Frete (Simulação) */}
+                        {/* Pagamento do checkout (simulação) */}
                         <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                              <span>Pagamento do Frete</span>
+                              <span>Pagamento do Frete e Complemento</span>
                               <span className="text-[10px] font-extrabold text-[#FF8243] bg-[#FF8243]/10 px-2 py-0.5 rounded-full">
-                                R$ {(freightFee + extraHelperFee).toFixed(2).replace('.', ',')}
+                                R$ {totalCashToPay.toFixed(2).replace('.', ',')}
                               </span>
                             </span>
                           </div>
+                          <p className="text-[10px] text-slate-500">
+                            O total inclui complemento em dinheiro, frete e adicionais selecionados.
+                          </p>
 
                           {/* Payment Method Tabs */}
                           <div className="grid grid-cols-2 gap-1 bg-slate-200/70 p-1 rounded-xl">
@@ -5664,7 +5712,7 @@ function WebApp() {
                         {!canRedeemWithComplement ? (
                           <div className="p-3 bg-rose-50 rounded-2xl border border-rose-200 text-center space-y-2">
                             <p className="text-xs text-rose-700 font-semibold">
-                              Saldo insuficiente. Você precisa de mais Dodos! Que tal publicar um desapego agora para ganhar Dodos?
+                              Saldo insuficiente. Você precisa ter no mínimo 70% do valor do item em Dodôs para resgatar.
                             </p>
                             <p className="text-[10px] text-slate-600">
                               {isPremium
@@ -5705,11 +5753,11 @@ function WebApp() {
                             <button
                               type="button"
                               onClick={handleConfirmRedeem}
-                              disabled={!canConfirmCheckout}
+                              disabled={!canConfirmCheckout || isSubmittingRedeem}
                               className="flex-1 sm:flex-none px-5 py-3 rounded-2xl bg-[#14A76C] hover:bg-[#108958] text-white text-xs font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#14A76C] disabled:active:scale-100"
                             >
-                              <Check className="w-4 h-4" />
-                              <span>Confirmar Resgate (R$ {totalCashToPay.toFixed(2).replace('.', ',')})</span>
+                              {isSubmittingRedeem ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                              <span>{isSubmittingRedeem ? 'Processando resgate...' : `Confirmar Resgate (R$ ${totalCashToPay.toFixed(2).replace('.', ',')})`}</span>
                             </button>
                           </div>
                         )}
