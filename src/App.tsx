@@ -2518,10 +2518,11 @@ function WebApp() {
     const cepRegex = /\b\d{5}-?\d{3}\b/;
     const addressRegex = /(?:\b(?:rua|avenida|alameda|travessa|praça|estrada|quadra|residencial|servidão)\b|\b(?:r|av|al|trv|prc|est|qd)\.)[\s\S]*?\b\d{1,5}\b/i;
     const complementRegex = /(?:\b(?:ap|apt|apto|bloco|bl|casa|num|numero)\b|nº)\s*[\w\d]+/i;
-    const streetNameRegex = /\b(?:rua|avenida|alameda|travessa|praça|estrada|servidão|res|residencial)\b|\b(?:r|av|al|trv|prc|est)\.(?=\s|$)/i;
-    const numberWordsRegex = /\b(cento|duzentos|trezentos|quatrocentos|quinhentos|seiscentos|setecentos|oitocentos|novecentos|dez|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|zero|meia)\b/i;
+    const addressTermsRegex = /\b(?:rua|r\.|av\.|avenida|alameda|al\.|travessa|trv\.|praça|prc\.|estrada|est\.|street|st\.|address|end|endereço|localização|localizacao)(?=\b|\s|$)/i;
+    const concatenatedStreetRegex = /\b(?:rua|r(?:do|da|de)|avenida|street|address)[a-z0-9]+\b/i;
+    const numberWordsRegex = /\b(cem|cento|duzentos|ducentos|trezentos|quatrocentos|quinhentos|seiscentos|setecentos|oitocentos|novecentos|dez|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|dezessete|decessete|dezoito|dezenove|um|dois|três|quatro|cinco|seis|sete|oito|nove|zero|meia)\b/i;
 
-    if ([phoneRegex, cepRegex, addressRegex, complementRegex, streetNameRegex, numberWordsRegex].some((regex) => regex.test(text))) {
+    if ([phoneRegex, cepRegex, addressRegex, complementRegex, addressTermsRegex, concatenatedStreetRegex, numberWordsRegex].some((regex) => regex.test(text))) {
       return { isBlocked: true, sanitized: maskPlaceholder };
     }
 
@@ -2599,7 +2600,7 @@ function WebApp() {
     const { isBlocked } = validateChatMessage(messageText);
     if (isBlocked || isUnsafeMessage(messageText, chatMessages, user.uid)) {
       showToast(
-        'Por razões de segurança, não é permitido compartilhar nomes de ruas, endereços ou telefones (mesmo por extenso) no chat. Utilize o fluxo oficial do Já Doei.',
+        'Por razões de segurança, não é permitido compartilhar endereços, localizações ou contatos no chat.',
         'error'
       );
       window.requestAnimationFrame(() => chatInputRef.current?.focus({ preventScroll: true }));
