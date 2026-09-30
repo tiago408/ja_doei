@@ -1541,6 +1541,7 @@ function WebApp() {
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('');
   const [newCredits, setNewCredits] = useState<number>(100);
+  const [baseDodos, setBaseDodos] = useState<number>(0);
   const [suggestedCredits, setSuggestedCredits] = useState<number>(100);
   const [isLoadingPricing, setIsLoadingPricing] = useState<boolean>(false);
   const [newLocation, setNewLocation] = useState('');
@@ -1653,6 +1654,7 @@ function WebApp() {
     setNewTitle('');
     setNewCategory('');
     setNewCredits(100);
+    setBaseDodos(0);
     setSuggestedCredits(100);
     setNewLocation('');
     setNewCondition('');
@@ -1692,10 +1694,7 @@ function WebApp() {
     }
   }, [isDonateModalOpen]);
 
-  const handleCalculatePricing = async (
-    conditionOverride = newCondition,
-    categoryOverride = newCategory
-  ) => {
+  const handleCalculatePricing = async (categoryOverride = newCategory) => {
     const requestId = ++pricingRequestId.current;
     const title = newTitle.trim();
     if (!title || !categoryOverride.trim()) {
@@ -1703,6 +1702,7 @@ function WebApp() {
       setIsPricingLoading(false);
       setIsLoadingPricing(false);
       setNewCredits(0);
+      setBaseDodos(0);
       setSuggestedCredits(0);
       setCreditsMin(0);
       setCreditsMax(0);
@@ -1717,6 +1717,7 @@ function WebApp() {
     setIsLoadingPricing(true);
     setPricingError('');
     setNewCredits(0);
+    setBaseDodos(0);
     setSuggestedCredits(0);
     setCreditsMin(0);
     setCreditsMax(0);
@@ -1725,23 +1726,26 @@ function WebApp() {
         newImageUrl || undefined,
         title,
         categoryOverride,
-        conditionOverride,
+        '',
         user?.uid
       );
       if (requestId !== pricingRequestId.current) return;
       if (!pricing) throw new Error('O Gemini não retornou uma avaliação válida');
-      setNewCredits(pricing.credits);
-      setSuggestedCredits(pricing.credits);
+      const baseValue = pricing.credits;
+      const conditionValue = calculateConditionDodos(baseValue, newCondition);
+      setBaseDodos(baseValue);
+      setSuggestedCredits(conditionValue);
       if (DONATION_CATEGORIES.includes(pricing.category as (typeof DONATION_CATEGORIES)[number])) {
         setNewCategory(pricing.category);
       }
-      applyCreditRange(pricing.credits);
+      applyCreditRange(conditionValue);
       setRequiresModeration(false);
       setPricingJustification(pricing.justification);
     } catch (error) {
       if (requestId !== pricingRequestId.current) return;
       console.error('Gemini indisponível; precificação não calculada:', error);
       setNewCredits(0);
+      setBaseDodos(0);
       setSuggestedCredits(0);
       setCreditsMin(0);
       setCreditsMax(0);
@@ -1828,6 +1832,20 @@ function WebApp() {
     const [start, end] = timeWindow.split('-').map((part) => part.trim());
     if (!start || !end) return timeWindow;
     return `das ${start} às ${end}`;
+  };
+
+  const calculateConditionDodos = (baseValue: number, condition: string) => {
+    const multipliers: Record<string, number> = {
+      'Novo na caixa': 1,
+      'Novo / Na caixa': 1,
+      'Usado - Excelente': 0.85,
+      'Excelente estado': 0.85,
+      'Usado - Marcas de uso': 0.6,
+      'Marcas de uso': 0.6,
+      'Com avarias': 0.35,
+      'Para conserto/peças': 0.35,
+    };
+    return Math.max(0, Math.round(baseValue * (multipliers[condition] ?? 1)));
   };
 
   const applyCreditRange = (suggestedValue: number) => {
@@ -1918,6 +1936,7 @@ function WebApp() {
     setIsItemInvalid(false);
     setImageAnalysisError('');
     setNewCredits(0);
+    setBaseDodos(0);
     setSuggestedCredits(0);
     setCreditsMin(0);
     setCreditsMax(0);
@@ -1931,8 +1950,7 @@ function WebApp() {
 
       const title = newTitle.trim() || 'Item fotografado';
       const category = newCategory;
-      const condition = newCondition;
-      const result = await evaluateItemWithGemini(base64Image, title, category, condition, user?.uid);
+      const result = await evaluateItemWithGemini(base64Image, title, category, '', user?.uid);
 
       const blockedTerms = ['selfie', 'pessoa', 'pessoas', 'rosto', 'humano', 'animal', 'cachorro', 'gato', 'inválid', 'invalid', 'não é possível', 'não pode ser avaliado', 'proibido'];
       const combinedText = `${result?.title || ''} ${result?.justification || ''} ${result?.invalidReason || ''}`.toLowerCase();
@@ -1941,6 +1959,7 @@ function WebApp() {
       if (result?.isInvalid || isBlockedByText) {
         setIsItemInvalid(true);
         setNewCredits(0);
+        setBaseDodos(0);
         setSuggestedCredits(0);
         setCreditsMin(0);
         setCreditsMax(0);
@@ -1962,14 +1981,17 @@ function WebApp() {
           setNewCategory(normalizedCategory);
         }
         setPricingJustification(result.justification);
-        setNewCredits(result.credits);
-        setSuggestedCredits(result.credits);
-        applyCreditRange(result.credits);
+        const baseValue = result.credits;
+        const conditionValue = calculateConditionDodos(baseValue, newCondition);
+        setBaseDodos(baseValue);
+        setSuggestedCredits(conditionValue);
+        applyCreditRange(conditionValue);
         setAiSuggested(true);
       }
     } catch (error) {
       console.error('Erro ao analisar foto com o Gemini:', error);
       setNewCredits(0);
+      setBaseDodos(0);
       setSuggestedCredits(0);
       setCreditsMin(0);
       setCreditsMax(0);
@@ -6082,7 +6104,7 @@ function WebApp() {
                               setPricingError('');
                               setIsLargeItem(category === 'Móveis & Decoração');
                               if (category) clearDonationError('category');
-                              void handleCalculatePricing(newCondition, category);
+                              void handleCalculatePricing(category);
                             }}
                             className={`w-full px-3 py-2 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 border ${
                               donationErrors.category
@@ -6133,10 +6155,13 @@ function WebApp() {
                             ref={conditionSelectRef}
                             value={newCondition}
                             onChange={(e) => {
-                              setNewCondition(e.target.value);
+                              const condition = e.target.value;
+                              setNewCondition(condition);
                               setPricingError('');
-                              if (e.target.value) clearDonationError('condition');
-                              void handleCalculatePricing(e.target.value);
+                              if (condition) clearDonationError('condition');
+                              const conditionValue = calculateConditionDodos(baseDodos, condition);
+                              setSuggestedCredits(conditionValue);
+                              applyCreditRange(conditionValue);
                             }}
                             className={`w-full px-3 py-2 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 border ${
                               donationErrors.condition
